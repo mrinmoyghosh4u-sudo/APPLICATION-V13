@@ -23,6 +23,10 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.outlined.*
+
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -120,9 +124,9 @@ fun LoginScreen(
                         CrownLogo(size = 110.dp)
                     }
                 }
-
+                
                 Spacer(modifier = Modifier.height(14.dp))
-
+                
                 Text(
                     text = "KING KHAN AI TRADE",
                     color = PrimaryGold,
@@ -131,9 +135,9 @@ fun LoginScreen(
                     letterSpacing = 1.2.sp,
                     textAlign = TextAlign.Center
                 )
-
+                
                 Spacer(modifier = Modifier.height(6.dp))
-
+                
                 // Motto Line with side gold accents
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -270,90 +274,97 @@ fun LoginScreen(
                     // Encrypted Connection Note
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.Start,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(DarkCardSecondary, RoundedCornerShape(10.dp))
-                            .padding(10.dp)
+                            .background(Color.Transparent, RoundedCornerShape(10.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                            .padding(14.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Security,
+                            imageVector = Icons.Outlined.Lock,
                             contentDescription = null,
                             tint = PrimaryGold,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 "OFFICIAL BROKER API & OAUTH 2.0",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = PrimaryGold,
                                 letterSpacing = 0.5.sp
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                "Direct end-to-end token encryption • No password logging",
-                                fontSize = 9.sp,
-                                color = TextGray
+                                "Direct end-to-end token encryption • No password logging\nYour data is 100% secure with bank-grade protection.",
+                                fontSize = 10.sp,
+                                color = Color.White.copy(alpha = 0.7f),
+                                lineHeight = 14.sp
                             )
                         }
                     }
-                }
-            }
-
-            // --- BOTTOM FEATURE BADGES & SKIP BUTTON ---
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Highlights Grid
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    FeatureBadge(icon = Icons.Default.Shield, title = "256-BIT ENCRYPTED")
-                    FeatureBadge(icon = Icons.Default.BarChart, title = "REAL TIME QUOTES")
-                    FeatureBadge(icon = Icons.Default.FlashOn, title = "ALGO EXECUTION")
-                    FeatureBadge(icon = Icons.Default.SupportAgent, title = "24/7 SUPPORT")
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // SKIP LOGIN / GUEST MODE BUTTON
-                OutlinedButton(
-                    onClick = onSkipLogin,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("skip_login_button"),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.5.dp, PrimaryGold),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = PrimaryGold
-                    )
-                ) {
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Features
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "SKIP LOGIN (EXPLORE APP)",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryGold,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = PrimaryGold,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        FeatureBadge(icon = Icons.Outlined.Lock, title = "256-BIT\nENCRYPTED")
+                        FeatureBadge(icon = Icons.Outlined.BarChart, title = "REAL TIME\nQUOTES")
+                        FeatureBadge(icon = Icons.Outlined.FlashOn, title = "ALGO\nEXECUTION")
+                        FeatureBadge(icon = Icons.Outlined.SupportAgent, title = "24/7\nSUPPORT")
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(30.dp))
+            
+            // SKIP LOGIN BUTTON AT BOTTOM
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSkipLogin() }
+                    .padding(vertical = 10.dp)
+                    .testTag("skip_login_button")
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(60.dp)
+                        .height(1.dp)
+                        .background(PrimaryGold.copy(alpha = 0.3f))
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Text(
+                    text = "SKIP LOGIN",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryGold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Skip",
+                    tint = PrimaryGold,
+                    modifier = Modifier.size(20.dp)
+                )
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                Box(
+                    modifier = Modifier
+                        .width(60.dp)
+                        .height(1.dp)
+                        .background(PrimaryGold.copy(alpha = 0.3f))
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
