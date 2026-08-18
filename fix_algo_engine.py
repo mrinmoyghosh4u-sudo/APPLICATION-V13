@@ -3,15 +3,23 @@ import re
 with open('app/src/main/java/com/example/util/AlgoEngine.kt', 'r') as f:
     content = f.read()
 
-pattern = r"""        // \(Evaluation of real indicators would go here if provided\)\n    \}\n\n    // Update active positions P&L\n        updateActivePositionsPnl\(ltp\)\n    \}"""
+# Let's fix the specific lines
+old_text = '''    fun setTradingMode(mode: String) {
+        _tradingMode.value = mode
+    } else {
+            _tradingMode.value = "PAPER TRADING"
+        }
+    }
 
-replacement = """        // (Evaluation of real indicators would go here if provided)
+    fun updateRiskSettings(riskPerTrade: Double, maxLossPct: Double, maxTrades: Int, onePos: Boolean) {'''
 
-        // Update active positions P&L
-        updateActivePositionsPnl(targetQuote.ltp)
-    }"""
+new_text = '''    fun setTradingMode(mode: String) {
+        _tradingMode.value = mode
+    }
 
-new_content = re.sub(pattern, replacement, content)
+    fun updateRiskSettings(riskPerTrade: Double, maxLossPct: Double, maxTrades: Int, onePos: Boolean) {'''
+
+content = content.replace(old_text, new_text)
 
 with open('app/src/main/java/com/example/util/AlgoEngine.kt', 'w') as f:
-    f.write(new_content)
+    f.write(content)

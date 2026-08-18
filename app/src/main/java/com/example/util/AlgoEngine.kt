@@ -23,9 +23,6 @@ object AlgoEngine {
     private val _isAlgoRunning = MutableStateFlow(false)
     val isAlgoRunning: StateFlow<Boolean> = _isAlgoRunning.asStateFlow()
 
-    private val _isAutoTradingEnabled = MutableStateFlow(false)
-    val isAutoTradingEnabled: StateFlow<Boolean> = _isAutoTradingEnabled.asStateFlow()
-
     private val _tradingMode = MutableStateFlow("PAPER TRADING") // "PAPER TRADING" or "AUTO TRADING"
     val tradingMode: StateFlow<String> = _tradingMode.asStateFlow()
 
@@ -128,15 +125,6 @@ object AlgoEngine {
         _tradingMode.value = mode
     }
 
-    fun setAutoTradingEnabled(enabled: Boolean) {
-        _isAutoTradingEnabled.value = enabled
-        if (enabled) {
-            _tradingMode.value = "AUTO TRADING"
-        } else {
-            _tradingMode.value = "PAPER TRADING"
-        }
-    }
-
     fun updateRiskSettings(riskPerTrade: Double, maxLossPct: Double, maxTrades: Int, onePos: Boolean) {
         _riskPerTrade.value = riskPerTrade
         _maxDailyLossPercent.value = maxLossPct
@@ -175,7 +163,6 @@ object AlgoEngine {
 
     fun emergencyStop() {
         _isAlgoRunning.value = false
-        _isAutoTradingEnabled.value = false
         _tradingMode.value = "PAPER TRADING"
         _engineStatusMessage.value = "EMERGENCY STOP TRIGGERED"
         coroutineScope.launch {
@@ -315,91 +302,6 @@ object AlgoEngine {
 
         // Update active positions P&L
         updateActivePositionsPnl(targetQuote.ltp)
-    }
-
-    private fun executeAlgoOrderIfNeeded(signal: AISignalEntity) {
-        // Risk Limit Checks
-        val maxLoss = _paperBalance.value * (_maxDailyLossPercent.value / 100.0)
-        if (_todayPnl.value <= -maxLoss) {
-            _engineStatusMessage.value = "ALGO STOPPED: MAX DAILY LOSS REACHED"
-            _isAlgoRunning.value = false
-            coroutineScope.launch {
-                telegramService?.sendFormattedEvent(
-                    "RISK_LIMIT_${System.currentTimeMillis()}",
-                    com.example.data.network.TelegramMessageFormatter.formatRiskLimitReached(
-                        "Max Daily Loss Limit Reached",
-                        String.format("%.2f", _todayPnl.value)
-                    )
-                )
-            }
-            return
-        }
-
-        if (_todayTradesCount.value >= _maxTradesPerDay.value) {
-            _engineStatusMessage.value = "ALGO STANDBY: MAX TRADES REACHED"
-            return
-        }
-
-        if (_onePositionAtATime.value && _activePositions.value.isNotEmpty()) {
-            return
-        }
-
-        val exists = _activePositions.value.any { it.symbol == signal.symbol && it.status == "OPEN" }
-        if (exists) return
-
-        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-
-        if (_tradingMode.value == "PAPER TRADING") {
-            val newPosition = AlgoPosition(
-                id = "PAPER_${System.currentTimeMillis()}",
-                symbol = signal.symbol,
-                type = if (signal.actionType.contains("PE")) "PE" else "CE",
-                entryPrice = signal.ltp,
-                qty = signal.lotSize,
-                sl = signal.stopLoss,
-                target1 = signal.target1,
-                target2 = signal.target2,
-                trailingSl = signal.trailingSl,
-                currentLtp = signal.ltp,
-                pnl = 0.0,
-                status = "OPEN"
-            )
-
-            _activePositions.value = _activePositions.value + newPosition
-            _todayTradesCount.value += 1
-
-            coroutineScope.launch {
-                telegramService?.sendFormattedEvent(
-                    "PAPER_OPEN_${newPosition.id}",
-                    com.example.data.network.TelegramMessageFormatter.formatPaperTradeOpened(
-                        actionType = if (newPosition.type == "PE") "BUY PE" else "BUY CE",
-                        index = _selectedIndex.value,
-                        strike = newPosition.symbol,
-                        expiry = "WEEKLY",
-                        entryPrice = String.format("%.2f", newPosition.entryPrice),
-                        quantity = newPosition.qty.toString(),
-                        sl = String.format("%.2f", newPosition.sl),
-                        t1 = String.format("%.2f", newPosition.target1)
-                    )
-                )
-            }
-
-            val historyItem = AlgoTradeHistory(
-                date = dateStr,
-                time = timeStr,
-                strategyName = _currentStrategy.value.name,
-                index = _selectedIndex.value,
-                type = newPosition.type,
-                strike = signal.symbol,
-                expiry = "WEEKLY",
-                action = "BUY",
-                price = signal.ltp,
-                qty = signal.lotSize,
-                status = "EXECUTED (PAPER)"
-            )
-            _paperTradeHistory.value = listOf(historyItem) + _paperTradeHistory.value
-        }
     }
 
     private fun updateActivePositionsPnl(currentQuoteLtp: Double) {

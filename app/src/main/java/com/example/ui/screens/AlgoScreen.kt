@@ -96,7 +96,6 @@ enum class AlgoScreenState {
     AI_CREATE,
     STRATEGY_BUILDER,
     MY_STRATEGIES,
-    AUTO_TRADING,
     RISK_MANAGEMENT,
     PERFORMANCE,
     TRADE_HISTORY
@@ -178,7 +177,6 @@ fun AlgoScreen(
             AlgoScreenState.AI_CREATE -> AiCreateStrategy(onNavigate = { currentState = it })
             AlgoScreenState.STRATEGY_BUILDER -> StrategyBuilder(onNavigate = { currentState = it })
             AlgoScreenState.MY_STRATEGIES -> MyStrategies(onNavigate = { currentState = it })
-            AlgoScreenState.AUTO_TRADING -> AutoTrading()
             AlgoScreenState.RISK_MANAGEMENT -> RiskManagement()
             AlgoScreenState.PERFORMANCE -> AlgoPerformance()
             AlgoScreenState.TRADE_HISTORY -> TradeHistory()
@@ -191,7 +189,6 @@ fun AlgoDashboard(
     onNavigate: (AlgoScreenState) -> Unit
 ) {
     val isAlgoActive by AlgoEngine.isAlgoRunning.collectAsState()
-    val isAutoTrading by AlgoEngine.isAutoTradingEnabled.collectAsState()
     val currentStrategy by AlgoEngine.currentStrategy.collectAsState()
     val selectedIndex by AlgoEngine.selectedIndex.collectAsState()
     val selectedOptionMode by AlgoEngine.selectedOptionMode.collectAsState()
@@ -313,7 +310,7 @@ fun AlgoDashboard(
                             Text("Trading Mode", color = TextGray, fontSize = 11.sp)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                if (isAutoTrading) "AUTO" else "PAPER",
+                                "LIVE SIGNALS",
                                 color = TextWhite,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -703,9 +700,6 @@ fun AlgoDashboard(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     QuickActionCard("MY STRATEGIES", Icons.Outlined.ListAlt, Modifier.weight(1f)) {
                         onNavigate(AlgoScreenState.MY_STRATEGIES)
-                    }
-                    QuickActionCard("AUTO TRADING", Icons.Outlined.Bolt, Modifier.weight(1f)) {
-                        onNavigate(AlgoScreenState.AUTO_TRADING)
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1599,74 +1593,6 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
         border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) PrimaryGold else DarkCardBorder)
     ) {
         Text(text, color = if (selected) PrimaryGold else TextGray, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
-    }
-}
-
-@Composable
-fun AutoTrading() {
-    val isAutoEnabled by AlgoEngine.isAutoTradingEnabled.collectAsState()
-    var showConfirmationModal by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("AUTO TRADING SETTINGS", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = DarkCard,
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("Live Auto Trading Mode", color = TextWhite, fontWeight = FontWeight.Bold)
-                        Text(if (isAutoEnabled) "ON • Executing Broker Orders" else "OFF • Safe Paper Mode", color = if (isAutoEnabled) ProfitGreen else TextGray, fontSize = 11.sp)
-                    }
-                    Switch(
-                        checked = isAutoEnabled,
-                        onCheckedChange = { enable ->
-                            if (enable) showConfirmationModal = true
-                            else AlgoEngine.setAutoTradingEnabled(false)
-                        },
-                        colors = SwitchDefaults.colors(checkedThumbColor = PrimaryGold, checkedTrackColor = PrimaryGold.copy(alpha = 0.5f))
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = DarkCardSecondary,
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("ORDER EXECUTION RULES", color = SecondaryGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("✓ BUY CE / BUY PE Only Enforcement", color = ProfitGreen, fontSize = 11.sp)
-                Text("✓ Max Loss Auto Kill Switch Active", color = ProfitGreen, fontSize = 11.sp)
-                Text("✕ Option Selling strictly blocked", color = LossRed, fontSize = 11.sp)
-            }
-        }
-
-        if (showConfirmationModal) {
-            AlertDialog(
-                onDismissRequest = { showConfirmationModal = false },
-                title = { Text("CONFIRM AUTO TRADING", color = TextWhite) },
-                text = { Text("Enabling Auto Trading allows the engine to submit live BUY CE/PE orders via your active broker API. Always ensure your risk parameters are set safely.", color = TextGray) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        AlgoEngine.setAutoTradingEnabled(true)
-                        showConfirmationModal = false
-                    }) { Text("ENABLE NOW", color = ProfitGreen, fontWeight = FontWeight.Bold) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showConfirmationModal = false }) { Text("CANCEL", color = LossRed) }
-                },
-                containerColor = DarkCard
-            )
-        }
     }
 }
 
