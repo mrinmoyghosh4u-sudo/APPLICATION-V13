@@ -344,7 +344,11 @@ fun AppUpdateDialog(
                                                 updateResult = checkResult
                                                 when (checkResult) {
                                                     is UpdateCheckResult.Error -> {
-                                                        statusMessage = "VERIFICATION FAILED: ${checkResult.message}"
+                                                        appPreferences.setGithubToken(tokenInputText)
+                                                        savedTokenState = appPreferences.getGithubToken()
+                                                        showTokenInput = false
+                                                        tokenInputText = ""
+                                                        statusMessage = "VERIFICATION FAILED: ${checkResult.message} (Token saved anyway)"
                                                     }
                                                     else -> {
                                                         appPreferences.setGithubToken(tokenInputText)

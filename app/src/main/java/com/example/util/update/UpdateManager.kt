@@ -129,8 +129,9 @@ class UpdateManager(
 
             if (repoAccessCode != 200) {
                 val repoErrorMsg = when (repoAccessCode) {
-                    401, 403 -> "GitHub authentication required to download private release APK."
-                    404 -> if (effectiveToken.isBlank()) "GitHub authentication required to download private release APK." else "APK release asset not found. Please create/publish the GitHub Release APK."
+                    401 -> "GitHub Auth Failed (401): Invalid Token"
+                    403 -> "GitHub Auth Failed (403): Token lacks permissions"
+                    404 -> if (effectiveToken.isBlank()) "GitHub authentication required for private repo." else "Not Found (404): Repo missing or Token lacks access."
                     else -> "REPOSITORY ACCESS ERROR (HTTP $repoAccessCode)"
                 }
 
@@ -234,8 +235,9 @@ class UpdateManager(
                 val apiReason = extractErrorMessage(responseSnippet, "HTTP $httpCode")
                 val errorMsg = when (httpCode) {
                     200 -> "APK release asset not found. Please create/publish the GitHub Release APK."
-                    401, 403 -> "GitHub authentication required to download private release APK."
-                    404 -> if (effectiveToken.isBlank()) "GitHub authentication required to download private release APK." else "APK release asset not found. Please create/publish the GitHub Release APK."
+                    401 -> "GitHub Auth Failed (401): Invalid Token"
+                    403 -> "GitHub Auth Failed (403): Token lacks permissions"
+                    404 -> if (effectiveToken.isBlank()) "GitHub authentication required for private repo." else "Not Found (404): Repo missing or Token lacks access."
                     429 -> "GITHUB RATE LIMIT EXCEEDED"
                     in 500..599 -> "GITHUB SERVER ERROR (HTTP $httpCode)"
                     0 -> "GITHUB NETWORK ERROR"
