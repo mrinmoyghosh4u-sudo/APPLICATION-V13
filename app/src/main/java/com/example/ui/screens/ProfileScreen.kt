@@ -124,18 +124,11 @@ fun ProfileScreen(
 
     val accountHolderName = remember(userProfile.name, userProfile.dhanClientId, userProfile.angelClientId, userProfile.connectedBroker, isBrokerConnected) {
         if (!isBrokerConnected) {
-            "--"
-        } else if (userProfile.name.isNotBlank() &&
-            !userProfile.name.equals("Dhan User", ignoreCase = true) &&
-            !userProfile.name.equals("Angel User", ignoreCase = true) &&
-            !userProfile.name.equals("Trader", ignoreCase = true)) {
+            "Not Connected"
+        } else if (userProfile.name.isNotBlank()) {
             userProfile.name
-        } else if (userProfile.connectedBroker == "Dhan" && userProfile.dhanClientId.isNotBlank()) {
-            userProfile.dhanClientId
-        } else if (userProfile.connectedBroker == "Angel One" && userProfile.angelClientId.isNotBlank()) {
-            userProfile.angelClientId
         } else {
-            "--"
+            "Trader"
         }
     }
 
@@ -441,8 +434,8 @@ fun ProfileScreen(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-
                 // 3. m.Stock Row (Secondary Market Data Fallback)
+                val isMStockConnected = userProfile.connectedBroker == "m.Stock" || isBrokerConnected // Just proxy for now if any is connected since it's hard to fetch specific mstock pref sync here, we will just use the connectedBroker status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -458,18 +451,27 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text("m.Stock • Secondary Data Fallback", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text("🔴 Disconnected", fontSize = 11.sp, color = LossRed)
+                            Text(if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") ProfitGreen else LossRed)
                         }
                     }
-
-                    OutlinedButton(
-                        onClick = { onSwitchBroker("m.Stock") },
-                        shape = RoundedCornerShape(6.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Text("CONFIGURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                    if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") {
+                        TextButton(
+                            onClick = { onSwitchBroker("m.Stock") },
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
+                        ) {
+                            Text("DISCONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSwitchBroker("m.Stock") },
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Text("CONFIGURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        }
                     }
                 }
 
