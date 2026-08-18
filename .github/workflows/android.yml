@@ -111,7 +111,9 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }} --no-daemon
+        run: |
+          VERSION_CODE=$((${{ github.run_number }} + 50))
+          ./gradlew assembleRelease -PversionCode=$VERSION_CODE -PversionName=1.0.$VERSION_CODE --no-daemon
 
       - name: Verify Release APK and Signature Certificate
         run: |
@@ -138,7 +140,8 @@ jobs:
           fi
           echo "Release APK SHA256 Fingerprint: $FINGERPRINT"
 
-          TAG_NAME="v1.0.${{ github.run_number }}"
+          VERSION_CODE=$((${{ github.run_number }} + 50))
+          TAG_NAME="v1.0.$VERSION_CODE"
           NAMED_APK="app/build/outputs/apk/release/KING-KHAN-AI-TRADE-${TAG_NAME}.apk"
           cp "$APK_PATH" "$NAMED_APK"
           echo "Created named APK artifact at $NAMED_APK"
@@ -149,7 +152,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          TAG_NAME="v1.0.${{ github.run_number }}"
+          VERSION_CODE=$((${{ github.run_number }} + 50))
+          TAG_NAME="v1.0.$VERSION_CODE"
           TITLE="KING KHAN AI TRADE $TAG_NAME"
           BODY="KING KHAN AI TRADE Automated Release $TAG_NAME from commit ${{ github.sha }}."
           APK_PATH="app/build/outputs/apk/release/app-release.apk"
@@ -179,7 +183,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          TAG_NAME="v1.0.${{ github.run_number }}"
+          VERSION_CODE=$((${{ github.run_number }} + 50))
+          TAG_NAME="v1.0.$VERSION_CODE"
           echo "Verifying published release $TAG_NAME on GitHub..."
 
           RELEASE_INFO=$(gh release view "$TAG_NAME" --json tagName,isDraft,isPrerelease,assets)
