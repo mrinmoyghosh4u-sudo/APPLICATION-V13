@@ -451,10 +451,10 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text("m.Stock • Secondary Data Fallback", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text(if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") ProfitGreen else LossRed)
+                            Text(if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") ProfitGreen else LossRed)
                         }
                     }
-                    if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock") {
+                    if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") {
                         TextButton(
                             onClick = { onSwitchBroker("m.Stock") },
                             modifier = Modifier.height(32.dp),

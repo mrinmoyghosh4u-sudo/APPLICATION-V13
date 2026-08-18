@@ -117,6 +117,12 @@ class SessionManager(context: Context) {
             prefs.edit().putString(KEY_ANGEL_CLIENT_ID, value).commit()
         }
 
+    var angelMpin: String
+        get() = safeGetToken("angel_mpin_enc") ?: ""
+        set(value) {
+            safeSetToken("angel_mpin_enc", value)
+        }
+
     var angelTokenTimestamp: Long
         get() = prefs.getLong(KEY_ANGEL_TOKEN_TIME, 0L)
         set(value) {
@@ -257,6 +263,12 @@ class SessionManager(context: Context) {
         get() = prefs.getString("mstock_client_id", "") ?: ""
         set(value) {
             prefs.edit().putString("mstock_client_id", value).commit()
+        }
+
+    var mstockPasswordPin: String
+        get() = safeGetToken("mstock_password_pin_enc") ?: ""
+        set(value) {
+            safeSetToken("mstock_password_pin_enc", value)
         }
 
     var mstockAccessToken: String?

@@ -409,6 +409,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (res.isSuccess) {
                 val tokens = res.getOrThrow()
                 sessionManager.angelClientId = clientCode
+                sessionManager.angelMpin = mpin
                 sessionManager.angelJwtToken = tokens.jwtToken
                 sessionManager.angelRefreshToken = tokens.refreshToken
                 sessionManager.angelFeedToken = tokens.feedToken
@@ -443,6 +444,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             sessionManager.mstockApiKey = apiKey
             sessionManager.mstockClientId = clientId
+            sessionManager.mstockPasswordPin = passwordPin
             sessionManager.mstockAccessToken = totpToken.ifBlank { "mstock_token_${System.currentTimeMillis()}" }
             sessionManager.mstockTokenTimestamp = System.currentTimeMillis()
             sessionManager.activeBroker = "m.Stock"

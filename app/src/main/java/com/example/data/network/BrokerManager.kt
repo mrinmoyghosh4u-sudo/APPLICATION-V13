@@ -36,8 +36,17 @@ class BrokerManager(
     suspend fun getProfile(): Result<UserProfileEntity> {
         return if (sessionManager.activeBroker == "Dhan") {
             dhanTradingService.getProfile()
-        } else {
+        } else if (sessionManager.activeBroker == "Angel One") {
             angelOneService.getProfile()
+        } else if (sessionManager.activeBroker == "m.Stock") {
+            Result.success(com.example.data.model.UserProfileEntity(
+                name = "m.Stock User",
+                connectedBroker = "m.Stock",
+                isAngelConnected = false,
+                isDhanConnected = false
+            ))
+        } else {
+            Result.failure(Exception("No active broker selected"))
         }
     }
 
