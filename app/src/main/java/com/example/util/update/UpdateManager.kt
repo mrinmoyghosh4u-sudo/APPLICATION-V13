@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 class UpdateManager(
     private val context: Context,
     private val owner: String = "mrinmoyghosh4u-sudo",
-    private val repo: String = "APPLICATION-V12"
+    private val repo: String = "APPLICATION-V13"
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)

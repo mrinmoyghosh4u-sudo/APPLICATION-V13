@@ -4,9 +4,9 @@ import java.io.File
 
 data class UpdateDiagnostics(
     val githubOwner: String = "mrinmoyghosh4u-sudo",
-    val githubRepo: String = "APPLICATION-V12",
-    val releaseApiUrl: String = "https://api.github.com/repos/mrinmoyghosh4u-sudo/APPLICATION-V12/releases/latest",
-    val repository: String = "mrinmoyghosh4u-sudo/APPLICATION-V12",
+    val githubRepo: String = "APPLICATION-V13",
+    val releaseApiUrl: String = "https://api.github.com/repos/mrinmoyghosh4u-sudo/APPLICATION-V13/releases/latest",
+    val repository: String = "mrinmoyghosh4u-sudo/APPLICATION-V13",
     val githubApiStatus: String = "PASS",
     val repoAccessStatus: String = "PASS",
     val authStatus: String = "PASS",

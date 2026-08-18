@@ -44,7 +44,6 @@ object AlgoEngine {
         timeframe = "5 MIN",
         riskLevel = "MEDIUM",
         capital = 100000.0,
-        isPaperTrading = true,
         isActive = true,
         maxTrades = 5
     )
@@ -207,8 +206,7 @@ object AlgoEngine {
             tradingStyle = style,
             timeframe = timeframe,
             riskLevel = risk,
-            capital = capital,
-            isPaperTrading = true
+            capital = capital
         )
     }
 

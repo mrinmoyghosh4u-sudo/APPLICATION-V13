@@ -55,7 +55,7 @@ class UpdateManagerTest {
               "assets": [
                 {
                   "name": "app-release.apk",
-                  "browser_download_url": "https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V12/releases/download/v1.0.1/app-release.apk",
+                  "browser_download_url": "https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V13/releases/download/v1.0.1/app-release.apk",
                   "size": 15420000
                 }
               ]
@@ -71,7 +71,7 @@ class UpdateManagerTest {
         assertEquals("v1.0.1", tagName)
         assertEquals("1.0.1", cleanVersion)
         assertEquals("app-release.apk", asset.getString("name"))
-        assertEquals("https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V12/releases/download/v1.0.1/app-release.apk", asset.getString("browser_download_url"))
+        assertEquals("https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V13/releases/download/v1.0.1/app-release.apk", asset.getString("browser_download_url"))
         assertEquals(15420000L, asset.getLong("size"))
         assertTrue(VersionUtils.isUpdateAvailable("1.0.0", cleanVersion))
     }
@@ -86,7 +86,7 @@ class UpdateManagerTest {
               "assets": [
                 {
                   "name": "source.zip",
-                  "browser_download_url": "https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V12/archive/refs/tags/v1.0.1.zip",
+                  "browser_download_url": "https://github.com/mrinmoyghosh4u-sudo/APPLICATION-V13/archive/refs/tags/v1.0.1.zip",
                   "size": 1200000
                 }
               ]
@@ -111,7 +111,7 @@ class UpdateManagerTest {
     fun `test update diagnostics model formatting`() {
         val diag = UpdateDiagnostics(
             httpStatus = "200",
-            repository = "mrinmoyghosh4u-sudo/APPLICATION-V12",
+            repository = "mrinmoyghosh4u-sudo/APPLICATION-V13",
             releaseCount = 1,
             latestTag = "v1.0.1",
             apkAssetName = "app-release.apk",
@@ -121,7 +121,7 @@ class UpdateManagerTest {
         )
 
         assertEquals("200", diag.httpStatus)
-        assertEquals("mrinmoyghosh4u-sudo/APPLICATION-V12", diag.repository)
+        assertEquals("mrinmoyghosh4u-sudo/APPLICATION-V13", diag.repository)
         assertEquals(1, diag.releaseCount)
         assertEquals("v1.0.1", diag.latestTag)
     }
