@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+  <!-- White Card Background for dark theme contrast and crisp visibility -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M16,4 L84,4 C90.63,4 96,9.37 96,16 L96,84 C96,90.63 90.63,96 84,96 L16,96 C9.37,96 4,90.63 4,84 L4,16 C4,9.37 9.37,4 16,4 Z" />
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="#E2E8F0"
+      android:strokeWidth="1.5"
+      android:pathData="M16,4 L84,4 C90.63,4 96,9.37 96,16 L96,84 C96,90.63 90.63,96 84,96 L16,96 C9.37,96 4,90.63 4,84 L4,16 C4,9.37 9.37,4 16,4 Z" />
+
+  <!-- Angel One Orange Downward Triangles (Pyramid of 10) -->
+  <!-- Row 1 (Top: 1 triangle) -->
+  <path
+      android:fillColor="#FF5C00"
+      android:pathData="M33,35 L43,35 L38,44 Z" />
+
+  <!-- Row 2 (2 triangles) -->
+  <path
+      android:fillColor="#FF5C00"
+      android:pathData="M27.5,46 L37.5,46 L32.5,55 Z M38.5,46 L48.5,46 L43.5,55 Z" />
+
+  <!-- Row 3 (3 triangles) -->
+  <path
+      android:fillColor="#FF5C00"
+      android:pathData="M22,57 L32,57 L27,66 Z M33,57 L43,57 L38,66 Z M44,57 L54,57 L49,66 Z" />
+
+  <!-- Row 4 (Bottom: 4 triangles) -->
+  <path
+      android:fillColor="#FF5C00"
+      android:pathData="M16.5,68 L26.5,68 L21.5,77 Z M27.5,68 L37.5,68 L32.5,77 Z M38.5,68 L48.5,68 L43.5,77 Z M49.5,68 L59.5,68 L54.5,77 Z" />
+
+  <!-- Angel One Vibrant Green Diagonal Bar -->
+  <path
+      android:fillColor="#0FAD57"
+      android:pathData="M42,21 L54,21 L82,77 L70,77 Z" />
+
+</vector>
+

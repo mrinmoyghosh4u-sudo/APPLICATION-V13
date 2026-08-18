@@ -1,0 +1,1 @@
+sed -i 's/val authToken = uri.getQueryParameter("auth_token")/val angelRefreshToken = uri.getQueryParameter("refresh_token")\n            val authToken = angelRefreshToken ?: uri.getQueryParameter("auth_token")/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

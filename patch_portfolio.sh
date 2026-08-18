@@ -1,0 +1,1 @@
+sed -i 's/val totalPnl = holdings.sumOf { it.pnl }/val totalRealized = userProfile.realizedPnl\n    val totalUnrealized = userProfile.unrealizedPnl\n    val totalPnl = totalRealized + totalUnrealized/' app/src/main/java/com/example/ui/screens/PortfolioScreen.kt

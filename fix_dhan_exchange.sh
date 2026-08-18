@@ -1,0 +1,1 @@
+sed -i 's/val isCodeExchange = accessToken.isNullOrBlank() && !code.isNullOrBlank()/val isCodeExchange = accessToken.isNullOrBlank() \&\& (!code.isNullOrBlank() || !authToken.isNullOrBlank())/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

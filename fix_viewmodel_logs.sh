@@ -1,0 +1,1 @@
+sed -i 's/val code = uri.getQueryParameter("code")/android.util.Log.d("OAuth", "OAuth Redirect Callback received: $uri")\n            val code = uri.getQueryParameter("code")/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

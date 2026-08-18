@@ -1,0 +1,9 @@
+# Explicitly declare text files so line endings are normalized
+* text=auto
+
+# Declare binary files so git sync never corrupts JARs, keystores, or images
+*.jar binary
+*.png binary
+*.jpg binary
+*.keystore binary
+*.jks binary

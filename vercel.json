@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/oauth", "destination": "/api/oauth" },
+    { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks" }
+  ]
+}

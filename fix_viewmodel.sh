@@ -1,0 +1,1 @@
+sed -i 's/val authToken = uri.getQueryParameter("auth_token") ?: uri.getQueryParameter("jwtToken") ?: uri.getQueryParameter("token")/val authToken = uri.getQueryParameter("auth_token") ?: uri.getQueryParameter("jwtToken") ?: uri.getQueryParameter("token") ?: uri.getQueryParameter("tokenId")/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

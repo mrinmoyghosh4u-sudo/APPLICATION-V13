@@ -1,0 +1,52 @@
+workflows:
+  android-build:
+    name: Android APK & Release Build
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      java: 17
+      groups:
+        - environment_variables
+    scripts:
+      - name: Set up project environment
+        script: |
+          if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+            cp .env.example .env
+          elif [ ! -f ".env" ]; then
+            touch .env
+          fi
+          if ! jar -tf gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
+            echo "Gradle wrapper JAR is invalid or corrupt. Regenerating wrapper..."
+            gradle wrapper || true
+          fi
+          chmod +x gradlew
+
+      - name: Ensure Debug Keystore
+        script: |
+          if [ ! -f "debug.keystore" ]; then
+            if [ -f "debug.keystore.base64" ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+      - name: Build Debug APK
+        script: |
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Build Release APK
+        script: |
+          ./gradlew assembleRelease --no-daemon || true
+
+    artifacts:
+      - app/build/outputs/apk/**/*.apk
+      - app/build/outputs/bundle/**/*.aab
+
+    publishing:
+      email:
+        recipients:
+          - mrinmoyghosh4u@gmail.com
+        notify:
+          failure: true
+          success: true

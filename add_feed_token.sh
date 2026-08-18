@@ -1,0 +1,5 @@
+sed -i 's/private const val KEY_ANGEL_REFRESH = "angel_refresh_token_enc"/private const val KEY_ANGEL_REFRESH = "angel_refresh_token_enc"\n        private const val KEY_ANGEL_FEED = "angel_feed_token_enc"/g' app/src/main/java/com/example/data/network/SessionManager.kt
+sed -i 's/var angelRefreshToken: String?/var angelRefreshToken: String?\n        get() = decrypt(prefs.getString(KEY_ANGEL_REFRESH, null))\n        set(value) = prefs.edit().putString(KEY_ANGEL_REFRESH, encrypt(value)).apply()\n\n    var angelFeedToken: String?\n        get() = decrypt(prefs.getString(KEY_ANGEL_FEED, null))\n        set(value) = prefs.edit().putString(KEY_ANGEL_FEED, encrypt(value)).apply()\n\n    var dummyToken: String?/g' app/src/main/java/com/example/data/network/SessionManager.kt
+sed -i '/var dummyToken: String?/d' app/src/main/java/com/example/data/network/SessionManager.kt
+sed -i '/get() = decrypt(prefs.getString(KEY_ANGEL_REFRESH, null))/d' app/src/main/java/com/example/data/network/SessionManager.kt
+sed -i '/set(value) = prefs.edit().putString(KEY_ANGEL_REFRESH, encrypt(value)).apply()/d' app/src/main/java/com/example/data/network/SessionManager.kt

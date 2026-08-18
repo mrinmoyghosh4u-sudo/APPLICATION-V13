@@ -1,0 +1,1 @@
+sed -i 's/accountBalance = prof.accountBalance/accountBalance = prof.accountBalance,\n                        realizedPnl = prof.realizedPnl,\n                        unrealizedPnl = prof.unrealizedPnl,\n                        todaysPnl = prof.todaysPnl/' app/src/main/java/com/example/data/repository/TradingRepository.kt

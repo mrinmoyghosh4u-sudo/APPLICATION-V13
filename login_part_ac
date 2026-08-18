@@ -1,0 +1,100 @@
+
+                    // Angel One Login Button
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .clickable { onConnectBroker("Angel One") },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF0B3B8A)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color.White, RoundedCornerShape(8.dp))
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_angel_one_logo),
+                                        contentDescription = "Angel One Logo",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    "LOGIN WITH ANGEL ONE",
+                                    fontSize = 15.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    // Secure connection footer
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Security,
+                            contentDescription = null,
+                            tint = PrimaryGold,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                "SECURE & ENCRYPTED CONNECTION",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                "Official Dhan HQ & Angel One SmartAPI",
+                                fontSize = 10.sp,
+                                color = TextGray
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- BOTTOM BLOCK ---
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Bottom Features Highlights Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    FeatureBadge(icon = Icons.Default.Shield, title = "SECURE LOGIN")
+                    FeatureBadge(icon = Icons.Default.BarChart, title = "REAL TIME DATA")
+                    FeatureBadge(icon = Icons.Default.FlashOn, title = "LIGHTNING FAST")
+                    FeatureBadge(icon = Icons.Default.SupportAgent, title = "24/7 SUPPORT")
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // SKIP LOGIN Button
+                OutlinedButton(
+                    onClick = onSkipLogin,
+                    modifier = Modifier

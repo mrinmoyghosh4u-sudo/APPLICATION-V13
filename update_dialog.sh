@@ -1,0 +1,1 @@
+sed -i 's|val url = "https://auth.dhan.co/login/oauth/authorize?client_id=$cid&redirect_uri=$redirectUri&response_type=code"|// Launch OAuth will be handled by ViewModel|g' app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt

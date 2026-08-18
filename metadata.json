@@ -1,0 +1,6 @@
+{
+  "name": "KING KHAN AI TRADE",
+  "description": "Premium Native AI Trading Application with Live Market Feeds, Option Chain, AI Signals, Orders & Portfolio Management",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

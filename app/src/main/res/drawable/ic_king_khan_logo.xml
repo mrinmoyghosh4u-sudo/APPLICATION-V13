@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+  <!-- ==================== CROWN (TOP) ==================== -->
+
+  <!-- Crown Base Arc Shadow / Glow -->
+  <path
+      android:fillColor="#4D3800"
+      android:pathData="M22,33 Q50,38 78,33 L76,35 Q50,40 24,35 Z" />
+
+  <!-- Crown Main Gold Body -->
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M24,32 L21,21 L31,25 L41,17 L50,10 L59,17 L69,25 L79,21 L76,32 Q50,37 24,32 Z" />
+
+  <!-- Crown Left Highlight Facets -->
+  <path
+      android:fillColor="#FFF8DC"
+      android:pathData="M50,10 L41,17 L50,25 Z M31,25 L21,21 L24,32 Q37,34.5 50,25 Z" />
+
+  <!-- Crown Right Shading Facets -->
+  <path
+      android:fillColor="#DAA520"
+      android:pathData="M50,10 L59,17 L50,25 Z M69,25 L79,21 L76,32 Q63,34.5 50,25 Z" />
+
+  <path
+      android:fillColor="#B8860B"
+      android:pathData="M41,17 L50,25 L31,25 Z M59,17 L50,25 L69,25 Z" />
+
+  <!-- Crown Pearls / Spheres (5 Orbs) -->
+  <!-- Center Orb -->
+  <path android:fillColor="#FFFFFF" android:pathData="M50,9 A2.8,2.8 0 1,1 49.9,9 Z" />
+  <path android:fillColor="#FFD700" android:pathData="M50,9 A2.0,2.0 0 1,1 49.9,9 Z" />
+
+  <!-- Inner Left Orb -->
+  <path android:fillColor="#FFFFFF" android:pathData="M41,16 A2.3,2.3 0 1,1 40.9,16 Z" />
+  <path android:fillColor="#FFD700" android:pathData="M41,16 A1.6,1.6 0 1,1 40.9,16 Z" />
+
+  <!-- Inner Right Orb -->
+  <path android:fillColor="#FFFFFF" android:pathData="M59,16 A2.3,2.3 0 1,1 58.9,16 Z" />
+  <path android:fillColor="#FFD700" android:pathData="M59,16 A1.6,1.6 0 1,1 58.9,16 Z" />
+
+  <!-- Outer Left Orb -->
+  <path android:fillColor="#FFFFFF" android:pathData="M21,20 A2.0,2.0 0 1,1 20.9,20 Z" />
+  <path android:fillColor="#FFD700" android:pathData="M21,20 A1.4,1.4 0 1,1 20.9,20 Z" />
+
+  <!-- Outer Right Orb -->
+  <path android:fillColor="#FFFFFF" android:pathData="M79,20 A2.0,2.0 0 1,1 78.9,20 Z" />
+  <path android:fillColor="#FFD700" android:pathData="M79,20 A1.4,1.4 0 1,1 78.9,20 Z" />
+
+  <!-- Crown Base Band Gold Trim -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M23,31.5 Q50,36.5 77,31.5 L77,33 Q50,38 23,33 Z" />
+
+
+  <!-- ==================== DOUBLE "KK" SHIELD MONOGRAM ==================== -->
+
+  <!-- LEFT 'K' -->
+  <!-- Left K Outer Vertical Wall & Upper/Lower Arms -->
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M24,36 H33 V50 L46,36 H48.5 V37 L37,52 L48.5,70 V71 H46 L33,54 V70 L24,57 Z" />
+
+  <!-- Left K Bevel Highlights -->
+  <path
+      android:fillColor="#FFF8DC"
+      android:pathData="M24,36 H27 V55 L24,57 Z M33,50 L46,36 H48.5 L36,50 Z" />
+
+  <path
+      android:fillColor="#DAA520"
+      android:pathData="M24,57 L33,70 V54 Z M37,52 L48.5,70 H46 L35,53 Z" />
+
+  <!-- Left K Shield Outer Taper (Angled Shield Left Edge to Bottom Tip) -->
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M24,57 L33,70 L48.5,91 L46,91 L31,71 L24,60 Z" />
+  <path
+      android:fillColor="#FFF8DC"
+      android:pathData="M24,57 L31,71 L48.5,91 L46,91 L30,70 L24,58 Z" />
+
+
+  <!-- RIGHT 'K' (Symmetrical Mirror around X=50) -->
+  <!-- Right K Main Body -->
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M76,36 H67 V50 L54,36 H51.5 V37 L63,52 L51.5,70 V71 H54 L67,54 V70 L76,57 Z" />
+
+  <!-- Right K Bevel Highlights -->
+  <path
+      android:fillColor="#FFF8DC"
+      android:pathData="M76,36 H73 V55 L76,57 Z M67,50 L54,36 H51.5 L64,50 Z" />
+
+  <path
+      android:fillColor="#DAA520"
+      android:pathData="M76,57 L67,70 V54 Z M63,52 L51.5,70 H54 L65,53 Z" />
+
+  <!-- Right K Shield Outer Taper (Angled Shield Right Edge to Bottom Tip) -->
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M76,57 L67,70 L51.5,91 L54,91 L69,71 L76,60 Z" />
+  <path
+      android:fillColor="#DAA520"
+      android:pathData="M76,57 L69,71 L51.5,91 L54,91 L70,70 L76,58 Z" />
+
+  <!-- SHIELD BOTTOM CENTER POINT APEX -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M50,94 L46,89 H54 Z" />
+  <path
+      android:fillColor="#FFD700"
+      android:pathData="M50,95 L47,90 H53 Z" />
+
+</vector>
