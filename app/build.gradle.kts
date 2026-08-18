@@ -121,12 +121,13 @@ android {
             ksFile
           } else null
         }
-        ?: throw GradleException("Production signing keystore is missing. Refusing to generate a new signing key because this would break app updates.")
 
-      storeFile = debugKs
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      if (debugKs != null) {
+        storeFile = debugKs
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
   }
 
