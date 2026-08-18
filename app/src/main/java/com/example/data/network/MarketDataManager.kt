@@ -131,11 +131,20 @@ class MarketDataManager(
             Log.w("MarketDataManager", "m.Stock getMarketQuotes failed: ${mStockResult.exceptionOrNull()?.message}")
         }
 
-        // 3. Unavailable State
+        // 3. Fallback to Yahoo Finance for index closing prices
+        val yahooResult = YahooFinanceService.getMarketQuotes(symbols)
+        if (yahooResult.isNotEmpty()) {
+            _activeProvider.value = "Yahoo Finance (Delayed)"
+            _connectionStatus.value = "CLOSED" // Show closed because it's fallback
+            updateTimestamp()
+            return Result.success(yahooResult)
+        }
+
+        // 4. Unavailable State
         _activeProvider.value = "Market Data Unavailable"
         _connectionStatus.value = "DISCONNECTED"
         _error.value = "Market data unavailable across all configured providers."
-        return Result.failure(Exception("Market data unavailable from Angel One or m.Stock."))
+        return Result.failure(Exception("Market data unavailable from all providers."))
     }
 
     /**
