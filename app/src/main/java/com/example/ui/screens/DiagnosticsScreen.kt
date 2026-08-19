@@ -40,6 +40,8 @@ fun DiagnosticsScreen(
     val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
     val mStockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
     val yahooHealth by MarketDataStore.yahooHealth.collectAsStateWithLifecycle()
+    val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
+    val internalActiveProvider by viewModel.brokerManager.marketDataEngine.internalActiveProvider.collectAsStateWithLifecycle()
     
     val isMasterLoaded = viewModel.brokerManager.instrumentMasterService.isLoaded
     val angelAuthStatus = if (viewModel.sessionManager.angelJwtToken.isNullOrEmpty()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
@@ -135,6 +137,16 @@ fun DiagnosticsScreen(
                 }
             }
         }
+
+        // Section: Automatic Failover Engine
+        SectionHeader("AUTOMATIC FAILOVER ROUTER (UNIFIED)")
+        DiagnosticItem("Unified Output Status", unifiedStatus)
+        DiagnosticItem("Internal Active Provider", internalActiveProvider)
+        DiagnosticItem("Failover Hierarchy", "1. Angel One → 2. m.Stock → 3. NSE → 4. Yahoo")
+        DiagnosticItem("Historical Failover", "1. m.Stock → 2. Yahoo → 3. NSE → 4. Angel One")
+        DiagnosticItem("Market Breadth Failover", "1. m.Stock → 2. NSE → 3. Yahoo → 4. Angel One")
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Section: Live Feed Providers
         SectionHeader("PRIMARY FEED: ANGEL ONE (SmartAPI)")

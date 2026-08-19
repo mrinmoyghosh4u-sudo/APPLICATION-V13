@@ -72,6 +72,15 @@ class MStockMarketDataService(
         return apiKey.isNotBlank() && !accessToken.isNullOrBlank()
     }
 
+    fun isConnectionLive(): Boolean {
+        return isConnected.get() && _connectionState.value == "LIVE"
+    }
+
+    fun reconnect() {
+        disconnect()
+        connect()
+    }
+
     /**
      * Connects to m.Stock Live WebSocket and initiates authentication handshake
      */
@@ -436,5 +445,19 @@ class MStockMarketDataService(
             return Result.failure(Exception("m.Stock Market Data is not configured."))
         }
         return Result.failure(Exception("m.Stock streaming active via WebSocket. Snapshot Option Chain unavailable."))
+    }
+
+    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.data.model.HistoricalCandle>> {
+        if (!isConfigured()) {
+            return Result.failure(Exception("m.Stock Market Data is not configured."))
+        }
+        return Result.failure(Exception("m.Stock historical candles REST endpoint unavailable."))
+    }
+
+    suspend fun getMarketBreadth(): Result<com.example.data.model.MarketBreadth> {
+        if (!isConfigured()) {
+            return Result.failure(Exception("m.Stock Market Data is not configured."))
+        }
+        return Result.failure(Exception("m.Stock market breadth REST endpoint unavailable."))
     }
 }

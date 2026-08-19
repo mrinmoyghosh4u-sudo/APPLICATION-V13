@@ -667,12 +667,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun startLiveMarketFeed() {
         viewModelScope.launch {
             launch {
-                brokerManager.marketDataManager.activeProvider.collect { provider ->
-                    _marketDataSource.value = provider
+                brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
+                    _marketDataSource.value = status
                 }
             }
             launch {
-                brokerManager.marketDataManager.lastUpdateTime.collect { time ->
+                brokerManager.marketDataEngine.lastTickTimeFormatted.collect { time ->
                     if (time.isNotBlank()) {
                         _marketDataLastUpdated.value = time
                     }

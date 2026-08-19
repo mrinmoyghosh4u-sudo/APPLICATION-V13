@@ -1,0 +1,132 @@
+package com.example.data.model
+
+import com.example.ui.components.CandleData
+
+/**
+ * Unified Provider-Independent Data Models
+ * 
+ * The UI layer consumes ONLY these unified models and never directly references
+ * provider-specific ticks or schemas.
+ */
+
+data class MarketTick(
+    val symbol: String,
+    val exchange: String,
+    val token: String = "",
+    val ltp: Double,
+    val open: Double = 0.0,
+    val high: Double = 0.0,
+    val low: Double = 0.0,
+    val close: Double = 0.0,
+    val change: Double = 0.0,
+    val changePercent: Double = 0.0,
+    val volume: Long = 0L,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isLive: Boolean = true
+)
+
+data class IndexQuote(
+    val symbol: String,
+    val exchange: String,
+    val ltp: Double,
+    val change: Double,
+    val changePercent: Double,
+    val open: Double = 0.0,
+    val high: Double = 0.0,
+    val low: Double = 0.0,
+    val previousClose: Double = 0.0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isLive: Boolean = true
+)
+
+data class OptionChain(
+    val symbol: String,
+    val expiry: String,
+    val underlyingLtp: Double,
+    val strikes: List<OptionStrikeItem>,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isLive: Boolean = true
+)
+
+data class OptionContract(
+    val strikePrice: Double,
+    val callOi: String = "-",
+    val callChgOi: String = "-",
+    val callIv: Double = 0.0,
+    val callLtp: Double = 0.0,
+    val callDelta: Double = 0.0,
+    val callGamma: Double = 0.0012,
+    val callTheta: Double = -12.4,
+    val callVega: Double = 8.5,
+    val callVolume: String = "0",
+    val putOi: String = "-",
+    val putChgOi: String = "-",
+    val putIv: Double = 0.0,
+    val putLtp: Double = 0.0,
+    val putDelta: Double = 0.0,
+    val putGamma: Double = 0.0012,
+    val putTheta: Double = -11.8,
+    val putVega: Double = 8.2,
+    val putVolume: String = "0",
+    val isAtm: Boolean = false
+)
+
+data class HistoricalCandle(
+    val time: String,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+    val volume: Long,
+    val timestamp: Long = 0L
+) {
+    fun toCandleData(): CandleData {
+        return CandleData(
+            open = open.toFloat(),
+            high = high.toFloat(),
+            low = low.toFloat(),
+            close = close.toFloat(),
+            volume = volume.toFloat()
+        )
+    }
+}
+
+data class MarketBreadth(
+    val advances: Int,
+    val declines: Int,
+    val unchanged: Int,
+    val total: Int,
+    val advanceDeclineRatio: Double = if (declines > 0) advances.toDouble() / declines.toDouble() else advances.toDouble(),
+    val advancingPercent: Double = if (total > 0) (advances.toDouble() / total.toDouble()) * 100.0 else 0.0,
+    val decliningPercent: Double = if (total > 0) (declines.toDouble() / total.toDouble()) * 100.0 else 0.0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class MarketDepthItem(
+    val price: Double,
+    val quantity: Int,
+    val orders: Int = 1
+)
+
+data class MarketDepth(
+    val symbol: String,
+    val exchange: String,
+    val totalBuyQty: Long = 0L,
+    val totalSellQty: Long = 0L,
+    val buyDepth: List<MarketDepthItem> = emptyList(),
+    val sellDepth: List<MarketDepthItem> = emptyList(),
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class InstrumentInfo(
+    val token: String,
+    val symbol: String,
+    val name: String,
+    val exchange: String,
+    val expiry: String = "",
+    val strike: Double = 0.0,
+    val optionType: String = "", // CE / PE
+    val lotSize: Int = 1,
+    val tickSize: Double = 0.05,
+    val instrumentType: String = "EQUITY" // EQUITY, INDEX, FUTIDX, OPTIDX, FUTSTK, OPTSTK, COMMODITY
+)

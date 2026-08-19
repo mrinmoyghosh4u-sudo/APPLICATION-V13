@@ -1,16 +1,20 @@
 package com.example.data.network
 
+import com.example.data.model.HistoricalCandle
+import com.example.data.model.MarketBreadth
+import com.example.data.model.MarketTick
 import com.example.data.model.OptionStrikeItem
 import com.example.data.model.OrderEntity
 import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
+import com.example.ui.components.CandleData
 
 /**
  * Broker Manager for KING KHAN AI TRADER
  * 
  * Rules:
- * - Market Data Providers: ANGEL ONE (Primary Live), m.STOCK (Live), NSE (Authorized Feed), YAHOO (Reference Only).
+ * - Market Data: Unified MarketDataEngine manages hidden automatic failover across Angel One, m.Stock, NSE, and Yahoo.
  * - Dhan is STRICTLY FOR ORDER EXECUTION ONLY. Dhan NEVER provides market data.
  * - ALL live orders route strictly through OrderManager -> DhanTradingService -> Dhan API.
  * - Angel One NEVER receives live trading orders.
@@ -25,6 +29,18 @@ class BrokerManager(
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
     val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService)
     val tradeSmartMarketDataService = TradeSmartMarketDataService(sessionManager, instrumentMasterService)
+    val nseFeedService = NseAuthorizedFeedService(sessionManager)
+    val healthManager = ProviderHealthManager()
+
+    // Unified Market Data Engine with Hidden Failover Router
+    val marketDataEngine = MarketDataEngine(
+        angelMarketDataService = angelMarketDataService,
+        mStockMarketDataService = mStockMarketDataService,
+        nseFeedService = nseFeedService,
+        tradeSmartMarketDataService = tradeSmartMarketDataService,
+        sessionManager = sessionManager,
+        healthManager = healthManager
+    )
 
     // Central Order Execution Manager (Dhan-only)
     val orderManager = OrderManager(
@@ -50,7 +66,7 @@ class BrokerManager(
     )
 
     val currentMarketDataSource: String
-        get() = marketDataManager.activeProvider.value
+        get() = marketDataEngine.unifiedFeedStatus.value
 
     val activeService: IBrokerService
         get() = if (sessionManager.activeBroker == "Dhan") dhanService else angelOneService
@@ -135,14 +151,26 @@ class BrokerManager(
     }
 
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
-        return marketDataManager.getMarketQuotes(symbols)
+        return marketDataEngine.getMarketQuotes(symbols)
     }
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> {
-        return marketDataManager.getOptionChain(symbol, expiry)
+        return marketDataEngine.getOptionChain(symbol, expiry)
     }
 
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return marketDataManager.getOptionExpiries(symbol)
+        return marketDataEngine.getOptionExpiries(symbol)
+    }
+
+    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
+        return marketDataEngine.getHistoricalCandleData(symbol, interval)
+    }
+
+    suspend fun getMarketBreadth(): Result<MarketBreadth> {
+        return marketDataEngine.getAdvanceDecline()
+    }
+
+    suspend fun getLiveTick(symbol: String, exchange: String = "NSE"): MarketTick? {
+        return marketDataEngine.getLiveTick(symbol, exchange)
     }
 }

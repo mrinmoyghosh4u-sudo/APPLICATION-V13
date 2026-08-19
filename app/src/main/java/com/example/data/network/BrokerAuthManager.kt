@@ -447,7 +447,7 @@ class BrokerAuthManager(
 
     private suspend fun validateTradeSmartSession() {
         if (!sessionManager.isTradeSmartConfigured()) {
-            updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Not Configured")
             return
         }
 

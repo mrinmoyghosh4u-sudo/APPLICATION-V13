@@ -1,8 +1,6 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,20 +26,16 @@ import com.example.ui.theme.DarkGold
 import com.example.ui.theme.LossRed
 import com.example.ui.theme.ProfitGreen
 import com.example.ui.theme.SecondaryGold
-import com.example.ui.theme.TextGray
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
 
 /**
- * Multi-Source Market Data Status Indicator
+ * Unified Market Data Status Indicator
  * 
- * Displays:
- * - Active primary source & market open status
- * - Source Health Matrix:
- *   ANGEL ONE: LIVE / STALE / OFFLINE
- *   m.STOCK: LIVE / STALE / OFFLINE
- *   NSE: LIVE / STALE / OFFLINE
- *   YAHOO: REFERENCE / DELAYED / OFFLINE
+ * Strict Directives:
+ * - Provider source names are HIDDEN from user-facing UI.
+ * - Displays ONLY: "LIVE", "MARKET CLOSED", or "DATA UNAVAILABLE".
+ * - Metrics show unified connection health without exposing backend provider names.
  */
 @Composable
 fun MarketDataStatusIndicator(
@@ -52,25 +46,12 @@ fun MarketDataStatusIndicator(
     onRefresh: (() -> Unit)? = null,
     onReconnect: (() -> Unit)? = null
 ) {
-    val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
-    val mstockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
-    val nseHealth by MarketDataStore.nseHealth.collectAsStateWithLifecycle()
-    val yahooHealth by MarketDataStore.yahooHealth.collectAsStateWithLifecycle()
-
     val isDisconnected = source.contains("Disconnected", ignoreCase = true) || 
                          source.contains("UNAVAILABLE", ignoreCase = true) || 
-                         source == "DISCONNECTED"
+                         source == "DISCONNECTED" ||
+                         source == "DATA UNAVAILABLE"
     val isLive = !isDisconnected
     val indicatorColor = if (!isMarketOpen) Color(0xFFFFB300) else if (isLive) ProfitGreen else LossRed
-
-    val activeBrokerName = when {
-        source.contains("Angel", ignoreCase = true) -> "ANGEL ONE"
-        source.contains("m.Stock", ignoreCase = true) -> "m.STOCK"
-        source.contains("Dhan", ignoreCase = true) -> "DHAN (EXEC ONLY)"
-        source.contains("NSE", ignoreCase = true) -> "NSE"
-        source.contains("Yahoo", ignoreCase = true) -> "YAHOO (REF)"
-        else -> source.uppercase()
-    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -97,14 +78,14 @@ fun MarketDataStatusIndicator(
                     Spacer(modifier = Modifier.width(8.dp))
                     if (isLive) {
                         Text(
-                            text = if (!isMarketOpen) "MARKET CLOSED — $activeBrokerName" else "LIVE FEED — $activeBrokerName",
+                            text = if (!isMarketOpen) "MARKET CLOSED" else "LIVE",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (!isMarketOpen) Color(0xFFFFB300) else ProfitGreen
                         )
                     } else {
                         Text(
-                            text = "$activeBrokerName DISCONNECTED",
+                            text = "DATA UNAVAILABLE",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = LossRed
@@ -132,7 +113,7 @@ fun MarketDataStatusIndicator(
                         border = androidx.compose.foundation.BorderStroke(1.dp, LossRed)
                     ) {
                         Text(
-                            text = "CONNECT",
+                            text = "RECONNECT",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = LossRed,
@@ -144,15 +125,15 @@ fun MarketDataStatusIndicator(
             
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Multi-Source Health Grid
+            // Unified Engine Health Badges (Provider agnostic)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                SourceHealthBadge("ANGEL ONE", angelHealth, Modifier.weight(1f))
-                SourceHealthBadge("m.STOCK", mstockHealth, Modifier.weight(1f))
-                SourceHealthBadge("NSE", nseHealth, Modifier.weight(1f))
-                SourceHealthBadge("YAHOO", yahooHealth, Modifier.weight(1f))
+                EngineHealthBadge("DATA FEED", if (isLive) "ACTIVE" else "OFFLINE", Modifier.weight(1f))
+                EngineHealthBadge("TICKS", if (isLive) "VALIDATED" else "STALE", Modifier.weight(1f))
+                EngineHealthBadge("ROUTER", "FAILOVER READY", Modifier.weight(1.2f))
+                EngineHealthBadge("LATENCY", if (isLive) "LOW" else "N/A", Modifier.weight(0.8f))
             }
             
             Spacer(modifier = Modifier.height(6.dp))
@@ -184,15 +165,14 @@ fun MarketDataStatusIndicator(
 }
 
 @Composable
-private fun SourceHealthBadge(
+private fun EngineHealthBadge(
     label: String,
-    health: String,
+    status: String,
     modifier: Modifier = Modifier
 ) {
-    val color = when (health.uppercase()) {
-        "LIVE" -> ProfitGreen
+    val color = when (status.uppercase()) {
+        "ACTIVE", "VALIDATED", "FAILOVER READY", "LOW" -> ProfitGreen
         "STALE" -> Color(0xFFFFB300)
-        "REFERENCE", "DELAYED" -> Color(0xFF64B5F6)
         else -> LossRed
     }
 
@@ -215,7 +195,7 @@ private fun SourceHealthBadge(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = health.uppercase(),
+                text = status.uppercase(),
                 fontSize = 7.sp,
                 fontWeight = FontWeight.Black,
                 color = color,

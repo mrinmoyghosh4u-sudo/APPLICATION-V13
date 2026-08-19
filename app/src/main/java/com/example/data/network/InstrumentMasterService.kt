@@ -93,6 +93,12 @@ class InstrumentMasterService(
 
         if (symUpper.isNotBlank()) {
             symbolExchangeMap["$normExch:$symUpper"] = inst
+            if (symUpper.endsWith("-EQ")) {
+                val clean = symUpper.removeSuffix("-EQ").trim()
+                if (clean.isNotBlank()) {
+                    symbolExchangeMap["$normExch:$clean"] = inst
+                }
+            }
         }
         if (nameUpper.isNotBlank()) {
             symbolExchangeMap["$normExch:$nameUpper"] = inst
