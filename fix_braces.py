@@ -1,8 +1,8 @@
 lines = open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt').read().split('\n')
 out = []
-for i, line in enumerate(lines):
+for line in lines:
     out.append(line)
-    if "emptyList()" in line and "    }" in lines[i+1] and "override" in lines[i+2] if i+2 < len(lines) else False:
-        out.append("            }")
-        out.append("        }")
+    if "override suspend fun getPositions" in line or "override suspend fun getMarketQuotes" in line:
+        out.insert(-1, "            }")
+        out.insert(-1, "        }")
 open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt', 'w').write('\n'.join(out))

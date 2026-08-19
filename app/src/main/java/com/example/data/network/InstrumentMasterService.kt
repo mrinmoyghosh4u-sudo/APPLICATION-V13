@@ -1,4 +1,7 @@
 package com.example.data.network
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 
 import android.content.Context
 import android.util.JsonReader
@@ -26,6 +29,20 @@ data class Instrument(
     val tick_size: String
 )
 
+
+    private fun getExchangeType(exchSeg: String): Int {
+        return when (exchSeg.uppercase()) {
+            "NSE" -> 1
+            "NFO" -> 2
+            "BSE" -> 3
+            "BFO" -> 4
+            "MCX" -> 5
+            "NCDEX" -> 7
+            "CDS" -> 9
+            else -> 1
+        }
+    }
+
 class InstrumentMasterService(
     private val client: OkHttpClient = OkHttpClient(),
     private val context: Context? = null
@@ -41,8 +58,19 @@ class InstrumentMasterService(
     private val instrumentMap = mutableMapOf<String, Instrument>()
     private val indexSymbolMap = mutableMapOf<String, Instrument>()
 
-    var isLoaded = false
-        private set
+    private val hardcodedIndices = mapOf(
+        "NIFTY" to Instrument("99926000", "NIFTY", "NIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
+        "BANKNIFTY" to Instrument("99926009", "BANKNIFTY", "BANKNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
+        "FINNIFTY" to Instrument("99926037", "FINNIFTY", "FINNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
+        "MIDCPNIFTY" to Instrument("99926074", "MIDCPNIFTY", "MIDCPNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
+        "SENSEX" to Instrument("99919000", "SENSEX", "SENSEX", "", "0", "1", "AMXIDX", "BSE", "0"),
+        "BANKEX" to Instrument("99919012", "BANKEX", "BANKEX", "", "0", "1", "AMXIDX", "BSE", "0")
+    )
+
+
+    private val _isLoaded = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isLoadedFlow = _isLoaded.asStateFlow()
+    val isLoaded: Boolean get() = _isLoaded.value
 
     init {
         // Pre-populate core index instruments so index quotes and tokens work immediately even before or during download
@@ -57,7 +85,7 @@ class InstrumentMasterService(
         indexSymbolMap["MIDCPNIFTY"] = midcapNifty
 
         listOf(nifty, bankNifty, finNifty, midcapNifty).forEach {
-            instrumentMap[it.token] = it
+            instrumentMap["${it.token}_${getExchangeType(it.exch_seg)}"] = it
         }
     }
 
@@ -94,7 +122,7 @@ class InstrumentMasterService(
             
             if (token.isNotBlank()) {
                 val inst = Instrument(token, symbol, name, expiry, strike, lotsize, instType, exch, tickSize)
-                instrumentMap[token] = inst
+                instrumentMap["${token}_${getExchangeType(exch)}"] = inst
                 if ((exch == "NSE" || exch == "BSE" || exch == "MCX") && (instType == "" || instType == "AMXIDX" || instType.contains("FUT") || instType.contains("IDX")) && (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY" || name == "SENSEX" || name == "BANKEX" || symbol.startsWith("CRUDEOIL"))) {
                     // Prefer AMXIDX for NSE/BSE indices
                     val isIndex = instType == "AMXIDX" || (exch == "BSE" && instType == "") || (exch == "MCX" && instType.contains("FUT"))
@@ -125,15 +153,20 @@ class InstrumentMasterService(
 
         // Try loading from recent local disk cache if available (< 24 hours old)
         if (cacheFile != null && cacheFile.exists() && cacheFile.length() > 0 && (System.currentTimeMillis() - cacheFile.lastModified() < 86400000L)) {
+            Log.d("InstrumentMaster", "Loading master from local cache (${cacheFile.length()} bytes)")
             try {
-                Log.d("InstrumentMaster", "Loading master from local cache (${cacheFile.length()} bytes)")
                 FileInputStream(cacheFile).use { parseInputStream(it) }
-                isLoaded = true
-                Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments from local cache")
-                return@withContext
+                if (instrumentMap.size > 1000) {
+                    _isLoaded.value = true
+                    Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments from local cache")
+                    return@withContext
+                } else {
+                    throw Exception("Not enough instruments loaded from cache: ${instrumentMap.size}")
+                }
             } catch (e: Exception) {
                 Log.w("InstrumentMaster", "Failed to parse cached master file, re-downloading", e)
                 cacheFile.delete()
+                instrumentMap.clear()
             }
         }
 
@@ -153,26 +186,38 @@ class InstrumentMasterService(
                 masterClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw Exception("Failed to download master (HTTP ${response.code})")
                     val body = response.body ?: throw Exception("Empty body in master file response")
-
+                    val expectedLength = body.contentLength()
+                    
                     if (cacheFile != null) {
                         body.byteStream().use { input ->
                             FileOutputStream(cacheFile).use { output ->
                                 input.copyTo(output)
                             }
                         }
+                        
+                        val actualLength = cacheFile.length()
+                        if (expectedLength > 0 && actualLength != expectedLength) {
+                            throw Exception("Truncated download: expected $expectedLength bytes, got $actualLength bytes")
+                        }
+                        
                         FileInputStream(cacheFile).use { parseInputStream(it) }
                     } else {
                         body.byteStream().use { parseInputStream(it) }
                     }
 
-                    isLoaded = true
-                    success = true
-                    Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments successfully")
+                    if (instrumentMap.size > 1000) {
+                        _isLoaded.value = true
+                        success = true
+                        Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments successfully")
+                    } else {
+                        throw Exception("Parsing completed but not enough instruments: ${instrumentMap.size}")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("InstrumentMaster", "Attempt $attempts failed to download/parse master: ${e.localizedMessage}")
+                instrumentMap.clear()
                 if (attempts < maxAttempts) {
-                    kotlinx.coroutines.delay(1000L * attempts)
+                    kotlinx.coroutines.delay(2000L * attempts)
                 }
             }
         }
@@ -182,15 +227,17 @@ class InstrumentMasterService(
             try {
                 Log.d("InstrumentMaster", "Falling back to existing cached master file after network failure")
                 FileInputStream(cacheFile).use { parseInputStream(it) }
-                isLoaded = true
-                Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments from fallback cache")
+                if (instrumentMap.size > 1000) {
+                    _isLoaded.value = true
+                    Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments from fallback cache")
+                }
             } catch (e: Exception) {
                 Log.e("InstrumentMaster", "Failed reading fallback cache file", e)
             }
         }
     }
 
-    fun getInstrumentByToken(token: String): Instrument? = instrumentMap[token]
+    fun getInstrumentByToken(token: String, exchangeType: Int): Instrument? = instrumentMap["${token}_${exchangeType}"]
     
         fun getOptionInstruments(name: String, expiry: String): List<Instrument> {
         val uppercaseName = name.uppercase()
@@ -239,14 +286,15 @@ class InstrumentMasterService(
             "CRUDEOIL M" to "CRUDEOIL M"
         )
         val symbol = nameToSymbol[indexName] ?: indexName
-        return indexSymbolMap[symbol]
+        return indexSymbolMap[symbol] ?: hardcodedIndices[symbol]
     }
 
     fun resolveAngelToken(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
         
         // Check index symbol map first
-        val indexInst = indexSymbolMap[uppercaseSymbol] ?: indexSymbolMap[if (uppercaseSymbol == "NIFTY 50") "NIFTY" else uppercaseSymbol]
+        val mappedName = if (uppercaseSymbol == "NIFTY 50") "NIFTY" else uppercaseSymbol
+        val indexInst = indexSymbolMap[mappedName] ?: hardcodedIndices[mappedName]
         if (indexInst != null) return indexInst.token
         
         // Exact token lookup if symbol is already a numeric token
@@ -259,6 +307,7 @@ class InstrumentMasterService(
         }
         return match?.token
     }
+
 
     fun resolveDhanSecurityId(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()

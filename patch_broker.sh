@@ -1,0 +1,2 @@
+sed -i 's|com.example.util.InstrumentMapUtil.getAngelSymbolToken(order.symbol, order.exchange)|instrumentMaster.resolveAngelToken(order.symbol, order.exchange) ?: ""|g' app/src/main/java/com/example/data/network/AngelOneBrokerService.kt
+sed -i 's|com.example.util.InstrumentMapUtil.getAngelSymbolToken(sym, "NSE")|instrumentMaster.resolveAngelToken(sym, "NSE") ?: ""|g' app/src/main/java/com/example/data/network/AngelOneBrokerService.kt

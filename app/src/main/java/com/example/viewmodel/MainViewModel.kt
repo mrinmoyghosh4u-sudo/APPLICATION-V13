@@ -288,11 +288,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     if (live != null && live.ltp > 0) {
+                        val prevClose = if (item.ltp > 0) item.ltp - item.change else 0.0
+                        val newChange = if (prevClose > 0) live.ltp - prevClose else live.change
+                        val newChangePct = if (prevClose > 0) (newChange / prevClose) * 100 else live.changePercent
                         item.copy(
                             ltp = live.ltp,
-                            change = live.change,
-                            changePercent = live.changePercent,
-                            isPositive = live.change >= 0
+                            change = newChange,
+                            changePercent = newChangePct,
+                            isPositive = newChange >= 0
                         )
                     } else {
                         item
@@ -734,7 +737,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 val secId = com.example.util.InstrumentMapUtil.getDhanSecurityId(symbol, exchange)
-                val token = com.example.util.InstrumentMapUtil.getAngelSymbolToken(symbol, exchange)
+                val token = instrumentMasterService.resolveAngelToken(symbol, exchange) ?: ""
                 val order = OrderEntity(
                     orderId = "ORD_${System.currentTimeMillis()}",
                     symbol = symbol,
@@ -832,7 +835,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     time = timeStr,
                     productType = productType,
                     securityId = existingOrder?.securityId ?: com.example.util.InstrumentMapUtil.getDhanSecurityId(symbol, exchange),
-                    symbolToken = existingOrder?.symbolToken ?: com.example.util.InstrumentMapUtil.getAngelSymbolToken(symbol, exchange)
+                    symbolToken = existingOrder?.symbolToken ?: instrumentMasterService.resolveAngelToken(symbol, exchange) ?: ""
                 )
 
                 repository.placeOrder(exitOrder)
@@ -869,7 +872,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     time = timeStr,
                     productType = productType,
                     securityId = existingOrder?.securityId ?: com.example.util.InstrumentMapUtil.getDhanSecurityId(symbol, exchange),
-                    symbolToken = existingOrder?.symbolToken ?: com.example.util.InstrumentMapUtil.getAngelSymbolToken(symbol, exchange)
+                    symbolToken = existingOrder?.symbolToken ?: instrumentMasterService.resolveAngelToken(symbol, exchange) ?: ""
                 )
 
                 repository.placeOrder(partialExitOrder)

@@ -45,6 +45,7 @@ class AngelOneMarketDataService(
 
     init {
         scope.launch {
+            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
             instrumentMaster.loadMaster()
             connectWebSocket()
         }
@@ -83,6 +84,7 @@ class AngelOneMarketDataService(
                 Log.d("AngelOneMarketDataService", "WebSocket Opened")
                 
                 pingJob = scope.launch {
+            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
                     while (true) {
                         delay(30_000)
                         try {
@@ -131,12 +133,15 @@ class AngelOneMarketDataService(
     
     private fun scheduleReconnect() {
         if (reconnectAttempt > 5) {
+            _connectionState.value = "DISCONNECTED"
             reconnectAttempt = 5
         }
         val delayTime = (1 shl reconnectAttempt) * 1000L
         reconnectAttempt++
+        _connectionState.value = "RECONNECTING"
         
         scope.launch {
+            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
             delay(delayTime)
             connectWebSocket()
         }
@@ -156,7 +161,7 @@ class AngelOneMarketDataService(
     }
 
     private fun subscribeToIndices(ws: WebSocket) {
-        if (!instrumentMaster.isLoaded) return
+        // if (!instrumentMaster.isLoaded) return // No need to wait, hardcoded fallback exists
         
         val tokensByExchange = mutableMapOf<Int, MutableList<String>>()
         val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
@@ -230,9 +235,10 @@ class AngelOneMarketDataService(
             
             if (ltpInt <= 0) return
             
-            val ltp = ltpInt / 100.0
+            val divisor = if (exchangeType.toInt() == 9) 10000000.0 else 100.0
+            val ltp = ltpInt / divisor
             
-            val inst = instrumentMaster.getInstrumentByToken(token) ?: return
+            val inst = instrumentMaster.getInstrumentByToken(token, exchangeType.toInt()) ?: return
             
             if (!hasFirstTick) {
                 hasFirstTick = true

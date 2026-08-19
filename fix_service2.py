@@ -1,4 +1,4 @@
-package com.example.data.network
+content = """package com.example.data.network
 
 import com.example.data.model.OptionStrikeItem
 import com.example.data.model.OrderEntity
@@ -145,7 +145,7 @@ class AngelOneBrokerService(
 
     override suspend fun cancelOrder(orderId: String): Result<Boolean> {
         return runCatching {
-            val req = mapOf("orderid" to orderId, "variety" to "NORMAL")
+            val req = AngelCancelOrderRequest(orderId = orderId)
             val response = api.cancelOrder(req)
             if (response.isSuccessful && response.body()?.status == true) true else throw Exception(response.body()?.message ?: "Cancel Order Failed")
         }
@@ -313,3 +313,5 @@ class AngelOneBrokerService(
         }
     }
 }
+"""
+open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt', 'w').write(content)

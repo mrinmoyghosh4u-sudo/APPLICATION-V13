@@ -1,0 +1,1 @@
+sed -i '/scope.launch {/a \            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }' app/src/main/java/com/example/data/network/AngelOneMarketDataService.kt

@@ -1,4 +1,3 @@
-cat << 'INNER_EOF' > app/src/main/java/com/example/data/network/AngelQuoteResponseData.kt
 package com.example.data.network
 
 import com.squareup.moshi.Json
@@ -16,4 +15,3 @@ data class AngelUnfetchedQuote(
     @Json(name = "symbolToken") val symbolToken: Any? = "",
     @Json(name = "message") val message: Any? = ""
 )
-INNER_EOF

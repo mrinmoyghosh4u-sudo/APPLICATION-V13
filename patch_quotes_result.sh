@@ -1,0 +1,1 @@
+sed -i 's|}.recoverCatching {|}.recoverCatching { e ->\n            android.util.Log.e("AngelOneBrokerService", "Failed to fetch quotes", e)\n            throw e\n        }|g' app/src/main/java/com/example/data/network/AngelOneBrokerService.kt

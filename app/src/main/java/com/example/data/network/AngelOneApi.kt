@@ -43,7 +43,7 @@ interface AngelOneApi {
     @POST("rest/secure/angelbroking/market/v1/quote/")
     suspend fun getQuotes(
         @Body request: AngelQuoteRequest
-    ): Response<AngelOneResponse<List<AngelQuoteItem>>>
+    ): Response<AngelOneResponse<AngelQuoteResponseData>>
 
     @GET("rest/secure/angelbroking/market/v1/optionchain/expirylist")
     suspend fun getOptionExpiries(

@@ -1,0 +1,3 @@
+sed -i 's/change = live.change,/val prevClose = if (item.ltp > 0) item.ltp - item.change else 0.0\n                            val newChange = if (prevClose > 0) live.ltp - prevClose else item.change\n                            val newChangePct = if (prevClose > 0) (newChange \/ prevClose) * 100 else item.changePercent\n                            change = newChange,/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt
+sed -i 's/changePercent = live.changePercent,/changePercent = newChangePct,/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt
+sed -i 's/isPositive = live.change >= 0/isPositive = newChange >= 0/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt
