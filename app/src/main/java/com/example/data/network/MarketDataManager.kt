@@ -32,6 +32,7 @@ import java.util.Locale
 class MarketDataManager(
     private val angelMarketDataService: AngelOneMarketDataService,
     private val mStockMarketDataService: MStockMarketDataService,
+    private val tradeSmartMarketDataService: TradeSmartMarketDataService,
     private val sessionManager: SessionManager
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + Job())
@@ -87,12 +88,17 @@ class MarketDataManager(
                         _connectionStatus.value = "STALE"
                     }
                     "DISCONNECTED", "ERROR" -> {
-                        // Angel One failed or disconnected -> Attempt failover to m.Stock if configured
+                        // Angel One failed or disconnected -> Failover to m.Stock or TradeSmart
                         if (mStockMarketDataService.isConfigured()) {
                             Log.w("MarketDataManager", "Angel One link down. Failing over to m.Stock...")
                             _activeProvider.value = "m.Stock"
-                            _connectionStatus.value = "FAILOVER"
+                            _connectionStatus.value = "LIVE"
                             _error.value = "Angel One connection lost. Switched to m.Stock fallback."
+                        } else if (tradeSmartMarketDataService.isConfigured()) {
+                            Log.w("MarketDataManager", "Angel One link down. Failing over to TradeSmart...")
+                            _activeProvider.value = "TradeSmart"
+                            _connectionStatus.value = "LIVE"
+                            _error.value = "Angel One connection lost. Switched to TradeSmart fallback."
                         } else {
                             _activeProvider.value = "Angel One"
                             _connectionStatus.value = "DISCONNECTED"
@@ -142,7 +148,18 @@ class MarketDataManager(
             Log.w("MarketDataManager", "m.Stock getMarketQuotes failed: ${mStockResult.exceptionOrNull()?.message}")
         }
 
-        // 3. Fallback to Yahoo Finance for index closing prices
+        // 3. Failover to TradeSmart (Tertiary Provider)
+        if (tradeSmartMarketDataService.isConfigured()) {
+            val tradeSmartResult = tradeSmartMarketDataService.getMarketQuotes(symbols)
+            if (tradeSmartResult.isSuccess) {
+                _activeProvider.value = "TradeSmart"
+                updateTimestamp()
+                return tradeSmartResult
+            }
+            Log.w("MarketDataManager", "TradeSmart getMarketQuotes failed: ${tradeSmartResult.exceptionOrNull()?.message}")
+        }
+
+        // 4. Fallback to Yahoo Finance for index closing prices
         val yahooResult = YahooFinanceService.getMarketQuotes(symbols)
         if (yahooResult.isNotEmpty()) {
             _activeProvider.value = "Yahoo Finance (Delayed)"
@@ -153,7 +170,7 @@ class MarketDataManager(
             return Result.success(yahooResult)
         }
 
-        // 4. Unavailable State
+        // 5. Unavailable State
         _activeProvider.value = "Market Data Unavailable"
         _connectionStatus.value = "DISCONNECTED"
         _error.value = "Market data unavailable across all configured providers."
@@ -178,7 +195,15 @@ class MarketDataManager(
             }
         }
 
-        return Result.failure(Exception("Option Chain data unavailable from Angel One or m.Stock."))
+        if (tradeSmartMarketDataService.isConfigured()) {
+            val tradeSmartResult = tradeSmartMarketDataService.getOptionChain(symbol, expiry)
+            if (tradeSmartResult.isSuccess) {
+                _activeProvider.value = "TradeSmart"
+                return tradeSmartResult
+            }
+        }
+
+        return Result.failure(Exception("Option Chain data unavailable from all providers."))
     }
 
     /**

@@ -54,6 +54,7 @@ class SessionManager(context: Context) {
         private const val KEY_ANGEL_FEED = "angel_feed_token_enc"
         private const val KEY_ANGEL_CLIENT_ID = "angel_client_id"
         private const val KEY_ANGEL_API_KEY = "angel_api_key_enc"
+        private const val KEY_ANGEL_TOTP_SECRET = "angel_totp_secret_enc"
         private const val KEY_ANGEL_TOKEN_TIME = "angel_token_time"
         private const val KEY_DHAN_TOKEN = "dhan_access_token_enc"
         private const val KEY_DHAN_CLIENT_ID = "dhan_client_id"
@@ -141,6 +142,16 @@ class SessionManager(context: Context) {
             safeSetToken(KEY_ANGEL_API_KEY, value)
         }
 
+    var angelTotpSecret: String
+        get() = safeGetToken(KEY_ANGEL_TOTP_SECRET) ?: ""
+        set(value) {
+            safeSetToken(KEY_ANGEL_TOTP_SECRET, value)
+        }
+
+    fun isAngelConfigured(): Boolean {
+        return !angelClientId.isBlank() && (!angelApiKey.isBlank() || !angelTotpSecret.isBlank() || !angelJwtToken.isNullOrBlank())
+    }
+
     var dhanAccessToken: String?
         get() = safeGetToken(KEY_DHAN_TOKEN)
         set(value) {
@@ -220,11 +231,27 @@ class SessionManager(context: Context) {
         }
     }
 
+    var isDhanConnected: Boolean
+        get() = prefs.getBoolean("is_dhan_connected", !dhanAccessToken.isNullOrBlank())
+        set(value) {
+            prefs.edit().putBoolean("is_dhan_connected", value).commit()
+        }
+
+    var isAngelConnected: Boolean
+        get() = prefs.getBoolean("is_angel_connected", !angelJwtToken.isNullOrBlank())
+        set(value) {
+            prefs.edit().putBoolean("is_angel_connected", value).commit()
+        }
+
+    fun hasAngelSession(): Boolean = !angelJwtToken.isNullOrBlank()
+    fun hasDhanSession(): Boolean = !dhanAccessToken.isNullOrBlank()
+
     fun clearDhanSession() {
         prefs.edit()
             .remove(KEY_DHAN_TOKEN)
             .remove(KEY_DHAN_CLIENT_ID)
             .remove(KEY_DHAN_TOKEN_TIME)
+            .putBoolean("is_dhan_connected", false)
             .commit()
         if (activeBroker == "Dhan") {
             activeBroker = ""
@@ -238,6 +265,7 @@ class SessionManager(context: Context) {
             .remove(KEY_ANGEL_FEED)
             .remove(KEY_ANGEL_CLIENT_ID)
             .remove(KEY_ANGEL_TOKEN_TIME)
+            .putBoolean("is_angel_connected", false)
             .commit()
         if (activeBroker == "Angel One") {
             activeBroker = ""
@@ -299,8 +327,48 @@ class SessionManager(context: Context) {
         }
     }
 
+    var tradesmartApiKey: String
+        get() = safeGetToken("tradesmart_api_key_enc") ?: ""
+        set(value) {
+            safeSetToken("tradesmart_api_key_enc", value)
+        }
+
+    var tradesmartClientId: String
+        get() = prefs.getString("tradesmart_client_id", "") ?: ""
+        set(value) {
+            prefs.edit().putString("tradesmart_client_id", value).commit()
+        }
+
+    var tradesmartAccessToken: String?
+        get() = safeGetToken("tradesmart_access_token_enc")
+        set(value) {
+            safeSetToken("tradesmart_access_token_enc", value)
+        }
+
+    var tradesmartRefreshToken: String?
+        get() = safeGetToken("tradesmart_refresh_token_enc")
+        set(value) {
+            safeSetToken("tradesmart_refresh_token_enc", value)
+        }
+
+    var tradesmartTokenTimestamp: Long
+        get() = prefs.getLong("tradesmart_token_time", 0L)
+        set(value) {
+            prefs.edit().putLong("tradesmart_token_time", value).commit()
+        }
+
     fun isTradeSmartConfigured(): Boolean {
-        return !prefs.getString("tradesmart_api_key", "").isNullOrBlank()
+        return !tradesmartApiKey.isBlank() || !tradesmartAccessToken.isNullOrBlank() || !tradesmartClientId.isBlank()
+    }
+
+    fun clearTradeSmartSession() {
+        prefs.edit()
+            .remove("tradesmart_api_key_enc")
+            .remove("tradesmart_client_id")
+            .remove("tradesmart_access_token_enc")
+            .remove("tradesmart_refresh_token_enc")
+            .remove("tradesmart_token_time")
+            .commit()
     }
 
     fun clearSession() {

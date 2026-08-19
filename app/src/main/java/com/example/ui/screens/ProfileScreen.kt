@@ -39,7 +39,10 @@ fun ProfileScreen(
     orders: List<OrderEntity> = emptyList(),
     holdings: List<PortfolioHoldingEntity> = emptyList(),
     appPreferences: AppPreferences,
+    brokerStatuses: Map<String, com.example.data.network.BrokerConnectionState> = emptyMap(),
     onSwitchBroker: (String) -> Unit,
+    onReconnectBroker: (String) -> Unit = {},
+    onDisconnectBroker: (String) -> Unit = {},
     onToggleBiometric: (Boolean) -> Unit,
     onNavigateToTelegramSettings: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
@@ -321,7 +324,7 @@ fun ProfileScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Link, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("BROKER CONNECTIONS", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryGold)
+                    Text("BROKER CONNECTIONS & SESSIONS", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryGold)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -333,11 +336,25 @@ fun ProfileScreen(
                 ) {
                     Column {
                         Text("ACTIVE ORDER BROKER", fontSize = 9.sp, color = TextGray)
-                        Text("🟢 Dhan (Primary Execution)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                        val dhanSt = brokerStatuses["Dhan"]?.status?.name ?: if (userProfile.isDhanConnected) "CONNECTED" else "OFFLINE"
+                        val dhanColor = when (dhanSt) {
+                            "CONNECTED" -> ProfitGreen
+                            "STANDBY" -> Color(0xFFFFD54F)
+                            "AUTHENTICATION_REQUIRED" -> Color(0xFFFF9800)
+                            else -> LossRed
+                        }
+                        Text("Dhan ($dhanSt)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = dhanColor)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("ACTIVE MARKET DATA", fontSize = 9.sp, color = TextGray)
-                        Text("🟢 Angel One (Primary Data)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                        Text("PRIMARY MARKET DATA", fontSize = 9.sp, color = TextGray)
+                        val angelSt = brokerStatuses["Angel One"]?.status?.name ?: if (userProfile.isAngelConnected) "CONNECTED" else "OFFLINE"
+                        val angelColor = when (angelSt) {
+                            "CONNECTED" -> ProfitGreen
+                            "STANDBY" -> Color(0xFFFFD54F)
+                            "AUTHENTICATION_REQUIRED" -> Color(0xFFFF9800)
+                            else -> LossRed
+                        }
+                        Text("Angel One ($angelSt)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = angelColor)
                     }
                 }
 
@@ -346,169 +363,68 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 1. Dhan Row
-                val isDhanConnected = userProfile.isDhanConnected || userProfile.connectedBroker == "Dhan"
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_dhan_logo),
-                            contentDescription = "Dhan Logo",
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("Dhan • Primary Execution", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text(if (isDhanConnected) "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (isDhanConnected) ProfitGreen else LossRed)
-                        }
-                    }
-
-                    if (isDhanConnected) {
-                        OutlinedButton(
-                            onClick = { onSwitchBroker("Dhan") },
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text("DISCONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                    } else {
-                        Button(
-                            onClick = { onSwitchBroker("Dhan") },
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp)
-                        ) {
-                            Text("CONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 2. Angel One Row
-                val isAngelConnected = userProfile.isAngelConnected || (userProfile.connectedBroker == "Angel One" && isBrokerConnected)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_angel_one_logo),
-                            contentDescription = "Angel One Logo",
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("Angel One • Primary Data Provider", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text(if (isAngelConnected) "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (isAngelConnected) ProfitGreen else LossRed)
-                        }
-                    }
-
-                    if (isAngelConnected) {
-                        OutlinedButton(
-                            onClick = { onSwitchBroker("Angel One") },
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text("DISCONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                    } else {
-                        Button(
-                            onClick = { onSwitchBroker("Angel One") },
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp)
-                        ) {
-                            Text("CONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-                // 3. m.Stock Row (Secondary Market Data Fallback)
-                val isMStockConnected = userProfile.connectedBroker == "m.Stock" || isBrokerConnected // Just proxy for now if any is connected since it's hard to fetch specific mstock pref sync here, we will just use the connectedBroker status
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(32.dp).background(DarkCardSecondary, CircleShape).border(1.dp, PrimaryGold, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("M", fontWeight = FontWeight.Black, color = PrimaryGold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("m.Stock • Secondary Data Fallback", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text(if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") "🟢 Connected" else "🔴 Disconnected", fontSize = 11.sp, color = if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") ProfitGreen else LossRed)
-                        }
-                    }
-                    if (userProfile.connectedBroker == "m.Stock" || userProfile.name == "m.Stock User") {
-                        TextButton(
-                            onClick = { onSwitchBroker("m.Stock") },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp)
-                        ) {
-                            Text("DISCONNECT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { onSwitchBroker("m.Stock") },
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text("CONFIGURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 4. TradeSmart Row (Tertiary Market Data Fallback)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(32.dp).background(DarkCardSecondary, CircleShape).border(1.dp, PrimaryGold, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("T", fontWeight = FontWeight.Black, color = PrimaryGold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("TradeSmart • Tertiary Data Fallback", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text("🔴 Disconnected", fontSize = 11.sp, color = LossRed)
-                        }
-                    }
-
-                    OutlinedButton(
-                        onClick = { onSwitchBroker("TradeSmart") },
-                        shape = RoundedCornerShape(6.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Text("CONFIGURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                    }
-                }
+                val dhanInfo = brokerStatuses["Dhan"]
+                val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Dhan",
+                    subtitle = "Primary Order Execution",
+                    logoRes = R.drawable.ic_dhan_logo,
+                    status = dhanStatus,
+                    lastRefreshTime = dhanInfo?.lastSyncTimestamp ?: 0L,
+                    onConnect = { onSwitchBroker("Dhan") },
+                    onReconnect = { onReconnectBroker("Dhan") },
+                    onDisconnect = { onDisconnectBroker("Dhan") }
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // 2. Angel One Row
+                val angelInfo = brokerStatuses["Angel One"]
+                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Angel One",
+                    subtitle = "Primary Market Data",
+                    logoRes = R.drawable.ic_angel_one_logo,
+                    status = angelStatus,
+                    lastRefreshTime = angelInfo?.lastSyncTimestamp ?: 0L,
+                    onConnect = { onSwitchBroker("Angel One") },
+                    onReconnect = { onReconnectBroker("Angel One") },
+                    onDisconnect = { onDisconnectBroker("Angel One") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3. m.Stock Row (Secondary Market Data Fallback)
+                val mstockInfo = brokerStatuses["m.Stock"]
+                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.CONFIGURE
+                BrokerStatusRow(
+                    name = "m.Stock",
+                    subtitle = "Secondary Market Data Fallback",
+                    letter = "m",
+                    status = mstockStatus,
+                    lastRefreshTime = mstockInfo?.lastSyncTimestamp ?: 0L,
+                    onConnect = { onSwitchBroker("m.Stock") },
+                    onReconnect = { onReconnectBroker("m.Stock") },
+                    onDisconnect = { onDisconnectBroker("m.Stock") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4. TradeSmart Row (Tertiary Market Data Fallback)
+                val tsInfo = brokerStatuses["TradeSmart"]
+                val tsStatus = tsInfo?.status ?: com.example.data.network.BrokerAuthStatus.CONFIGURE
+                BrokerStatusRow(
+                    name = "TradeSmart",
+                    subtitle = "Tertiary Market Data Fallback",
+                    letter = "T",
+                    status = tsStatus,
+                    lastRefreshTime = tsInfo?.lastSyncTimestamp ?: 0L,
+                    onConnect = { onSwitchBroker("TradeSmart") },
+                    onReconnect = { onReconnectBroker("TradeSmart") },
+                    onDisconnect = { onDisconnectBroker("TradeSmart") }
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Warning Footer
                 Surface(
@@ -522,7 +438,7 @@ fun ProfileScreen(
                     ) {
                         Text("⭐", fontSize = 12.sp)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Angel One is primary market data source. Dhan handles all order routing.", fontSize = 10.sp, color = TextGray)
+                        Text("Auto-Auth Manager maintains sessions across all 4 brokers. Sessions are automatically refreshed on startup.", fontSize = 10.sp, color = TextGray)
                     }
                 }
             }
@@ -900,3 +816,118 @@ private fun ProfileMenuItemRow(
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(20.dp))
     }
 }
+
+@Composable
+private fun BrokerStatusRow(
+    name: String,
+    subtitle: String,
+    logoRes: Int = 0,
+    letter: String = "",
+    status: com.example.data.network.BrokerAuthStatus,
+    lastRefreshTime: Long = 0L,
+    onConnect: () -> Unit,
+    onReconnect: () -> Unit,
+    onDisconnect: () -> Unit
+) {
+    val statusText = when (status) {
+        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Connected (Active)"
+        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟡 Standby (Session Valid)"
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> "🟠 Re-auth Required"
+        com.example.data.network.BrokerAuthStatus.OFFLINE -> "🔴 Disconnected"
+        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Configured"
+        com.example.data.network.BrokerAuthStatus.ERROR -> "⚠️ Auth Error"
+    }
+
+    val statusColor = when (status) {
+        com.example.data.network.BrokerAuthStatus.CONNECTED -> ProfitGreen
+        com.example.data.network.BrokerAuthStatus.STANDBY -> Color(0xFFFFD54F)
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> Color(0xFFFF9800)
+        com.example.data.network.BrokerAuthStatus.OFFLINE -> LossRed
+        com.example.data.network.BrokerAuthStatus.CONFIGURE -> TextGray
+        com.example.data.network.BrokerAuthStatus.ERROR -> LossRed
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (logoRes != 0) {
+                Image(
+                    painter = painterResource(id = logoRes),
+                    contentDescription = name,
+                    modifier = Modifier.size(30.dp)
+                )
+            } else {
+                val boxBg = if (letter == "m") Color(0xFFE53935) else Color(0xFF0288D1)
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(boxBg, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(letter, fontWeight = FontWeight.Black, color = Color.White, fontSize = 14.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text("$name • $subtitle", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                Text(statusText, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = statusColor)
+            }
+        }
+
+        when (status) {
+            com.example.data.network.BrokerAuthStatus.CONNECTED -> {
+                OutlinedButton(
+                    onClick = onDisconnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LossRed),
+                    modifier = Modifier.height(30.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                }
+            }
+            com.example.data.network.BrokerAuthStatus.STANDBY -> {
+                OutlinedButton(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
+                    modifier = Modifier.height(30.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                }
+            }
+            com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+            com.example.data.network.BrokerAuthStatus.ERROR -> {
+                Button(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800), contentColor = Color.Black),
+                    modifier = Modifier.height(30.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Text("RE-AUTH", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            com.example.data.network.BrokerAuthStatus.CONFIGURE,
+            com.example.data.network.BrokerAuthStatus.OFFLINE -> {
+                Button(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black),
+                    modifier = Modifier.height(30.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Text(if (status == com.example.data.network.BrokerAuthStatus.CONFIGURE) "CONFIGURE" else "CONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+

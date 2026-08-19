@@ -334,6 +334,139 @@ class AngelOneMarketDataService(
                 state = "LIVE",
                 sequenceNumber = sequenceNumber
             )
+
+            // Also map to alias index names if this token matches a known index/commodity contract
+            val crudeInst = instrumentMaster.resolveIndexToken("CRUDEOIL")
+            val crudeMInst = instrumentMaster.resolveIndexToken("CRUDEOIL M")
+            val niftyInst = instrumentMaster.resolveIndexToken("NIFTY")
+            val bankNiftyInst = instrumentMaster.resolveIndexToken("BANKNIFTY")
+            val finNiftyInst = instrumentMaster.resolveIndexToken("FINNIFTY")
+            val midcpInst = instrumentMaster.resolveIndexToken("MIDCPNIFTY")
+            val sensexInst = instrumentMaster.resolveIndexToken("SENSEX")
+            val bankexInst = instrumentMaster.resolveIndexToken("BANKEX")
+
+            when (token) {
+                crudeInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "CRUDEOIL",
+                    token = token,
+                    exchange = "MCX",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                crudeMInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "CRUDEOIL M",
+                    token = token,
+                    exchange = "MCX",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                niftyInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "NIFTY 50",
+                    token = token,
+                    exchange = "NSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                bankNiftyInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "BANKNIFTY",
+                    token = token,
+                    exchange = "NSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                finNiftyInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "FINNIFTY",
+                    token = token,
+                    exchange = "NSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                midcpInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "MIDCPNIFTY",
+                    token = token,
+                    exchange = "NSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                sensexInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "SENSEX",
+                    token = token,
+                    exchange = "BSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+                bankexInst?.token -> MarketDataStore.updateTick(
+                    source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                    symbol = "BANKEX",
+                    token = token,
+                    exchange = "BSE",
+                    ltp = ltp,
+                    open = open,
+                    high = high,
+                    low = low,
+                    close = close,
+                    volume = volume,
+                    receivedTimestamp = System.currentTimeMillis(),
+                    state = "LIVE",
+                    sequenceNumber = sequenceNumber
+                )
+            }
             Log.d("SmartStream", "[MARKET_DATA_STORE_UPDATED] symbol=$symbol ltp=$ltp")
             
         } catch (e: Exception) {
@@ -349,6 +482,17 @@ class AngelOneMarketDataService(
         return if (lastTickTimestamp > 0) {
             java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(lastTickTimestamp))
         } else ""
+    }
+
+    fun connect() {
+        connectWebSocket()
+    }
+
+    fun disconnect() {
+        webSocket?.cancel()
+        webSocket = null
+        pingJob?.cancel()
+        _connectionState.value = "DISCONNECTED"
     }
 
     fun reconnect() {
@@ -385,16 +529,24 @@ class AngelOneMarketDataService(
         if (instrumentMaster.isLoaded) {
             val options = instrumentMaster.getOptionInstruments(symbol, expiry)
             if (options.isNotEmpty()) {
+                val exchSeg = options.firstOrNull()?.exch_seg ?: "NFO"
+                val exchType = InstrumentMasterService.getExchangeType(exchSeg)
                 val tokensToSubscribe = options.map { it.token }
-                subscribeToTokens(2, tokensToSubscribe)
+                subscribeToTokens(exchType, tokensToSubscribe)
                 
-                if (httpResult.isSuccess) {
+                if (httpResult.isSuccess && httpResult.getOrDefault(emptyList()).isNotEmpty()) {
                     val strikes = httpResult.getOrDefault(emptyList()).map { item ->
-                        val ceOpt = options.find { (it.strike.toDoubleOrNull() ?: 0.0) / 100.0 == item.strikePrice && it.symbol.endsWith("CE") }
-                        val peOpt = options.find { (it.strike.toDoubleOrNull() ?: 0.0) / 100.0 == item.strikePrice && it.symbol.endsWith("PE") }
+                        val ceOpt = options.find { 
+                            val s = (it.strike.toDoubleOrNull() ?: 0.0).let { raw -> if (raw > 10000 && item.strikePrice < 10000) raw / 100.0 else if (raw > 100000 && item.strikePrice < 100000) raw / 100.0 else raw }
+                            kotlin.math.abs(s - item.strikePrice) < 0.01 && (it.symbol.endsWith("CE") || it.symbol.contains("CE"))
+                        }
+                        val peOpt = options.find { 
+                            val s = (it.strike.toDoubleOrNull() ?: 0.0).let { raw -> if (raw > 10000 && item.strikePrice < 10000) raw / 100.0 else if (raw > 100000 && item.strikePrice < 100000) raw / 100.0 else raw }
+                            kotlin.math.abs(s - item.strikePrice) < 0.01 && (it.symbol.endsWith("PE") || it.symbol.contains("PE"))
+                        }
                         
-                        val ceLive = if (ceOpt != null) MarketDataStore.marketData.value[ceOpt.symbol] else null
-                        val peLive = if (peOpt != null) MarketDataStore.marketData.value[peOpt.symbol] else null
+                        val ceLive = if (ceOpt != null) MarketDataStore.getTick(ceOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, ceOpt.token) else null
+                        val peLive = if (peOpt != null) MarketDataStore.getTick(peOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peOpt.token) else null
                         
                         item.copy(
                             callLtp = ceLive?.ltp ?: item.callLtp,
@@ -402,6 +554,37 @@ class AngelOneMarketDataService(
                         )
                     }
                     return Result.success(strikes)
+                } else {
+                    // Assemble option strike items from official Instrument Master loaded instruments
+                    val groupedByStrike = options.groupBy { inst ->
+                        val rawStrike = inst.strike.toDoubleOrNull() ?: 0.0
+                        if (rawStrike > 100000) rawStrike / 100.0 else rawStrike
+                    }
+                    val strikes = groupedByStrike.map { (strike, instList) ->
+                        val ceInst = instList.find { it.symbol.endsWith("CE") || it.symbol.contains("CE") }
+                        val peInst = instList.find { it.symbol.endsWith("PE") || it.symbol.contains("PE") }
+                        val ceLive = if (ceInst != null) MarketDataStore.getTick(ceInst.symbol) ?: MarketDataStore.getTickByToken(exchSeg, ceInst.token) else null
+                        val peLive = if (peInst != null) MarketDataStore.getTick(peInst.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peInst.token) else null
+                        
+                        OptionStrikeItem(
+                            strikePrice = strike,
+                            callOi = "-",
+                            callChgOi = "-",
+                            callIv = 0.0,
+                            callLtp = ceLive?.ltp ?: 0.0,
+                            callDelta = 0.0,
+                            putDelta = 0.0,
+                            putLtp = peLive?.ltp ?: 0.0,
+                            putIv = 0.0,
+                            putChgOi = "-",
+                            putOi = "-",
+                            callVolume = "${ceLive?.volume ?: 0}",
+                            putVolume = "${peLive?.volume ?: 0}"
+                        )
+                    }.sortedBy { it.strikePrice }
+                    if (strikes.isNotEmpty()) {
+                        return Result.success(strikes)
+                    }
                 }
             }
         }
@@ -409,7 +592,17 @@ class AngelOneMarketDataService(
     }
 
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return angelOneService.getOptionExpiries(symbol)
+        val httpResult = angelOneService.getOptionExpiries(symbol)
+        if (httpResult.isSuccess && httpResult.getOrDefault(emptyList()).isNotEmpty()) {
+            return httpResult
+        }
+        if (instrumentMaster.isLoaded) {
+            val expiries = instrumentMaster.getOptionExpiries(symbol)
+            if (expiries.isNotEmpty()) {
+                return Result.success(expiries)
+            }
+        }
+        return httpResult
     }
 
     private suspend fun monitorConnection() {

@@ -18,12 +18,13 @@ import kotlin.math.abs
 object MarketDataSourceNames {
     const val ANGEL_ONE = "ANGEL_ONE"
     const val MSTOCK = "MSTOCK"
+    const val TRADESMART = "TRADESMART"
     const val NSE = "NSE"
     const val YAHOO = "YAHOO"
 }
 
 data class MarketDataState(
-    val source: String, // "ANGEL_ONE", "MSTOCK", "NSE", "YAHOO"
+    val source: String, // "ANGEL_ONE", "MSTOCK", "TRADESMART", "NSE", "YAHOO"
     val symbol: String,
     val exchange: String,
     val token: String,
@@ -37,7 +38,7 @@ data class MarketDataState(
     val volume: Long = 0L,
     val exchangeTimestamp: Long = 0L,
     val receivedTimestamp: Long = 0L,
-    val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "REFERENCE", "DELAYED", "UNAVAILABLE"
+    val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "REFERENCE", "DELAYED", "UNAVAILABLE", "STANDBY"
     val sequenceNumber: Long = 0L
 )
 
@@ -48,7 +49,7 @@ data class MarketDataState(
  * - Source is NEVER hardcoded.
  * - Every tick contains full provenance (source, timestamps, sequence).
  * - Full validation: timestamp freshness, stale detection, invalid price prevention, duplicate filtering.
- * - Source health tracking for ANGEL ONE, m.STOCK, NSE, and YAHOO.
+ * - Source health tracking for ANGEL ONE, m.STOCK, TRADESMART, NSE, and YAHOO.
  */
 object MarketDataStore {
     private val scope = CoroutineScope(Dispatchers.IO + Job())
@@ -65,8 +66,11 @@ object MarketDataStore {
     private val _angelOneHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
     val angelOneHealth: StateFlow<String> = _angelOneHealth.asStateFlow()
 
-    private val _mStockHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
+    private val _mStockHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, STANDBY, OFFLINE
     val mStockHealth: StateFlow<String> = _mStockHealth.asStateFlow()
+
+    private val _tradeSmartHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, STANDBY, OFFLINE
+    val tradeSmartHealth: StateFlow<String> = _tradeSmartHealth.asStateFlow()
 
     private val _nseHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
     val nseHealth: StateFlow<String> = _nseHealth.asStateFlow()
@@ -102,6 +106,12 @@ object MarketDataStore {
                     _mStockHealth.value = "STALE"
                 }
 
+                // TradeSmart Health
+                val lastTradeSmart = sourceLastUpdate[MarketDataSourceNames.TRADESMART] ?: 0L
+                if (lastTradeSmart > 0 && now - lastTradeSmart > staleThreshold && _tradeSmartHealth.value == "LIVE") {
+                    _tradeSmartHealth.value = "STALE"
+                }
+
                 // NSE Health
                 val lastNse = sourceLastUpdate[MarketDataSourceNames.NSE] ?: 0L
                 if (lastNse > 0 && now - lastNse > staleThreshold && _nseHealth.value == "LIVE") {
@@ -121,6 +131,7 @@ object MarketDataStore {
         when (source) {
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = health
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = health
+            MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = health
             MarketDataSourceNames.NSE -> _nseHealth.value = health
             MarketDataSourceNames.YAHOO -> _yahooHealth.value = health
         }
@@ -175,8 +186,8 @@ object MarketDataStore {
             return
         }
 
-        // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / NSE) with reference data (YAHOO)
-        if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.NSE)) {
+        // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / TRADESMART / NSE) with reference data (YAHOO)
+        if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.TRADESMART || existing.source == MarketDataSourceNames.NSE)) {
             if (source == MarketDataSourceNames.YAHOO) {
                 // Keep the live tick, but update previous close if missing
                 if (existing.previousClose <= 0.0 && close > 0.0) {
@@ -205,6 +216,7 @@ object MarketDataStore {
         when (source) {
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = "LIVE"
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
+            MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = "LIVE"
             MarketDataSourceNames.NSE -> _nseHealth.value = "LIVE"
             MarketDataSourceNames.YAHOO -> if (_yahooHealth.value != "REFERENCE") _yahooHealth.value = "REFERENCE"
         }

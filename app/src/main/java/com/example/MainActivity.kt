@@ -426,26 +426,36 @@ class MainActivity : FragmentActivity() {
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onNavigateToAISignals = { navController.navigate("ai_signals") }
                                         )
-                                        "profile" -> ProfileScreen(
-                                            userProfile = userProfile,
-                                            orders = orders,
-                                            holdings = holdings,
-                                            appPreferences = remember { com.example.util.AppPreferences(applicationContext) },
-                                            onSwitchBroker = { broker ->
-                                                viewModel.switchActiveBroker(broker)
-                                            },
-                                            onToggleBiometric = { enabled -> viewModel.toggleBiometric(enabled) },
-                                            onNavigateToTelegramSettings = { navController.navigate("telegram_settings") },
-                                            onNavigateToDiagnostics = { navController.navigate("diagnostics") },
-                                            onOpenNotificationCenter = { showNotificationCenter = true },
-                                            onLogout = {
-                                                viewModel.logout()
-                                                navController.navigate("login") {
-                                                    popUpTo("main") { inclusive = true }
-                                                }
-                                            },
-                                            onRefresh = { viewModel.refreshBrokerData() }
-                                        )
+                                        "profile" -> {
+                                            val brokerStatuses by viewModel.brokerStatuses.collectAsStateWithLifecycle()
+                                            ProfileScreen(
+                                                userProfile = userProfile,
+                                                orders = orders,
+                                                holdings = holdings,
+                                                appPreferences = remember { com.example.util.AppPreferences(applicationContext) },
+                                                brokerStatuses = brokerStatuses,
+                                                onSwitchBroker = { broker ->
+                                                    viewModel.switchActiveBroker(broker)
+                                                },
+                                                onReconnectBroker = { broker ->
+                                                    viewModel.reconnectBroker(broker)
+                                                },
+                                                onDisconnectBroker = { broker ->
+                                                    viewModel.disconnectBroker(broker)
+                                                },
+                                                onToggleBiometric = { enabled -> viewModel.toggleBiometric(enabled) },
+                                                onNavigateToTelegramSettings = { navController.navigate("telegram_settings") },
+                                                onNavigateToDiagnostics = { navController.navigate("diagnostics") },
+                                                onOpenNotificationCenter = { showNotificationCenter = true },
+                                                onLogout = {
+                                                    viewModel.logout()
+                                                    navController.navigate("login") {
+                                                        popUpTo("main") { inclusive = true }
+                                                    }
+                                                },
+                                                onRefresh = { viewModel.refreshBrokerData() }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -587,8 +597,9 @@ class MainActivity : FragmentActivity() {
                                 isAuthInProgress = isAuthInProgress,
                                 errorMessage = authErrorMessage,
                                 onDismiss = { viewModel.closeConnectDialog() },
-                                onAngelLogin = { clientCode, mpin, totp -> viewModel.loginAngel(clientCode, mpin, totp) },
-                                onMStockLogin = { apiKey, clientId, passwordPin, totp -> viewModel.connectMStock(apiKey, clientId, passwordPin, totp) }
+                                onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
+                                onMStockLogin = { apiKey, clientId, passwordPin, totp -> viewModel.connectMStock(apiKey, clientId, passwordPin, totp) },
+                                onTradeSmartLogin = { apiKey, clientId, token -> viewModel.connectTradeSmart(apiKey, clientId, token) }
                             )
                         }
 

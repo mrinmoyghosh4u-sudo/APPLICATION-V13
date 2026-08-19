@@ -99,20 +99,66 @@ class InstrumentMasterService(
         }
 
         // Index mapping
-        if ((normExch == "NSE" || normExch == "BSE" || normExch == "MCX") &&
-            (inst.instrumenttype == "AMXIDX" || inst.instrumenttype == "" || inst.instrumenttype.contains("IDX") || inst.instrumenttype.contains("FUT"))
-        ) {
-            when {
-                nameUpper == "NIFTY" || symUpper == "NIFTY 50" || symUpper == "NIFTY" -> indexSymbolMap["NIFTY"] = inst
-                nameUpper == "BANKNIFTY" || symUpper == "NIFTY BANK" || symUpper == "BANKNIFTY" -> indexSymbolMap["BANKNIFTY"] = inst
-                nameUpper == "FINNIFTY" || symUpper == "NIFTY FIN SERVICE" || symUpper == "FINNIFTY" -> indexSymbolMap["FINNIFTY"] = inst
-                nameUpper == "MIDCPNIFTY" || symUpper.contains("MID SELECT") || symUpper == "MIDCPNIFTY" -> indexSymbolMap["MIDCPNIFTY"] = inst
-                nameUpper == "SENSEX" || symUpper == "SENSEX" -> indexSymbolMap["SENSEX"] = inst
-                nameUpper == "BANKEX" || symUpper == "BANKEX" -> indexSymbolMap["BANKEX"] = inst
-                symUpper.startsWith("CRUDEOILM") -> indexSymbolMap["CRUDEOIL M"] = inst
-                symUpper.startsWith("CRUDEOIL") -> indexSymbolMap["CRUDEOIL"] = inst
+        if (normExch == "NSE" || normExch == "BSE" || normExch == "MCX") {
+            val isIndexOrFuture = inst.instrumenttype == "AMXIDX" || 
+                                  inst.instrumenttype == "" || 
+                                  inst.instrumenttype.contains("IDX", ignoreCase = true) || 
+                                  inst.instrumenttype.equals("FUTCOM", ignoreCase = true) ||
+                                  inst.instrumenttype.equals("FUTIDX", ignoreCase = true) ||
+                                  inst.instrumenttype.equals("FUTSTK", ignoreCase = true)
+
+            if (isIndexOrFuture) {
+                when {
+                    normExch == "NSE" && (nameUpper == "NIFTY" || symUpper == "NIFTY 50" || symUpper == "NIFTY") -> indexSymbolMap["NIFTY"] = inst
+                    normExch == "NSE" && (nameUpper == "BANKNIFTY" || symUpper == "NIFTY BANK" || symUpper == "BANKNIFTY") -> indexSymbolMap["BANKNIFTY"] = inst
+                    normExch == "NSE" && (nameUpper == "FINNIFTY" || symUpper == "NIFTY FIN SERVICE" || symUpper == "FINNIFTY") -> indexSymbolMap["FINNIFTY"] = inst
+                    normExch == "NSE" && (nameUpper == "MIDCPNIFTY" || symUpper.contains("MID SELECT") || symUpper == "MIDCPNIFTY") -> indexSymbolMap["MIDCPNIFTY"] = inst
+                    normExch == "BSE" && (nameUpper == "SENSEX" || symUpper == "SENSEX") -> indexSymbolMap["SENSEX"] = inst
+                    normExch == "BSE" && (nameUpper == "BANKEX" || symUpper == "BANKEX") -> indexSymbolMap["BANKEX"] = inst
+                    normExch == "MCX" && (nameUpper == "CRUDEOILM" || symUpper.startsWith("CRUDEOILM")) && (inst.instrumenttype.equals("FUTCOM", ignoreCase = true) || inst.instrumenttype.isBlank()) -> {
+                        val current = indexSymbolMap["CRUDEOIL M"]
+                        if (current == null || isEarlierActiveExpiry(inst.expiry, current.expiry)) {
+                            indexSymbolMap["CRUDEOIL M"] = inst
+                        }
+                    }
+                    normExch == "MCX" && (nameUpper == "CRUDEOIL" || symUpper.startsWith("CRUDEOIL")) && !symUpper.startsWith("CRUDEOILM") && (inst.instrumenttype.equals("FUTCOM", ignoreCase = true) || inst.instrumenttype.isBlank()) -> {
+                        val current = indexSymbolMap["CRUDEOIL"]
+                        if (current == null || isEarlierActiveExpiry(inst.expiry, current.expiry)) {
+                            indexSymbolMap["CRUDEOIL"] = inst
+                        }
+                    }
+                }
             }
         }
+    }
+
+    private fun isEarlierActiveExpiry(newExpiry: String, currentExpiry: String): Boolean {
+        if (currentExpiry.isBlank()) return true
+        if (newExpiry.isBlank()) return false
+        val newTime = parseExpiryDate(newExpiry)
+        val curTime = parseExpiryDate(currentExpiry)
+        val now = System.currentTimeMillis() - 86400000L // allow today
+        if (newTime < now && curTime >= now) return false
+        if (newTime >= now && curTime < now) return true
+        return newTime < curTime
+    }
+
+    private fun parseExpiryDate(expiryStr: String): Long {
+        if (expiryStr.isBlank()) return Long.MAX_VALUE
+        val clean = expiryStr.trim().uppercase()
+        val formats = listOf(
+            java.text.SimpleDateFormat("ddMMMyyyy", java.util.Locale.ENGLISH),
+            java.text.SimpleDateFormat("dd-MMM-yyyy", java.util.Locale.ENGLISH),
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH),
+            java.text.SimpleDateFormat("ddMMMyy", java.util.Locale.ENGLISH)
+        )
+        for (f in formats) {
+            try {
+                val d = f.parse(clean)
+                if (d != null) return d.time
+            } catch (_: Exception) {}
+        }
+        return Long.MAX_VALUE
     }
 
     private fun readNextStringSafe(reader: JsonReader): String {
@@ -381,12 +427,17 @@ class InstrumentMasterService(
     }
 
     fun resolveIndexToken(indexName: String): Instrument? {
-        val cleanName = when (indexName.uppercase().trim()) {
-            "NIFTY 50", "NIFTY50" -> "NIFTY"
-            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
-            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
-            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
-            else -> indexName.uppercase().trim()
+        val upper = indexName.uppercase().trim().removePrefix("NSE:").removePrefix("BSE:").removePrefix("MCX:")
+        val cleanName = when {
+            upper == "NIFTY 50" || upper == "NIFTY50" || upper == "NIFTY" -> "NIFTY"
+            upper == "BANK NIFTY" || upper == "NIFTY BANK" || upper == "BANKNIFTY" -> "BANKNIFTY"
+            upper == "FIN NIFTY" || upper == "NIFTY FIN SERVICE" || upper == "FINNIFTY" -> "FINNIFTY"
+            upper.contains("MID SELECT") || upper == "MIDCAP NIFTY" || upper == "MIDCP NIFTY" || upper == "MIDCPNIFTY" -> "MIDCPNIFTY"
+            upper == "SENSEX" || upper == "BSE SENSEX" -> "SENSEX"
+            upper == "BANKEX" || upper == "BSE BANKEX" -> "BANKEX"
+            upper == "CRUDEOIL M" || upper == "CRUDEOILM" || upper == "CRUDE OIL M" || upper == "CRUDEOIL MINI" -> "CRUDEOIL M"
+            upper == "CRUDEOIL" || upper == "CRUDE OIL" || upper.startsWith("CRUDEOIL") -> "CRUDEOIL"
+            else -> upper
         }
         return indexSymbolMap[cleanName]
     }

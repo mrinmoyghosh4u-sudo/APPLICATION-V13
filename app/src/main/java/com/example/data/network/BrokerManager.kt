@@ -24,7 +24,7 @@ class BrokerManager(
     val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService)
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
     val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService)
-    val tradeSmartMarketDataService = TradeSmartMarketDataService(sessionManager)
+    val tradeSmartMarketDataService = TradeSmartMarketDataService(sessionManager, instrumentMasterService)
 
     // Central Order Execution Manager (Dhan-only)
     val orderManager = OrderManager(
@@ -35,7 +35,18 @@ class BrokerManager(
     val marketDataManager = MarketDataManager(
         angelMarketDataService = angelMarketDataService,
         mStockMarketDataService = mStockMarketDataService,
+        tradeSmartMarketDataService = tradeSmartMarketDataService,
         sessionManager = sessionManager
+    )
+
+    val brokerAuthManager = BrokerAuthManager(
+        sessionManager = sessionManager,
+        dhanService = dhanTradingService,
+        angelOneService = angelOneService,
+        angelMarketDataService = angelMarketDataService,
+        mStockMarketDataService = mStockMarketDataService,
+        tradeSmartMarketDataService = tradeSmartMarketDataService,
+        brokerManager = this
     )
 
     val currentMarketDataSource: String

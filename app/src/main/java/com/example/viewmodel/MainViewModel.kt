@@ -123,6 +123,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _brokerSwitchStatus = MutableStateFlow<String?>(null)
     val brokerSwitchStatus: StateFlow<String?> = _brokerSwitchStatus.asStateFlow()
 
+    val brokerAuthManager = brokerManager.brokerAuthManager
+    val brokerStatuses = brokerAuthManager.statuses
+    val isBrokerAuthInitializing = brokerAuthManager.isInitializing
+
     fun clearBrokerSwitchStatus() {
         _brokerSwitchStatus.value = null
     }
@@ -132,6 +136,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.example.util.AlgoEngine.telegramService = telegramService
         viewModelScope.launch {
             repository.checkAndSeedInitialData()
+            brokerAuthManager.initialize()
             validateAndRestoreSession()
         }
         observeData()
@@ -418,18 +423,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loginAngel(clientCode: String, mpin: String, totp: String) {
+    fun loginAngel(clientCode: String, mpin: String, apiKey: String, totpSecret: String) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            val res = AngelAuthHelper.generateSession(clientCode, mpin, totp)
-            if (res.isSuccess) {
-                val tokens = res.getOrThrow()
-                sessionManager.angelClientId = clientCode
-                sessionManager.angelMpin = mpin
-                sessionManager.angelJwtToken = tokens.jwtToken
-                sessionManager.angelRefreshToken = tokens.refreshToken
-                sessionManager.angelFeedToken = tokens.feedToken
+            val res = brokerAuthManager.connectAngelOne(
+                clientCode = clientCode,
+                mpin = mpin,
+                totp = null,
+                totpSecret = totpSecret,
+                apiKey = apiKey
+            )
+            if (res.isSuccess && res.getOrThrow()) {
                 sessionManager.activeBroker = "Angel One"
                 sessionManager.angelTokenTimestamp = System.currentTimeMillis()
                 brokerManager.setActiveBroker("Angel One")
@@ -487,6 +492,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _authErrorMessage.value = "Failed to validate m.Stock connection. Please check API Key, Client ID and Access Token."
             }
+        }
+    }
+
+    fun connectTradeSmart(apiKey: String, clientId: String, token: String) {
+        viewModelScope.launch {
+            _isAuthInProgress.value = true
+            _authErrorMessage.value = null
+
+            if (apiKey.isBlank() || clientId.isBlank()) {
+                _authErrorMessage.value = "TradeSmart API Key and Client ID are required."
+                _isAuthInProgress.value = false
+                return@launch
+            }
+
+            sessionManager.tradesmartApiKey = apiKey
+            sessionManager.tradesmartClientId = clientId
+            sessionManager.tradesmartAccessToken = token
+            sessionManager.tradesmartTokenTimestamp = System.currentTimeMillis()
+
+            val res = brokerAuthManager.connectTradeSmart(apiKey, clientId, token)
+            _isAuthInProgress.value = false
+
+            if (res.isSuccess) {
+                _brokerSwitchStatus.value = "Broker Connected • TradeSmart"
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                repository.addNotification("Broker Connected", "Connected to TradeSmart successfully", "SUCCESS")
+            } else {
+                _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Failed to connect TradeSmart."
+            }
+        }
+    }
+
+    fun reconnectBroker(brokerName: String) {
+        viewModelScope.launch {
+            _isSessionRestoring.value = true
+            val res = brokerAuthManager.reconnectBroker(brokerName)
+            _isSessionRestoring.value = false
+            if (res.isSuccess && res.getOrThrow()) {
+                repository.addNotification("Broker Reconnected", "$brokerName session refreshed successfully", "SUCCESS")
+            } else {
+                _authErrorMessage.value = "Failed to refresh $brokerName session. Re-authentication required."
+                openConnectDialog(brokerName)
+            }
+        }
+    }
+
+    fun disconnectBroker(brokerName: String) {
+        viewModelScope.launch {
+            brokerAuthManager.logoutBroker(brokerName)
+            repository.addNotification("Broker Disconnected", "$brokerName has been disconnected", "INFO")
         }
     }
 

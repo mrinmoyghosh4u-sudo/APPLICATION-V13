@@ -14,21 +14,37 @@ object AngelAuthHelper {
 
     data class AngelTokens(val jwtToken: String, val refreshToken: String, val feedToken: String)
 
-    suspend fun generateSession(clientCode: String, mpin: String, totp: String): Result<AngelTokens> = withContext(Dispatchers.IO) {
+    suspend fun generateSession(
+        clientCode: String,
+        mpin: String,
+        totpOrSecret: String,
+        customApiKey: String = ""
+    ): Result<AngelTokens> = withContext(Dispatchers.IO) {
         runCatching {
-            val apiKey = BrokerConfig.angelApiKey
+            val apiKey = customApiKey.ifBlank { BrokerConfig.angelApiKey }
             
             Log.d(TAG, "Attempting Angel One login for client: $clientCode")
             
             if (apiKey.isBlank()) {
-                throw Exception("ANGEL_ONE_API_KEY is missing.")
+                throw Exception("Angel One API Key is missing. Please configure your API Key.")
+            }
+
+            val sanitizedTotpInput = totpOrSecret.trim()
+            val effectiveTotp = if (sanitizedTotpInput.length == 6 && sanitizedTotpInput.all { it.isDigit() }) {
+                sanitizedTotpInput
+            } else {
+                val generated = TotpUtil.generateTotp(sanitizedTotpInput)
+                if (generated.isBlank()) {
+                    throw Exception("Failed to generate valid 6-digit TOTP from provided secret. Verify Base32 TOTP secret.")
+                }
+                generated
             }
             
             val url = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
             val reqBody = JSONObject().apply {
-                put("clientcode", clientCode)
-                put("password", mpin)
-                put("totp", totp)
+                put("clientcode", clientCode.trim())
+                put("password", mpin.trim())
+                put("totp", effectiveTotp)
             }.toString().toRequestBody("application/json".toMediaType())
             
             val request = Request.Builder()
@@ -36,7 +52,7 @@ object AngelAuthHelper {
                 .post(reqBody)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Accept", "application/json")
-                .addHeader("X-PrivateKey", apiKey)
+                .addHeader("X-PrivateKey", apiKey.trim())
                 .addHeader("X-UserType", "USER")
                 .addHeader("X-SourceID", "WEB")
                 .addHeader("X-ClientLocalIP", "127.0.0.1")
@@ -70,11 +86,11 @@ object AngelAuthHelper {
         }
     }
 
-    suspend fun renewSession(refreshToken: String): Result<AngelTokens> = withContext(Dispatchers.IO) {
+    suspend fun renewSession(refreshToken: String, customApiKey: String = ""): Result<AngelTokens> = withContext(Dispatchers.IO) {
         runCatching {
-            val apiKey = BrokerConfig.angelApiKey
+            val apiKey = customApiKey.ifBlank { BrokerConfig.angelApiKey }
             if (apiKey.isBlank()) {
-                throw Exception("ANGEL_ONE_API_KEY is missing.")
+                throw Exception("Angel One API Key is missing.")
             }
             val url = "https://apiconnect.angelone.in/rest/auth/angelbroking/jwt/v1/generateTokens"
             val reqBody = JSONObject().apply {
