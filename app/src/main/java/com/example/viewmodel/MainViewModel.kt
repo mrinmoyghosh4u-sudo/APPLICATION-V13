@@ -271,9 +271,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
                 dbList.map { item ->
-                    val dbSymbol = item.symbol.uppercase()
+                    val dbSymbol = item.symbol.uppercase().trim()
+                    println("IndexMatch: " + "Trying to match dbSymbol=$dbSymbol against liveData keys=${liveData.keys}")
                     val live = liveData.values.find { liveItem ->
-                        val liveSymbol = liveItem.symbol.uppercase()
+                        val liveSymbol = liveItem.symbol.uppercase().trim()
                         when (dbSymbol) {
                             "NIFTY 50" -> liveSymbol == "NIFTY 50" || liveSymbol == "NIFTY"
                             "BANKNIFTY" -> liveSymbol == "NIFTY BANK" || liveSymbol == "BANKNIFTY"
