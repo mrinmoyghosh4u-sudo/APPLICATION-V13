@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.AISignalEntity
 import com.example.data.model.OrderEntity
 import com.example.data.model.UserProfileEntity
@@ -37,6 +39,7 @@ import com.example.ui.components.MarketDataStatusIndicator
 import com.example.ui.components.PullToRefreshLayout
 import com.example.ui.theme.*
 import com.example.util.MarketStatusUtil
+import com.example.viewmodel.MainViewModel
 
 @Composable
 fun IndexSparkline(
@@ -79,6 +82,7 @@ fun HomeScreen(
     watchlist: List<WatchlistItem> = emptyList(),
     marketDataSource: String = "Angel One",
     marketDataLastUpdated: String = "",
+    viewModel: MainViewModel? = null,
     onNavigateToOrders: () -> Unit,
     onNavigateToMarket: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -87,16 +91,10 @@ fun HomeScreen(
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
     onRefresh: () -> Unit = {}
 ) {
-    var selectedExchange by remember { mutableStateOf("NSE") }
+    var selectedExchange by rememberSaveable { mutableStateOf("NSE") }
 
     val detailedStatus = remember(selectedExchange) { MarketStatusUtil.getDetailedMarketStatus(selectedExchange) }
     val isMarketOpen = detailedStatus.isOpen
-
-    val exchangeSignals = remember(aiSignals, selectedExchange, isMarketOpen) {
-        if (!isMarketOpen) emptyList()
-        else aiSignals.filter { it.exchange.equals(selectedExchange, ignoreCase = true) }
-    }
-    val topSignal = exchangeSignals.firstOrNull()
 
     PullToRefreshLayout(onRefresh = onRefresh) {
         Column(
@@ -121,41 +119,15 @@ fun HomeScreen(
             }
             
             // Top Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CrownLogo(size = 36.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text("KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                        Text("Trade Like a King 👑", fontSize = 10.sp, color = SecondaryGold)
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onOpenNotificationCenter) {
-                        Box {
-                            Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(ProfitGreen, CircleShape)
-                                    .align(Alignment.TopEnd)
-                            )
-                        }
-                    }
-                }
-            }
+            HomeTopBar(onOpenNotificationCenter = onOpenNotificationCenter)
 
             Spacer(modifier = Modifier.height(10.dp))
 
             // Compact Broker Live Status
-            MarketDataStatusIndicator(
-                source = marketDataSource,
-                lastUpdatedTime = marketDataLastUpdated,
+            MarketDataStatusSection(
+                viewModel = viewModel,
+                fallbackSource = marketDataSource,
+                fallbackLastUpdated = marketDataLastUpdated,
                 isMarketOpen = isMarketOpen,
                 onRefresh = onRefresh,
                 onReconnect = onNavigateToProfile
@@ -164,431 +136,602 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // Exchange Selector Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DarkCard, RoundedCornerShape(8.dp))
-                    .border(1.dp, PrimaryGold, RoundedCornerShape(8.dp)),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                listOf("NSE", "BSE", "MCX").forEach { exchange ->
-                    val isSelected = selectedExchange == exchange
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) SecondaryGold else Color.Transparent)
-                            .clickable { selectedExchange = exchange },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = exchange,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) Color.Black else TextWhite
-                        )
-                    }
-                }
-            }
+            ExchangeSelectorBar(
+                selectedExchange = selectedExchange,
+                onExchangeSelected = { selectedExchange = it }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             // Index Cards
-            val indexesToShow = when (selectedExchange) {
-                "NSE" -> listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY")
-                "BSE" -> listOf("SENSEX", "BANKEX")
-                "MCX" -> listOf("CRUDEOIL", "CRUDEOIL M")
-                else -> emptyList()
-            }
-
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(indexesToShow) { indexName ->
-                    val indexItem = watchlist.find { 
-                        it.symbol.equals(indexName, ignoreCase = true) || 
-                        (indexName == "MIDCPNIFTY" && it.symbol.contains("MID", ignoreCase = true)) 
-                    }
-                    val ltp = indexItem?.ltp ?: 0.0
-                    val change = indexItem?.change ?: 0.0
-                    val changePercent = indexItem?.changePercent ?: 0.0
-                    val isPositive = indexItem?.isPositive ?: true
-                    val color = if (isPositive) ProfitGreen else LossRed
-                    val hasData = ltp > 0.0
-
-                    Surface(
-                        modifier = Modifier
-                            .width(160.dp)
-                            .clickable { onNavigateToIndexDetails(selectedExchange, indexName) },
-                        color = DarkCard,
-                        shape = RoundedCornerShape(10.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (hasData) DarkGold else LossRed.copy(alpha = 0.4f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalAlignment = Alignment.Start
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = indexName,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextWhite,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Default.ArrowForward,
-                                    contentDescription = null,
-                                    tint = if (hasData) color else TextGray,
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .rotate(if (isPositive) -45f else 45f)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(6.dp))
-                            
-                            Text(
-                                text = if (hasData) String.format("%,.2f", ltp) else "DATA UNAVAILABLE",
-                                fontSize = if (hasData) 15.sp else 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (hasData) TextWhite else LossRed
-                            )
-                            
-                            Spacer(modifier = Modifier.height(4.dp))
-                            
-                            if (hasData) {
-                                Text(
-                                    text = String.format("%s%.2f (%s%.2f%%)", if (isPositive) "+" else "", change, if (isPositive) "+" else "", changePercent),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = color,
-                                    maxLines = 1
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = if (isMarketOpen) "LIVE" else "CLOSED",
-                                    fontSize = 9.sp,
-                                    color = if (isMarketOpen) ProfitGreen else Color(0xFFFFB300),
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (marketDataLastUpdated.isNotBlank() && marketDataLastUpdated != "Not Updated") {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = marketDataLastUpdated,
-                                        fontSize = 8.sp,
-                                        color = TextMuted,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = "DISCONNECTED",
-                                    fontSize = 10.sp,
-                                    color = TextGray
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text("Check connection", fontSize = 9.sp, color = TextMuted)
-                            }
-                        }
-                    }
-                }
-            }
+            IndexCardsSection(
+                selectedExchange = selectedExchange,
+                viewModel = viewModel,
+                fallbackWatchlist = watchlist,
+                isMarketOpen = isMarketOpen,
+                onNavigateToIndexDetails = onNavigateToIndexDetails
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
+
             // Account Summary Cards
-            val isBrokerConnected = userProfile.isAngelConnected || userProfile.isDhanConnected || userProfile.connectedBroker.isNotBlank()
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Available Margin
-                    GoldCard(modifier = Modifier.weight(1f)) {
-                        Text("Available Margin", fontSize = 11.sp, color = TextGray)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        if (isBrokerConnected) {
-                            Text(String.format("₹%,.2f", userProfile.availableMargin), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        } else {
-                            Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(DarkCardSecondary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(12.dp))
-                        }
-                    }
-                    // Today's P&L
-                    GoldCard(modifier = Modifier.weight(1f)) {
-                        val pnlColor = if (userProfile.todaysPnl >= 0) ProfitGreen else LossRed
-                        Text("Today's P&L", fontSize = 11.sp, color = TextGray)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        if (isBrokerConnected) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    String.format("%s₹%,.2f", if (userProfile.todaysPnl >= 0) "+" else "", userProfile.todaysPnl),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = pnlColor
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(String.format("(%s%.2f%%)", if (userProfile.todaysPnlPercent >= 0) "+" else "", userProfile.todaysPnlPercent), fontSize = 10.sp, color = pnlColor)
-                            }
-                        } else {
-                            Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                        }
-                    }
-                }
-                
-                // Account Balance
-                GoldCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Account Balance", fontSize = 11.sp, color = TextGray)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            if (isBrokerConnected) {
-                                Text(String.format("₹%,.2f", userProfile.accountBalance), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            } else {
-                                Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(DarkCardSecondary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.CreditCard, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
+            AccountSummarySection(userProfile = userProfile)
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // LIVE AI SIGNAL CARD or MARKET CLOSED BANNER
-            val indexItemForSignal = watchlist.find { it.symbol.contains(selectedExchange, ignoreCase = true) || it.exchange.equals(selectedExchange, ignoreCase = true) }
-            val underlyingLtp = indexItemForSignal?.ltp ?: 0.0
-
-            GoldCard(
-                borderColor = if (isMarketOpen) PrimaryGold else DarkCardBorder,
-                borderWidth = 1.dp
-            ) {
-                if (!isMarketOpen) {
-                    // Market Closed Display
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("★ AI OPTION SIGNALS (OPTION BUYER ONLY)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                            Box(
-                                modifier = Modifier
-                                    .background(LossRedBg, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text("MARKET CLOSED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text("$selectedExchange Market is Currently Closed", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(detailedStatus.nextOpeningTimeText, fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Live BUY CE/PE signals will automatically resume when exchange trading begins.", fontSize = 10.sp, color = TextGray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    }
-                } else if (topSignal != null) {
-                    // Active Signal Display
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("★ LIVE AI SIGNAL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(ProfitGreenBg, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text("LIVE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Confidence ", fontSize = 11.sp, color = TextGray)
-                            Text("${topSignal.confidence}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val isPe = topSignal.actionType.contains("PE") || topSignal.symbol.contains("PE")
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(DarkCardSecondary, RoundedCornerShape(10.dp))
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(if (isPe) LossRedBg else ProfitGreenBg, CircleShape)
-                                .border(1.dp, if (isPe) LossRed else ProfitGreen, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isPe) Icons.Default.TrendingDown else Icons.Default.TrendingUp,
-                                contentDescription = null,
-                                tint = if (isPe) LossRed else ProfitGreen,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(topSignal.symbol, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text(
-                                text = if (underlyingLtp > 0.0) String.format("Underlying LTP: ₹%,.2f", underlyingLtp) else String.format("Signal LTP ₹%.2f", topSignal.ltp),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = TextWhite
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(topSignal.actionType, fontSize = 18.sp, fontWeight = FontWeight.Black, color = if (isPe) LossRed else ProfitGreen)
-                            Text("Trend: ${topSignal.trend}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        MetricColumn("Entry Zone", topSignal.entryZone)
-                        MetricColumn("Stop Loss", "₹${String.format("%.2f", topSignal.stopLoss)}")
-                        MetricColumn("Target 1", "₹${String.format("%.2f", topSignal.target1)}")
-                        MetricColumn("Target 2", "₹${String.format("%.2f", topSignal.target2)}")
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        MetricColumn("Target 3", "₹${String.format("%.2f", topSignal.target3)}")
-                        MetricColumn("Target 4", "₹${String.format("%.2f", topSignal.trailingSl * 1.5)}") // Assuming target4 based on SL logic if not in model
-                        MetricColumn("Trailing SL", "₹${String.format("%.2f", topSignal.trailingSl)}")
-                        MetricColumn("Time", topSignal.timestamp.substringAfter(" ").substringBeforeLast(":"))
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                onOpenOrderDialog(topSignal.symbol, if (isPe) "BUY" else "BUY", topSignal.ltp, topSignal.lotSize)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = if (isPe) LossRed else ProfitGreen),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = "EXECUTE SIGNAL (${topSignal.actionType})",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                } else {
-                    // No Active Signal
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("★ AI OPTION SIGNALS (OPTION BUYER ONLY)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Analyzing real-time market feed for High-Probability Option Buyer Setups...", fontSize = 11.sp, color = TextGray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    }
-                }
-            }
+            LiveAISignalSection(
+                selectedExchange = selectedExchange,
+                aiSignals = aiSignals,
+                isMarketOpen = isMarketOpen,
+                nextOpeningTimeText = detailedStatus.nextOpeningTimeText,
+                viewModel = viewModel,
+                fallbackWatchlist = watchlist,
+                onOpenOrderDialog = onOpenOrderDialog
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Recent Orders Header
+            // Recent Orders Header & List
+            RecentOrdersSection(
+                orders = orders,
+                onNavigateToOrders = onNavigateToOrders
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeTopBar(onOpenNotificationCenter: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CrownLogo(size = 36.dp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text("KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
+                Text("Trade Like a King 👑", fontSize = 10.sp, color = SecondaryGold)
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenNotificationCenter) {
+                Box {
+                    Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(ProfitGreen, CircleShape)
+                            .align(Alignment.TopEnd)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketDataStatusSection(
+    viewModel: MainViewModel?,
+    fallbackSource: String,
+    fallbackLastUpdated: String,
+    isMarketOpen: Boolean,
+    onRefresh: () -> Unit,
+    onReconnect: () -> Unit
+) {
+    val sourceState = viewModel?.marketDataSource?.collectAsStateWithLifecycle()
+    val lastUpdatedState = viewModel?.marketDataLastUpdated?.collectAsStateWithLifecycle()
+
+    val source = sourceState?.value ?: fallbackSource
+    val lastUpdated = lastUpdatedState?.value ?: fallbackLastUpdated
+
+    MarketDataStatusIndicator(
+        source = source,
+        lastUpdatedTime = lastUpdated,
+        isMarketOpen = isMarketOpen,
+        onRefresh = onRefresh,
+        onReconnect = onReconnect
+    )
+}
+
+@Composable
+private fun ExchangeSelectorBar(
+    selectedExchange: String,
+    onExchangeSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DarkCard, RoundedCornerShape(8.dp))
+            .border(1.dp, PrimaryGold, RoundedCornerShape(8.dp)),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        listOf("NSE", "BSE", "MCX").forEach { exchange ->
+            val isSelected = selectedExchange == exchange
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isSelected) SecondaryGold else Color.Transparent)
+                    .clickable { onExchangeSelected(exchange) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = exchange,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color.Black else TextWhite
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IndexCardsSection(
+    selectedExchange: String,
+    viewModel: MainViewModel?,
+    fallbackWatchlist: List<WatchlistItem>,
+    isMarketOpen: Boolean,
+    onNavigateToIndexDetails: (String, String) -> Unit
+) {
+    val indexesToShow = remember(selectedExchange) {
+        when (selectedExchange) {
+            "NSE" -> listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY")
+            "BSE" -> listOf("SENSEX", "BANKEX")
+            "MCX" -> listOf("CRUDEOIL", "CRUDEOIL M")
+            else -> emptyList()
+        }
+    }
+
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(
+            items = indexesToShow,
+            key = { indexName -> indexName }
+        ) { indexName ->
+            IndexCardItem(
+                indexName = indexName,
+                selectedExchange = selectedExchange,
+                viewModel = viewModel,
+                fallbackWatchlist = fallbackWatchlist,
+                isMarketOpen = isMarketOpen,
+                onNavigateToIndexDetails = onNavigateToIndexDetails
+            )
+        }
+    }
+}
+
+@Composable
+private fun IndexCardItem(
+    indexName: String,
+    selectedExchange: String,
+    viewModel: MainViewModel?,
+    fallbackWatchlist: List<WatchlistItem>,
+    isMarketOpen: Boolean,
+    onNavigateToIndexDetails: (String, String) -> Unit
+) {
+    val itemFlow = remember(indexName, viewModel) {
+        viewModel?.getWatchlistItemFlow(indexName)
+    }
+    val liveItem = itemFlow?.collectAsStateWithLifecycle(initialValue = null)?.value
+
+    val indexItem = liveItem ?: fallbackWatchlist.find {
+        it.symbol.equals(indexName, ignoreCase = true) ||
+        (indexName == "MIDCPNIFTY" && it.symbol.contains("MID", ignoreCase = true))
+    }
+
+    val ltp = indexItem?.ltp ?: 0.0
+    val change = indexItem?.change ?: 0.0
+    val changePercent = indexItem?.changePercent ?: 0.0
+    val isPositive = indexItem?.isPositive ?: true
+    val color = if (isPositive) ProfitGreen else LossRed
+    val hasData = ltp > 0.0
+
+    val lastUpdatedState = viewModel?.marketDataLastUpdated?.collectAsStateWithLifecycle()
+    val marketDataLastUpdated = lastUpdatedState?.value ?: ""
+
+    Surface(
+        modifier = Modifier
+            .width(160.dp)
+            .clickable { onNavigateToIndexDetails(selectedExchange, indexName) },
+        color = DarkCard,
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (hasData) DarkGold else LossRed.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("☷ Recent Orders", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                TextButton(onClick = onNavigateToOrders) {
-                    Text("View All >", fontSize = 12.sp, color = SecondaryGold)
+                Text(
+                    text = indexName,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextWhite,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = null,
+                    tint = if (hasData) color else TextGray,
+                    modifier = Modifier
+                        .size(12.dp)
+                        .rotate(if (isPositive) -45f else 45f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            Text(
+                text = if (hasData) String.format("%,.2f", ltp) else "DATA UNAVAILABLE",
+                fontSize = if (hasData) 15.sp else 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (hasData) TextWhite else LossRed
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            if (hasData) {
+                Text(
+                    text = String.format("%s%.2f (%s%.2f%%)", if (isPositive) "+" else "", change, if (isPositive) "+" else "", changePercent),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = color,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (isMarketOpen) "LIVE" else "CLOSED",
+                    fontSize = 9.sp,
+                    color = if (isMarketOpen) ProfitGreen else Color(0xFFFFB300),
+                    fontWeight = FontWeight.Bold
+                )
+                if (marketDataLastUpdated.isNotBlank() && marketDataLastUpdated != "Not Updated") {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = marketDataLastUpdated,
+                        fontSize = 8.sp,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Text(
+                    text = "DISCONNECTED",
+                    fontSize = 10.sp,
+                    color = TextGray
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("Check connection", fontSize = 9.sp, color = TextMuted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountSummarySection(userProfile: UserProfileEntity) {
+    val isBrokerConnected = userProfile.isAngelConnected || userProfile.isDhanConnected || userProfile.connectedBroker.isNotBlank()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Available Margin
+            GoldCard(modifier = Modifier.weight(1f)) {
+                Text("Available Margin", fontSize = 11.sp, color = TextGray)
+                Spacer(modifier = Modifier.height(4.dp))
+                if (isBrokerConnected) {
+                    Text(String.format("₹%,.2f", userProfile.availableMargin), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                } else {
+                    Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(DarkCardSecondary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(12.dp))
+                }
+            }
+            // Today's P&L
+            GoldCard(modifier = Modifier.weight(1f)) {
+                val pnlColor = if (userProfile.todaysPnl >= 0) ProfitGreen else LossRed
+                Text("Today's P&L", fontSize = 11.sp, color = TextGray)
+                Spacer(modifier = Modifier.height(4.dp))
+                if (isBrokerConnected) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            String.format("%s₹%,.2f", if (userProfile.todaysPnl >= 0) "+" else "", userProfile.todaysPnl),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = pnlColor
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(String.format("(%s%.2f%%)", if (userProfile.todaysPnlPercent >= 0) "+" else "", userProfile.todaysPnlPercent), fontSize = 10.sp, color = pnlColor)
+                    }
+                } else {
+                    Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                }
+            }
+        }
+        
+        // Account Balance
+        GoldCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Account Balance", fontSize = 11.sp, color = TextGray)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    if (isBrokerConnected) {
+                        Text(String.format("₹%,.2f", userProfile.accountBalance), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                    } else {
+                        Text("DISCONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(DarkCardSecondary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CreditCard, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveAISignalSection(
+    selectedExchange: String,
+    aiSignals: List<AISignalEntity>,
+    isMarketOpen: Boolean,
+    nextOpeningTimeText: String,
+    viewModel: MainViewModel?,
+    fallbackWatchlist: List<WatchlistItem>,
+    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
+) {
+    val exchangeSignals = remember(aiSignals, selectedExchange, isMarketOpen) {
+        if (!isMarketOpen) emptyList()
+        else aiSignals.filter { it.exchange.equals(selectedExchange, ignoreCase = true) }
+    }
+    val topSignal = exchangeSignals.firstOrNull()
+
+    val underlyingFlow = remember(selectedExchange, viewModel) {
+        viewModel?.getWatchlistItemFlow(selectedExchange)
+    }
+    val liveUnderlying = underlyingFlow?.collectAsStateWithLifecycle(initialValue = null)?.value
+    val fallbackUnderlying = fallbackWatchlist.find {
+        it.symbol.contains(selectedExchange, ignoreCase = true) || it.exchange.equals(selectedExchange, ignoreCase = true)
+    }
+    val underlyingLtp = liveUnderlying?.ltp ?: fallbackUnderlying?.ltp ?: 0.0
+
+    GoldCard(
+        borderColor = if (isMarketOpen) PrimaryGold else DarkCardBorder,
+        borderWidth = 1.dp
+    ) {
+        if (!isMarketOpen) {
+            // Market Closed Display
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("★ AI OPTION SIGNALS (OPTION BUYER ONLY)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                    Box(
+                        modifier = Modifier
+                            .background(LossRedBg, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("MARKET CLOSED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("$selectedExchange Market is Currently Closed", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(nextOpeningTimeText, fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Live BUY CE/PE signals will automatically resume when exchange trading begins.", fontSize = 10.sp, color = TextGray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        } else if (topSignal != null) {
+            // Active Signal Display
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("★ LIVE AI SIGNAL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(ProfitGreenBg, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("LIVE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Confidence ", fontSize = 11.sp, color = TextGray)
+                    Text("${topSignal.confidence}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            if (orders.isEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = DarkCard,
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+            val isPe = topSignal.actionType.contains("PE") || topSignal.symbol.contains("PE")
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DarkCardSecondary, RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(if (isPe) LossRedBg else ProfitGreenBg, CircleShape)
+                        .border(1.dp, if (isPe) LossRed else ProfitGreen, CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
-                        Text("No recent orders found.", fontSize = 12.sp, color = TextGray)
-                    }
+                    Icon(
+                        imageVector = if (isPe) Icons.Default.TrendingDown else Icons.Default.TrendingUp,
+                        contentDescription = null,
+                        tint = if (isPe) LossRed else ProfitGreen,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
-            } else {
-                orders.take(3).forEach { order ->
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(topSignal.symbol, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                    Text(
+                        text = if (underlyingLtp > 0.0) String.format("Underlying LTP: ₹%,.2f", underlyingLtp) else String.format("Signal LTP ₹%.2f", topSignal.ltp),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextWhite
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(topSignal.actionType, fontSize = 18.sp, fontWeight = FontWeight.Black, color = if (isPe) LossRed else ProfitGreen)
+                    Text("Trend: ${topSignal.trend}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MetricColumn("Entry Zone", topSignal.entryZone)
+                MetricColumn("Stop Loss", "₹${String.format("%.2f", topSignal.stopLoss)}")
+                MetricColumn("Target 1", "₹${String.format("%.2f", topSignal.target1)}")
+                MetricColumn("Target 2", "₹${String.format("%.2f", topSignal.target2)}")
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MetricColumn("Target 3", "₹${String.format("%.2f", topSignal.target3)}")
+                MetricColumn("Target 4", "₹${String.format("%.2f", topSignal.trailingSl * 1.5)}")
+                MetricColumn("Trailing SL", "₹${String.format("%.2f", topSignal.trailingSl)}")
+                MetricColumn("Time", topSignal.timestamp.substringAfter(" ").substringBeforeLast(":"))
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = {
+                        onOpenOrderDialog(topSignal.symbol, if (isPe) "BUY" else "BUY", topSignal.ltp, topSignal.lotSize)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isPe) LossRed else ProfitGreen),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "EXECUTE SIGNAL (${topSignal.actionType})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        } else {
+            // No Active Signal
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("★ AI OPTION SIGNALS (OPTION BUYER ONLY)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Analyzing real-time market feed for High-Probability Option Buyer Setups...", fontSize = 11.sp, color = TextGray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentOrdersSection(
+    orders: List<OrderEntity>,
+    onNavigateToOrders: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("☷ Recent Orders", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        TextButton(onClick = onNavigateToOrders) {
+            Text("View All >", fontSize = 12.sp, color = SecondaryGold)
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (orders.isEmpty()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = DarkCard,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+        ) {
+            Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("No recent orders found.", fontSize = 12.sp, color = TextGray)
+            }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            orders.take(3).forEach { order ->
+                key(order.orderId) {
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         color = DarkCard,
                         shape = RoundedCornerShape(8.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
@@ -631,8 +774,6 @@ fun HomeScreen(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

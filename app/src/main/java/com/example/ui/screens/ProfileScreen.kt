@@ -43,6 +43,7 @@ fun ProfileScreen(
     onSwitchBroker: (String) -> Unit,
     onReconnectBroker: (String) -> Unit = {},
     onDisconnectBroker: (String) -> Unit = {},
+    onRemoveAccountBroker: (String) -> Unit = {},
     onToggleBiometric: (Boolean) -> Unit,
     onNavigateToTelegramSettings: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
@@ -373,7 +374,8 @@ fun ProfileScreen(
                     lastRefreshTime = dhanInfo?.lastSyncTimestamp ?: 0L,
                     onConnect = { onSwitchBroker("Dhan") },
                     onReconnect = { onReconnectBroker("Dhan") },
-                    onDisconnect = { onDisconnectBroker("Dhan") }
+                    onDisconnect = { onDisconnectBroker("Dhan") },
+                    onRemoveAccount = { onRemoveAccountBroker("Dhan") }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -389,7 +391,8 @@ fun ProfileScreen(
                     lastRefreshTime = angelInfo?.lastSyncTimestamp ?: 0L,
                     onConnect = { onSwitchBroker("Angel One") },
                     onReconnect = { onReconnectBroker("Angel One") },
-                    onDisconnect = { onDisconnectBroker("Angel One") }
+                    onDisconnect = { onDisconnectBroker("Angel One") },
+                    onRemoveAccount = { onRemoveAccountBroker("Angel One") }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -405,7 +408,8 @@ fun ProfileScreen(
                     lastRefreshTime = mstockInfo?.lastSyncTimestamp ?: 0L,
                     onConnect = { onSwitchBroker("m.Stock") },
                     onReconnect = { onReconnectBroker("m.Stock") },
-                    onDisconnect = { onDisconnectBroker("m.Stock") }
+                    onDisconnect = { onDisconnectBroker("m.Stock") },
+                    onRemoveAccount = { onRemoveAccountBroker("m.Stock") }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -421,7 +425,8 @@ fun ProfileScreen(
                     lastRefreshTime = tsInfo?.lastSyncTimestamp ?: 0L,
                     onConnect = { onSwitchBroker("TradeSmart") },
                     onReconnect = { onReconnectBroker("TradeSmart") },
-                    onDisconnect = { onDisconnectBroker("TradeSmart") }
+                    onDisconnect = { onDisconnectBroker("TradeSmart") },
+                    onRemoveAccount = { onRemoveAccountBroker("TradeSmart") }
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -827,7 +832,8 @@ private fun BrokerStatusRow(
     lastRefreshTime: Long = 0L,
     onConnect: () -> Unit,
     onReconnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    onRemoveAccount: (() -> Unit)? = null
 ) {
     val statusText = when (status) {
         com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Connected (Active)"
@@ -880,51 +886,68 @@ private fun BrokerStatusRow(
             }
         }
 
-        when (status) {
-            com.example.data.network.BrokerAuthStatus.CONNECTED -> {
-                OutlinedButton(
-                    onClick = onDisconnect,
-                    shape = RoundedCornerShape(6.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LossRed),
-                    modifier = Modifier.height(30.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            when (status) {
+                com.example.data.network.BrokerAuthStatus.CONNECTED -> {
+                    OutlinedButton(
+                        onClick = onDisconnect,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LossRed),
+                        modifier = Modifier.height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                    }
+                }
+                com.example.data.network.BrokerAuthStatus.STANDBY -> {
+                    OutlinedButton(
+                        onClick = onConnect,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
+                        modifier = Modifier.height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                    }
+                }
+                com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+                com.example.data.network.BrokerAuthStatus.ERROR -> {
+                    Button(
+                        onClick = onConnect,
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800), contentColor = Color.Black),
+                        modifier = Modifier.height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("RE-AUTH", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                com.example.data.network.BrokerAuthStatus.CONFIGURE,
+                com.example.data.network.BrokerAuthStatus.OFFLINE -> {
+                    Button(
+                        onClick = onConnect,
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black),
+                        modifier = Modifier.height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text(if (status == com.example.data.network.BrokerAuthStatus.CONFIGURE) "CONFIGURE" else "CONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-            com.example.data.network.BrokerAuthStatus.STANDBY -> {
-                OutlinedButton(
-                    onClick = onConnect,
-                    shape = RoundedCornerShape(6.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
-                    modifier = Modifier.height(30.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
+
+            if (onRemoveAccount != null && status != com.example.data.network.BrokerAuthStatus.CONFIGURE) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = onRemoveAccount,
+                    modifier = Modifier.size(30.dp)
                 ) {
-                    Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                }
-            }
-            com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,
-            com.example.data.network.BrokerAuthStatus.ERROR -> {
-                Button(
-                    onClick = onConnect,
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800), contentColor = Color.Black),
-                    modifier = Modifier.height(30.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text("RE-AUTH", fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-            com.example.data.network.BrokerAuthStatus.CONFIGURE,
-            com.example.data.network.BrokerAuthStatus.OFFLINE -> {
-                Button(
-                    onClick = onConnect,
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black),
-                    modifier = Modifier.height(30.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text(if (status == com.example.data.network.BrokerAuthStatus.CONFIGURE) "CONFIGURE" else "CONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "Remove Account",
+                        tint = TextGray,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }

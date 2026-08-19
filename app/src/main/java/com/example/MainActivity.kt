@@ -321,6 +321,7 @@ class MainActivity : FragmentActivity() {
                                             watchlist = watchlist,
                                             marketDataSource = marketDataSource,
                                             marketDataLastUpdated = marketDataLastUpdated,
+                                            viewModel = viewModel,
                                             onNavigateToOrders = {
                                                 coroutineScope.launch { pagerState.animateScrollToPage(3) }
                                             },
@@ -444,6 +445,7 @@ class MainActivity : FragmentActivity() {
                                                     viewModel.disconnectBroker(broker)
                                                 },
                                                 onToggleBiometric = { enabled -> viewModel.toggleBiometric(enabled) },
+                                                onRemoveAccountBroker = { broker -> viewModel.removeAccountBroker(broker) },
                                                 onNavigateToTelegramSettings = { navController.navigate("telegram_settings") },
                                                 onNavigateToDiagnostics = { navController.navigate("diagnostics") },
                                                 onOpenNotificationCenter = { showNotificationCenter = true },

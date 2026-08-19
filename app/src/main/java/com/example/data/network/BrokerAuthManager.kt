@@ -536,28 +536,56 @@ class BrokerAuthManager(
         return _statuses.value[brokerName]?.status ?: BrokerAuthStatus.OFFLINE
     }
 
-    fun logoutBroker(brokerName: String) {
+    fun disconnectBroker(brokerName: String) {
         when (brokerName) {
             "Dhan" -> {
                 sessionManager.clearDhanSession()
-                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Disconnected")
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.OFFLINE, "Disconnected")
             }
             "Angel One" -> {
-                sessionManager.clearAngelSession()
                 angelMarketDataService.disconnect()
-                updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Disconnected")
+                sessionManager.clearAngelSessionTokens()
+                updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
             }
             "m.Stock" -> {
-                sessionManager.clearMStockSession()
                 mStockMarketDataService.disconnect()
-                updateStatus("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.CONFIGURE, "Disconnected")
+                sessionManager.clearMStockSessionTokens()
+                updateStatus("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
             }
             "TradeSmart" -> {
-                sessionManager.clearTradeSmartSession()
                 tradeSmartMarketDataService.disconnect()
-                updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Disconnected")
+                sessionManager.clearTradeSmartSession()
+                updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
             }
         }
+    }
+
+    fun removeAccount(brokerName: String) {
+        when (brokerName) {
+            "Dhan" -> {
+                sessionManager.clearDhanCredentials()
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Account Removed")
+            }
+            "Angel One" -> {
+                angelMarketDataService.disconnect()
+                sessionManager.clearAngelOneCredentials()
+                updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+            }
+            "m.Stock" -> {
+                mStockMarketDataService.disconnect()
+                sessionManager.clearMStockCredentials()
+                updateStatus("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.CONFIGURE, "Account Removed")
+            }
+            "TradeSmart" -> {
+                tradeSmartMarketDataService.disconnect()
+                sessionManager.clearTradeSmartSession()
+                updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Account Removed")
+            }
+        }
+    }
+
+    fun logoutBroker(brokerName: String) {
+        disconnectBroker(brokerName)
     }
 
     suspend fun reconnectBroker(brokerName: String): Result<Boolean> {

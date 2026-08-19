@@ -1,8 +1,10 @@
 package com.example.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+@Immutable
 @Entity(tableName = "watchlist")
 data class WatchlistItem(
     @PrimaryKey val symbol: String,
@@ -17,6 +19,7 @@ data class WatchlistItem(
     val oiChange: Double = 0.0
 )
 
+@Immutable
 @Entity(tableName = "orders")
 data class OrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -49,6 +52,7 @@ data class OrderEntity(
     val symbolToken: String = ""
 )
 
+@Immutable
 @Entity(tableName = "holdings")
 data class PortfolioHoldingEntity(
     @PrimaryKey val symbol: String,
@@ -74,6 +78,7 @@ data class PortfolioHoldingEntity(
     val productType: String = "INTRADAY"
 )
 
+@Immutable
 @Entity(tableName = "ai_signals")
 data class AISignalEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -105,6 +110,7 @@ data class AISignalEntity(
     val underlyingChange: Double = 0.0
 )
 
+@Immutable
 @Entity(tableName = "notifications")
 data class NotificationEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -135,6 +141,7 @@ fun formatRelativeTimestamp(createdMillis: Long): String {
     }
 }
 
+@Immutable
 @Entity(tableName = "user_profile")
 data class UserProfileEntity(
     @PrimaryKey val id: Int = 1,
@@ -170,6 +177,7 @@ data class UserProfileEntity(
     val buyingPower: Double = 0.0
 )
 
+@Immutable
 data class OptionStrikeItem(
     val strikePrice: Double,
     val callOi: String = "0",

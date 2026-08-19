@@ -87,16 +87,8 @@ class MarketDataEngine(
                     val isConnected = state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED"
                     healthManager.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, isConnected)
                     
-                    if (state == "LIVE") {
+                    if (state == "LIVE" || state == "SUBSCRIBED") {
                         healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_ANGEL_ONE, true)
-                        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_ANGEL_ONE)
-                        
-                        if (_internalActiveProvider.value != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
-                            healthManager.logRestored(_internalActiveProvider.value, ProviderHealthManager.PROVIDER_ANGEL_ONE)
-                            _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                        }
-                        _unifiedFeedStatus.value = "LIVE"
-                        updateLastTickTime()
                     } else if (state == "DISCONNECTED" || state == "ERROR" || state == "STALE") {
                         evaluateLiveLtpFailover()
                     }
@@ -106,24 +98,60 @@ class MarketDataEngine(
             // Monitor m.Stock connection state
             launch {
                 mStockMarketDataService.connectionState.collectLatest { state ->
-                    val isConnected = state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED"
+                    val isConnected = state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED" || state == "AUTHENTICATED"
                     healthManager.reportConnection(ProviderHealthManager.PROVIDER_MSTOCK, isConnected)
-                    if (state == "LIVE") {
+                    if (state == "LIVE" || state == "AUTHENTICATED") {
                         healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
-                        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK)
-                        updateLastTickTime()
                     }
                 }
             }
 
-            // Monitor ticks in MarketDataStore
+            // Monitor ticks in MarketDataStore for strict source-driven failover and auto-recovery
             launch {
                 MarketDataStore.marketData.collect { tickMap ->
                     if (tickMap.isNotEmpty()) {
-                        val hasLiveTick = tickMap.values.any { it.ltp > 0.0 && it.state == "LIVE" }
-                        if (hasLiveTick) {
-                            _unifiedFeedStatus.value = "LIVE"
-                            updateLastTickTime()
+                        val latestTicks = tickMap.values.toList()
+
+                        // Check for recent Angel One tick
+                        val angelTick = latestTicks.find { it.source == MarketDataSourceNames.ANGEL_ONE && it.ltp > 0.0 && it.state == "LIVE" }
+                        if (angelTick != null) {
+                            val now = System.currentTimeMillis()
+                            val tickAge = now - angelTick.receivedTimestamp
+                            if (tickAge <= ProviderHealthManager.STALE_TIMEOUT_MS) {
+                                healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_ANGEL_ONE, angelTick.receivedTimestamp)
+                                
+                                // Automatic Recovery to Angel One if currently on m.Stock or None
+                                if (_internalActiveProvider.value != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
+                                    Log.i(TAG, "RECOVERY: ${_internalActiveProvider.value} → ANGEL_ONE (Fresh Angel One tick received: ${angelTick.symbol} LTP=${angelTick.ltp})")
+                                    healthManager.logRestored(_internalActiveProvider.value, ProviderHealthManager.PROVIDER_ANGEL_ONE)
+                                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
+                                }
+                                _unifiedFeedStatus.value = "LIVE"
+                                updateLastTickTime()
+                                return@collect
+                            }
+                        }
+
+                        // Check for recent m.Stock tick if Angel One is not active/healthy
+                        val mStockTick = latestTicks.find { it.source == MarketDataSourceNames.MSTOCK && it.ltp > 0.0 && it.state == "LIVE" }
+                        if (mStockTick != null) {
+                            val now = System.currentTimeMillis()
+                            val tickAge = now - mStockTick.receivedTimestamp
+                            if (tickAge <= ProviderHealthManager.STALE_TIMEOUT_MS) {
+                                healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, mStockTick.receivedTimestamp)
+                                
+                                // Automatic Failover to m.Stock if Angel One is unhealthy
+                                val isAngelHealthy = healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_ANGEL_ONE)
+                                if (!isAngelHealthy && _internalActiveProvider.value != ProviderHealthManager.PROVIDER_MSTOCK) {
+                                    Log.i(TAG, "FAILOVER: ${_internalActiveProvider.value} → MSTOCK (Fresh m.Stock tick received: ${mStockTick.symbol} LTP=${mStockTick.ltp})")
+                                    healthManager.logFailover(_internalActiveProvider.value, ProviderHealthManager.PROVIDER_MSTOCK)
+                                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
+                                }
+                                if (_internalActiveProvider.value == ProviderHealthManager.PROVIDER_MSTOCK) {
+                                    _unifiedFeedStatus.value = "LIVE"
+                                    updateLastTickTime()
+                                }
+                            }
                         }
                     }
                 }
@@ -138,19 +166,19 @@ class MarketDataEngine(
                 delay(5000)
                 healthManager.checkAndEvaluateStaleness()
                 
-                // If current provider is Angel One but stale/disconnected, initiate failover
-                if (_internalActiveProvider.value == ProviderHealthManager.PROVIDER_ANGEL_ONE) {
-                    val angelHealth = healthManager.getHealthState(ProviderHealthManager.PROVIDER_ANGEL_ONE)
-                    if (!angelHealth.healthy && angelMarketDataService.connectionState.value != "LIVE") {
-                        evaluateLiveLtpFailover()
+                val currentProvider = _internalActiveProvider.value
+                val isAngelHealthy = healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_ANGEL_ONE)
+
+                if (currentProvider == ProviderHealthManager.PROVIDER_ANGEL_ONE && !isAngelHealthy) {
+                    Log.w(TAG, "Angel One feed stale/unhealthy. Initiating background m.Stock failover check...")
+                    if (mStockMarketDataService.isConfigured() && !mStockMarketDataService.isConnectionLive()) {
+                        mStockMarketDataService.connect()
                     }
-                } else {
-                    // Check if Angel One has recovered to restore it
-                    val angelHealth = healthManager.getHealthState(ProviderHealthManager.PROVIDER_ANGEL_ONE)
-                    if (angelHealth.healthy && angelMarketDataService.connectionState.value == "LIVE") {
-                        healthManager.logRestored(_internalActiveProvider.value, ProviderHealthManager.PROVIDER_ANGEL_ONE)
-                        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                        _unifiedFeedStatus.value = "LIVE"
+                } else if (currentProvider == ProviderHealthManager.PROVIDER_MSTOCK) {
+                    // Monitor Angel One background recovery
+                    if (!angelMarketDataService.isConnectionLive()) {
+                        Log.i(TAG, "Monitoring Angel One recovery in background...")
+                        angelMarketDataService.reconnect()
                     }
                 }
             }

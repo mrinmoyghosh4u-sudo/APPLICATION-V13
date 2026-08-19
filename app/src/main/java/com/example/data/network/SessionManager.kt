@@ -351,7 +351,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearAngelSession() {
-        clearAngelOneCredentials()
+        clearAngelSessionTokens()
     }
 
     fun clearActiveBrokerSession() {
@@ -416,7 +416,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearMStockSession() {
-        clearMStockCredentials()
+        clearMStockSessionTokens()
     }
 
     var tradesmartApiKey: String

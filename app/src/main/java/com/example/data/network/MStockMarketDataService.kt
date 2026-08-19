@@ -34,12 +34,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Dispatching validated ticks to MarketDataStore with source = "MSTOCK"
  */
 class MStockMarketDataService(
-    private val sessionManager: SessionManager,
+    private val sessionManager: SessionManager? = null,
     private val instrumentMasterService: InstrumentMasterService? = null
 ) {
     companion object {
         private const val TAG = "mStockMarketData"
-        private const val WS_URL = "wss://ws.mstock.trade"
+        private val WS_URLS = listOf(
+            "wss://api.mstock.trade/openapi/ws",
+            "wss://ws.mstock.trade",
+            "wss://api.mstock.trade/ws"
+        )
         private const val PING_INTERVAL_MS = 20000L
         private const val STALE_THRESHOLD_MS = 15000L
         private const val MAX_RECONNECT_ATTEMPTS = 5
@@ -50,13 +54,14 @@ class MStockMarketDataService(
     private val isConnecting = AtomicBoolean(false)
     private val isConnected = AtomicBoolean(false)
     private val reconnectAttempts = AtomicInteger(0)
+    private var urlIndex = 0
 
     private val subscribedTokens = ConcurrentHashMap<String, String>() // token -> exchange
     private var heartbeatJob: Job? = null
     private var staleCheckJob: Job? = null
     private var lastTickReceivedTime: Long = 0L
 
-    private val _connectionState = MutableStateFlow("OFFLINE") // OFFLINE, CONNECTING, CONNECTED, SUBSCRIBING, LIVE, STALE
+    private val _connectionState = MutableStateFlow("OFFLINE") // DISCONNECTED, CONNECTING, AUTHENTICATING, AUTHENTICATED, SUBSCRIBING, SUBSCRIBED, WAITING_FOR_TICK, LIVE, STALE, RECONNECTING, ERROR
     val connectionState: StateFlow<String> = _connectionState.asStateFlow()
 
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -70,8 +75,8 @@ class MStockMarketDataService(
     private var hasSubscription = false
 
     fun isConfigured(): Boolean {
-        val apiKey = sessionManager.mstockApiKey
-        val accessToken = sessionManager.mstockAccessToken
+        val apiKey = sessionManager?.mstockApiKey ?: ""
+        val accessToken = sessionManager?.mstockAccessToken
         return apiKey.isNotBlank() && !accessToken.isNullOrBlank()
     }
 
@@ -90,7 +95,8 @@ class MStockMarketDataService(
     }
 
     fun isConnectionLive(): Boolean {
-        return isConnected.get() && _connectionState.value == "LIVE"
+        val age = getTickAgeMs()
+        return isConnected.get() && hasFirstTick && age >= 0L && age <= STALE_THRESHOLD_MS && (_connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED")
     }
 
     fun reconnect() {
@@ -104,7 +110,7 @@ class MStockMarketDataService(
     fun connect() {
         if (!isConfigured()) {
             Log.d(TAG, "m.Stock credentials not configured. Connection skipped.")
-            _connectionState.value = "OFFLINE"
+            _connectionState.value = "DISCONNECTED"
             MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "OFFLINE")
             return
         }
@@ -113,10 +119,15 @@ class MStockMarketDataService(
 
         isConnecting.set(true)
         _connectionState.value = "CONNECTING"
-        Log.d(TAG, "Initiating m.Stock WebSocket connection to $WS_URL...")
+
+        val currentUrl = WS_URLS[urlIndex % WS_URLS.size]
+        Log.d(TAG, "Initiating m.Stock WebSocket connection to $currentUrl...")
 
         val request = Request.Builder()
-            .url(WS_URL)
+            .url(currentUrl)
+            .header("X-Mirae-Version", "1")
+            .header("X-PrivateKey", sessionManager?.mstockApiKey ?: "")
+            .header("Authorization", "Bearer ${sessionManager?.mstockAccessToken ?: ""}")
             .header("User-Agent", "KingKhanAITrader/1.0")
             .build()
 
@@ -129,20 +140,21 @@ class MStockMarketDataService(
                 isConnecting.set(false)
                 isConnected.set(true)
                 reconnectAttempts.set(0)
+                _connectionState.value = "AUTHENTICATING"
                 Log.d(TAG, "[MSTOCK_WS_CONNECTED] Sending authentication handshake...")
 
                 // Send Login / Authentication Handshake
                 val authPayload = JSONObject().apply {
                     put("action", "login")
-                    put("apiKey", sessionManager.mstockApiKey)
-                    put("clientId", sessionManager.mstockClientId)
-                    put("token", sessionManager.mstockAccessToken ?: "")
-                    put("feedToken", sessionManager.mstockFeedToken ?: "")
+                    put("apiKey", sessionManager?.mstockApiKey ?: "")
+                    put("clientId", sessionManager?.mstockClientId ?: "")
+                    put("token", sessionManager?.mstockAccessToken ?: "")
+                    put("feedToken", sessionManager?.mstockFeedToken ?: "")
                     put("timestamp", System.currentTimeMillis())
                 }
                 webSocket.send(authPayload.toString())
 
-                _connectionState.value = "CONNECTED"
+                _connectionState.value = "AUTHENTICATED"
                 MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "CONNECTED")
 
                 startHeartbeat()
@@ -173,6 +185,7 @@ class MStockMarketDataService(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "m.Stock WebSocket connection failure: ${t.localizedMessage}")
                 handleDisconnect()
+                urlIndex++ // Switch fallback endpoint on failure
                 scheduleReconnect()
             }
         }
@@ -181,12 +194,12 @@ class MStockMarketDataService(
     private fun parseTextMessage(text: String) {
         try {
             val json = JSONObject(text)
-            val type = json.optString("type", json.optString("action", ""))
+            val type = json.optString("type", json.optString("action", json.optString("status", "")))
 
             when (type.lowercase()) {
-                "auth", "login" -> {
-                    val status = json.optString("status", "ok")
-                    Log.d(TAG, "[MSTOCK_AUTH_SUCCESS] status=$status")
+                "auth", "login", "success", "ok" -> {
+                    _connectionState.value = "SUBSCRIBED"
+                    Log.d(TAG, "[MSTOCK_AUTH_SUCCESS]")
                 }
                 "tick", "quote", "ltp" -> {
                     val token = json.optString("token", json.optString("scripCode", ""))
@@ -236,81 +249,93 @@ class MStockMarketDataService(
 
     /**
      * Parses m.Stock Binary Market Data Packets
-     * 
-     * Structure:
-     * - Header: Packet Length (2B), Packet Type (1B), Exchange (1B), Token (4B)
-     * - Payload: LTP (4B or 8B int/double in paise), Open (4B), High (4B), Low (4B), Close (4B), Volume (4B/8B), Timestamp (8B)
+     * Supports single and multi-packet binary frames.
      */
-    private fun parseBinaryPacket(bytes: ByteArray) {
+    fun parseBinaryPacket(bytes: ByteArray) {
         try {
             if (bytes.size < 8) return
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
-            val packetLength = buffer.short.toInt() and 0xFFFF
-            val packetType = buffer.get().toInt()
-            val exchangeCode = buffer.get().toInt()
-            val tokenNumber = buffer.int
+            while (buffer.remaining() >= 8) {
+                val startPos = buffer.position()
+                val packetLength = buffer.short.toInt() and 0xFFFF
+                val packetType = buffer.get().toInt()
+                val exchangeCode = buffer.get().toInt()
+                val tokenNumber = buffer.int
 
-            val exchange = when (exchangeCode) {
-                1 -> "NSE"
-                2 -> "NFO"
-                3 -> "BSE"
-                4 -> "BFO"
-                5 -> "MCX"
-                else -> "NSE"
-            }
-
-            val token = tokenNumber.toString()
-
-            if (buffer.remaining() >= 4) {
-                val rawLtp = buffer.int
-                // LTP in paise (divide by 100.0)
-                val ltp = rawLtp / 100.0
-
-                var open = 0.0
-                var high = 0.0
-                var low = 0.0
-                var close = 0.0
-                var volume = 0L
-                var ts = System.currentTimeMillis()
-
-                if (buffer.remaining() >= 16) {
-                    open = buffer.int / 100.0
-                    high = buffer.int / 100.0
-                    low = buffer.int / 100.0
-                    close = buffer.int / 100.0
+                val exchange = when (exchangeCode) {
+                    1 -> "NSE"
+                    2 -> "NFO"
+                    3 -> "BSE"
+                    4 -> "BFO"
+                    5 -> "MCX"
+                    else -> "NSE"
                 }
 
-                if (buffer.remaining() >= 8) {
-                    volume = buffer.long
+                val token = tokenNumber.toString()
+
+                if (buffer.remaining() >= 4) {
+                    val rawLtp = buffer.int
+                    val ltp = rawLtp / 100.0
+
+                    var open = 0.0
+                    var high = 0.0
+                    var low = 0.0
+                    var close = 0.0
+                    var volume = 0L
+                    var ts = System.currentTimeMillis()
+
+                    if (buffer.remaining() >= 16) {
+                        open = buffer.int / 100.0
+                        high = buffer.int / 100.0
+                        low = buffer.int / 100.0
+                        close = buffer.int / 100.0
+                    }
+
+                    if (buffer.remaining() >= 8) {
+                        volume = buffer.long
+                    }
+
+                    if (buffer.remaining() >= 8) {
+                        val rawTs = buffer.long
+                        if (rawTs > 0) ts = rawTs
+                    }
+
+                    val symbol = resolveSymbol(exchange, token)
+
+                    if (ltp > 0.0) {
+                        hasFirstTick = true
+                        lastTickReceivedTime = System.currentTimeMillis()
+                        _connectionState.value = "LIVE"
+                        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+
+                        MarketDataStore.updateTick(
+                            source = MarketDataSourceNames.MSTOCK,
+                            symbol = symbol,
+                            token = token,
+                            exchange = exchange,
+                            ltp = ltp,
+                            open = open,
+                            high = high,
+                            low = low,
+                            close = close,
+                            volume = volume,
+                            exchangeTimestamp = ts,
+                            receivedTimestamp = System.currentTimeMillis(),
+                            state = "LIVE"
+                        )
+                    }
                 }
 
-                if (buffer.remaining() >= 8) {
-                    ts = buffer.long
-                }
-
-                val symbol = resolveSymbol(exchange, token)
-
-                if (ltp > 0.0) {
-                    hasFirstTick = true
-                    _connectionState.value = "LIVE"
-                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
-
-                    MarketDataStore.updateTick(
-                        source = MarketDataSourceNames.MSTOCK,
-                        symbol = symbol,
-                        token = token,
-                        exchange = exchange,
-                        ltp = ltp,
-                        open = open,
-                        high = high,
-                        low = low,
-                        close = close,
-                        volume = volume,
-                        exchangeTimestamp = ts,
-                        receivedTimestamp = System.currentTimeMillis(),
-                        state = "LIVE"
-                    )
+                if (packetLength > 0 && packetLength <= (bytes.size - startPos)) {
+                    val nextPos = startPos + packetLength
+                    if (nextPos > buffer.position() && nextPos <= bytes.size) {
+                        buffer.position(nextPos)
+                    } else {
+                        break
+                    }
+                } else {
+                    break
                 }
             }
         } catch (e: Exception) {
@@ -387,7 +412,19 @@ class MStockMarketDataService(
     }
 
     fun subscribe(exchange: String, tokens: List<String>, mode: Int = 1) {
-        tokens.forEach { subscribedTokens[it] = exchange }
+        val validTokens = mutableListOf<String>()
+        tokens.forEach { tok ->
+            val trimmed = tok.trim()
+            if (trimmed.isNotBlank()) {
+                subscribedTokens[trimmed] = exchange
+                validTokens.add(trimmed)
+            } else {
+                Log.w(TAG, "MSTOCK SUBSCRIPTION FAILED SYMBOL=UNKNOWN REASON=TOKEN_NOT_FOUND")
+            }
+        }
+
+        if (validTokens.isEmpty()) return
+
         if (!isConnected.get()) {
             connect()
             return
@@ -398,11 +435,12 @@ class MStockMarketDataService(
                 put("action", "subscribe")
                 put("mode", mode) // 1: LTP, 2: QUOTE
                 put("exchange", exchange)
-                put("tokens", JSONArray(tokens))
+                put("tokens", JSONArray(validTokens))
             }
             webSocket?.send(subMsg.toString())
             hasSubscription = true
-            Log.d(TAG, "[MSTOCK_SUBSCRIBED] tokens=$tokens exch=$exchange mode=$mode")
+            _connectionState.value = "SUBSCRIBING"
+            Log.d(TAG, "[MSTOCK_SUBSCRIBED] tokens=$validTokens exch=$exchange mode=$mode")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send m.Stock subscribe frame", e)
         }

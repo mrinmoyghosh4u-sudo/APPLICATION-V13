@@ -10,10 +10,13 @@ import com.example.data.network.*
 import com.example.data.repository.TradingRepository
 import com.example.util.AngelAuthHelper
 import com.example.util.OptionExpiryUtil
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -278,7 +281,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
                 dbList.map { item ->
                     val dbSymbol = item.symbol.uppercase().trim()
-                    println("IndexMatch: " + "Trying to match dbSymbol=$dbSymbol against liveData keys=${liveData.keys}")
                     val live = liveData.values.find { liveItem ->
                         val liveSymbol = liveItem.symbol.uppercase().trim()
                         when (dbSymbol) {
@@ -311,6 +313,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _watchlist.value = combinedList
             }
         }
+    }
+
+    fun getWatchlistItemFlow(indexName: String): Flow<WatchlistItem?> {
+        val normName = indexName.trim().uppercase()
+        return watchlist
+            .map { list ->
+                list.find { item ->
+                    val dbSymbol = item.symbol.uppercase().trim()
+                    when (normName) {
+                        "NIFTY 50", "NIFTY" -> dbSymbol == "NIFTY 50" || dbSymbol == "NIFTY"
+                        "BANKNIFTY" -> dbSymbol == "BANKNIFTY" || dbSymbol == "NIFTY BANK"
+                        "FINNIFTY" -> dbSymbol == "FINNIFTY" || dbSymbol == "NIFTY FIN SERVICE"
+                        "MIDCPNIFTY" -> dbSymbol.contains("MID") || dbSymbol == "MIDCPNIFTY"
+                        "SENSEX" -> dbSymbol == "SENSEX"
+                        "BANKEX" -> dbSymbol == "BANKEX"
+                        "CRUDEOIL" -> dbSymbol.startsWith("CRUDEOIL") && !dbSymbol.startsWith("CRUDEOILM")
+                        "CRUDEOIL M" -> dbSymbol.startsWith("CRUDEOILM")
+                        else -> dbSymbol == normName || dbSymbol.contains(normName)
+                    }
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    private fun observeOrdersAndHoldings() {
         viewModelScope.launch {
             repository.allOrders.collectLatest { list ->
                 _orders.value = list
@@ -554,8 +581,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnectBroker(brokerName: String) {
         viewModelScope.launch {
-            brokerAuthManager.logoutBroker(brokerName)
-            repository.addNotification("Broker Disconnected", "$brokerName has been disconnected", "INFO")
+            brokerAuthManager.disconnectBroker(brokerName)
+            repository.addNotification("Broker Disconnected", "$brokerName disconnected (credentials preserved)", "INFO")
+        }
+    }
+
+    fun removeAccountBroker(brokerName: String) {
+        viewModelScope.launch {
+            brokerAuthManager.removeAccount(brokerName)
+            repository.addNotification("Account Removed", "$brokerName credentials and tokens cleared", "WARNING")
         }
     }
 
@@ -680,7 +714,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             while (true) {
-                kotlinx.coroutines.delay(2000L)
+                kotlinx.coroutines.delay(15000L)
                 val isValidSession = sessionManager.hasValidSession()
                 if (isValidSession) {
                     refreshMarketData()
@@ -746,9 +780,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fetchOptionChain() {
         viewModelScope.launch {
-            _optionStrikes.value = emptyList() // clear previous
             val res = brokerManager.getOptionChain(_selectedOptionIndex.value, _selectedOptionExpiry.value)
-            _optionStrikes.value = res.getOrNull() ?: emptyList()
+            val strikes = res.getOrNull()
+            if (!strikes.isNullOrEmpty()) {
+                _optionStrikes.value = strikes
+            }
         }
     }
 

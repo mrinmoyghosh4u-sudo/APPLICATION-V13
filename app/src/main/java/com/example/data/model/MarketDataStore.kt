@@ -1,5 +1,6 @@
 package com.example.data.model
 
+import androidx.compose.runtime.Immutable
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +9,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -23,6 +26,7 @@ object MarketDataSourceNames {
     const val YAHOO = "YAHOO"
 }
 
+@Immutable
 data class MarketDataState(
     val source: String, // "ANGEL_ONE", "MSTOCK", "TRADESMART", "NSE", "YAHOO"
     val symbol: String,
@@ -266,6 +270,15 @@ object MarketDataStore {
         if (direct != null) return direct
         val key = symbolIndex.keys.find { it.equals(symbol, ignoreCase = true) }
         return key?.let { symbolIndex[it] }
+    }
+
+    fun getTickFlow(symbol: String): kotlinx.coroutines.flow.Flow<MarketDataState?> {
+        val normSym = symbol.trim().uppercase()
+        return marketData
+            .map { map ->
+                getTick(symbol) ?: map[normSym]
+            }
+            .distinctUntilChanged()
     }
 
     fun getTick(exchange: String, symbol: String): MarketDataState? {

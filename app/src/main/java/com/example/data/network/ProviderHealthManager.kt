@@ -95,7 +95,7 @@ class ProviderHealthManager {
         _providerHealthFlow.value = HashMap(healthMap)
 
         if (!wasHealthy && updated.healthy) {
-            Log.i(TAG, "DATA PROVIDER: $provider → HEALTHY")
+            try { Log.i(TAG, "DATA PROVIDER: $provider → HEALTHY") } catch (_: Throwable) { println("DATA PROVIDER: $provider → HEALTHY") }
         }
     }
 
@@ -130,7 +130,7 @@ class ProviderHealthManager {
                 if (!state.stale) {
                     val updated = state.copy(stale = true, healthy = false)
                     healthMap[provider] = updated
-                    Log.w(TAG, "DATA PROVIDER: $provider → STALE (no ticks for >15s)")
+                    try { Log.w(TAG, "DATA PROVIDER: $provider → STALE (no ticks for >15s)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → STALE") }
                 }
             }
         }
@@ -154,10 +154,10 @@ class ProviderHealthManager {
     }
 
     fun logFailover(fromProvider: String, toProvider: String) {
-        Log.i(TAG, "DATA FAILOVER: $fromProvider → $toProvider")
+        try { Log.i(TAG, "DATA FAILOVER: $fromProvider → $toProvider") } catch (_: Throwable) { println("DATA FAILOVER: $fromProvider → $toProvider") }
     }
 
     fun logRestored(fallbackProvider: String, primaryProvider: String) {
-        Log.i(TAG, "DATA RESTORED: $fallbackProvider → $primaryProvider")
+        try { Log.i(TAG, "DATA RESTORED: $fallbackProvider → $primaryProvider") } catch (_: Throwable) { println("DATA RESTORED: $fallbackProvider → $primaryProvider") }
     }
 }
