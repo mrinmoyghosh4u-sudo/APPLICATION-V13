@@ -293,6 +293,12 @@ class SessionManager(context: Context) {
             prefs.edit().putString("mstock_client_id", value).commit()
         }
 
+    var mstockTotpSecret: String
+        get() = safeGetToken("mstock_totp_secret_enc") ?: ""
+        set(value) {
+            safeSetToken("mstock_totp_secret_enc", value)
+        }
+
     var mstockPasswordPin: String
         get() = safeGetToken("mstock_password_pin_enc") ?: ""
         set(value) {
@@ -305,6 +311,18 @@ class SessionManager(context: Context) {
             safeSetToken("mstock_access_token_enc", value)
         }
 
+    var mstockRefreshToken: String?
+        get() = safeGetToken("mstock_refresh_token_enc")
+        set(value) {
+            safeSetToken("mstock_refresh_token_enc", value)
+        }
+
+    var mstockFeedToken: String?
+        get() = safeGetToken("mstock_feed_token_enc")
+        set(value) {
+            safeSetToken("mstock_feed_token_enc", value)
+        }
+
     var mstockTokenTimestamp: Long
         get() = prefs.getLong("mstock_token_time", 0L)
         set(value) {
@@ -312,14 +330,18 @@ class SessionManager(context: Context) {
         }
 
     fun isMStockConfigured(): Boolean {
-        return !mstockApiKey.isBlank() || !mstockAccessToken.isNullOrBlank() || !mstockClientId.isBlank()
+        return (!mstockClientId.isBlank() && (!mstockApiKey.isBlank() || !mstockTotpSecret.isBlank())) || !mstockAccessToken.isNullOrBlank()
     }
 
     fun clearMStockSession() {
         prefs.edit()
             .remove("mstock_api_key_enc")
             .remove("mstock_client_id")
+            .remove("mstock_totp_secret_enc")
+            .remove("mstock_password_pin_enc")
             .remove("mstock_access_token_enc")
+            .remove("mstock_refresh_token_enc")
+            .remove("mstock_feed_token_enc")
             .remove("mstock_token_time")
             .commit()
         if (activeBroker == "m.Stock") {

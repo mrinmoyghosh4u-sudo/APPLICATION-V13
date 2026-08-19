@@ -459,38 +459,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun connectMStock(apiKey: String, clientId: String, passwordPin: String, accessToken: String) {
+    fun connectMStock(clientCode: String, apiKey: String, totpSecret: String) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
 
-            if (apiKey.isBlank() || clientId.isBlank()) {
-                _authErrorMessage.value = "m.Stock API Key and Client ID are required."
+            if (clientCode.isBlank()) {
+                _authErrorMessage.value = "m.Stock Client Code is required."
+                _isAuthInProgress.value = false
+                return@launch
+            }
+            if (apiKey.isBlank()) {
+                _authErrorMessage.value = "m.Stock API Key is required."
+                _isAuthInProgress.value = false
+                return@launch
+            }
+            if (totpSecret.isBlank()) {
+                _authErrorMessage.value = "m.Stock TOTP Secret is required."
                 _isAuthInProgress.value = false
                 return@launch
             }
 
-            sessionManager.mstockApiKey = apiKey
-            sessionManager.mstockClientId = clientId
-            sessionManager.mstockPasswordPin = passwordPin
-            sessionManager.mstockAccessToken = accessToken
-            sessionManager.mstockTokenTimestamp = System.currentTimeMillis()
-            sessionManager.activeBroker = "m.Stock"
-            brokerManager.setActiveBroker("m.Stock")
-
-            val valid = validateAndRestoreSession()
+            val res = brokerAuthManager.connectMStock(
+                clientCode = clientCode,
+                apiKey = apiKey,
+                totpSecret = totpSecret
+            )
             _isAuthInProgress.value = false
-            if (valid) {
-                _brokerSwitchStatus.value = "Broker Connected • m.Stock"
-                _authSuccessEvent.value = true
-                _showConnectDialog.value = false
-                repository.addNotification("Broker Connected", "Connected to m.Stock (Mirae Asset) successfully", "SUCCESS")
-                telegramService.sendFormattedEvent(
-                    "MSTOCK_CONN_${clientId}",
-                    "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient ID: <code>${clientId}</code>\nStatus: <b>Active Real Trading Session</b>"
-                )
+            if (res.isSuccess && res.getOrThrow()) {
+                sessionManager.activeBroker = "m.Stock"
+                brokerManager.setActiveBroker("m.Stock")
+                val valid = validateAndRestoreSession()
+                if (valid) {
+                    _brokerSwitchStatus.value = "Broker Connected • m.Stock"
+                    _authSuccessEvent.value = true
+                    _showConnectDialog.value = false
+                    repository.addNotification("Broker Connected", "Connected to m.Stock (Mirae Asset) successfully", "SUCCESS")
+                    telegramService.sendFormattedEvent(
+                        "MSTOCK_CONN_${clientCode}",
+                        "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient Code: <code>${clientCode}</code>\nStatus: <b>Active Real Trading Session</b>"
+                    )
+                } else {
+                    _authErrorMessage.value = "Failed to validate m.Stock session."
+                }
             } else {
-                _authErrorMessage.value = "Failed to validate m.Stock connection. Please check API Key, Client ID and Access Token."
+                _authErrorMessage.value = res.exceptionOrNull()?.message ?: "m.Stock login failed. Please verify credentials."
             }
         }
     }

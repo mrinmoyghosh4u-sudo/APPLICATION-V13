@@ -36,7 +36,7 @@ fun BrokerConnectDialog(
     errorMessage: String?,
     onDismiss: () -> Unit,
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
-    onMStockLogin: ((String, String, String, String) -> Unit)? = null,
+    onMStockLogin: ((String, String, String) -> Unit)? = null,
     onTradeSmartLogin: ((String, String, String) -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
@@ -51,10 +51,9 @@ fun BrokerConnectDialog(
     var angelTotpSecret by remember { mutableStateOf(sessionManager.angelTotpSecret) }
     var isDhanConsentLoading by remember { mutableStateOf(false) }
 
-    var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
     var mstockClientId by remember { mutableStateOf(sessionManager.mstockClientId) }
-    var mstockPasswordPin by remember { mutableStateOf(sessionManager.mstockPasswordPin) }
-    var mstockTotp by remember { mutableStateOf("") }
+    var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
+    var mstockTotpSecret by remember { mutableStateOf(sessionManager.mstockTotpSecret) }
 
     var tradeSmartApiKey by remember { mutableStateOf(sessionManager.tradesmartApiKey) }
     var tradeSmartClientId by remember { mutableStateOf(sessionManager.tradesmartClientId) }
@@ -166,22 +165,6 @@ fun BrokerConnectDialog(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         OutlinedTextField(
-                            value = mstockApiKey,
-                            onValueChange = { mstockApiKey = it },
-                            label = { Text("API Key / App Key") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFFE53935),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFFE53935),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
                             value = mstockClientId,
                             onValueChange = { mstockClientId = it },
                             label = { Text("Client Code / User ID") },
@@ -198,9 +181,25 @@ fun BrokerConnectDialog(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
-                            value = mstockPasswordPin,
-                            onValueChange = { mstockPasswordPin = it },
-                            label = { Text("Password / MPIN") },
+                            value = mstockApiKey,
+                            onValueChange = { mstockApiKey = it },
+                            label = { Text("API Key / App Key") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = Color(0xFFE53935),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = Color(0xFFE53935),
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = mstockTotpSecret,
+                            onValueChange = { mstockTotpSecret = it },
+                            label = { Text("TOTP Secret (Base32 Key for Auto TOTP)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -214,31 +213,15 @@ fun BrokerConnectDialog(
                                 unfocusedLabelColor = TextGray,
                             )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = mstockTotp,
-                            onValueChange = { mstockTotp = it },
-                            label = { Text("TOTP / Access Token") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFFE53935),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFFE53935),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
                         
                         Spacer(modifier = Modifier.height(20.dp))
                         Button(
                             onClick = {
-                                if (mstockApiKey.isBlank() && mstockClientId.isBlank()) {
-                                    localErrorMsg = "Please enter API Key or Client ID."
+                                if (mstockClientId.isBlank() || mstockApiKey.isBlank() || mstockTotpSecret.isBlank()) {
+                                    localErrorMsg = "Please enter Client Code, API Key, and TOTP Secret."
                                 } else {
                                     localErrorMsg = null
-                                    onMStockLogin?.invoke(mstockApiKey, mstockClientId, mstockPasswordPin, mstockTotp)
+                                    onMStockLogin?.invoke(mstockClientId, mstockApiKey, mstockTotpSecret)
                                 }
                             },
                             enabled = !isAuthInProgress,

@@ -598,7 +598,7 @@ class MainActivity : FragmentActivity() {
                                 errorMessage = authErrorMessage,
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
-                                onMStockLogin = { apiKey, clientId, passwordPin, totp -> viewModel.connectMStock(apiKey, clientId, passwordPin, totp) },
+                                onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },
                                 onTradeSmartLogin = { apiKey, clientId, token -> viewModel.connectTradeSmart(apiKey, clientId, token) }
                             )
                         }

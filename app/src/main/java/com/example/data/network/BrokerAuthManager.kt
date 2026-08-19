@@ -6,6 +6,7 @@ import com.example.data.model.MarketDataStore
 import com.example.util.AngelAuthHelper
 import com.example.util.BrokerConfig
 import com.example.util.DhanAuthHelper
+import com.example.util.MStockAuthHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -309,40 +310,133 @@ class BrokerAuthManager(
             return
         }
 
+        val clientCode = sessionManager.mstockClientId
+        val apiKey = sessionManager.mstockApiKey
+        val totpSecret = sessionManager.mstockTotpSecret
+        val accessToken = sessionManager.mstockAccessToken
+        val tokenTimestamp = sessionManager.mstockTokenTimestamp
+        val tokenAgeMs = System.currentTimeMillis() - tokenTimestamp
+        val isTokenExpired = accessToken.isNullOrBlank() || tokenAgeMs > (23 * 60 * 60 * 1000L) // m.Stock 24hr session
+
+        if (isTokenExpired) {
+            if (totpSecret.isNotBlank() && clientCode.isNotBlank() && apiKey.isNotBlank()) {
+                Log.d(TAG, "m.Stock session expired/missing. Auto-authenticating using stored TOTP secret...")
+                val autoAuthRes = connectMStock(
+                    clientCode = clientCode,
+                    apiKey = apiKey,
+                    totpSecret = totpSecret
+                )
+                if (autoAuthRes.isSuccess) {
+                    Log.d(TAG, "m.Stock auto-login with TOTP secret succeeded.")
+                    return
+                } else {
+                    Log.w(TAG, "m.Stock auto-login failed: ${autoAuthRes.exceptionOrNull()?.message}")
+                    updateStatus(
+                        "m.Stock",
+                        "Secondary Data Fallback",
+                        BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+                        "Auto-login failed: ${autoAuthRes.exceptionOrNull()?.message ?: "Re-authentication required"}"
+                    )
+                    return
+                }
+            } else {
+                updateStatus(
+                    "m.Stock",
+                    "Secondary Data Fallback",
+                    BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+                    "Session expired. Please configure TOTP Secret or Access Token."
+                )
+                return
+            }
+        }
+
         val hasAngelLive = getConnectionStatus("Angel One") == BrokerAuthStatus.CONNECTED
         val status = if (hasAngelLive) BrokerAuthStatus.STANDBY else BrokerAuthStatus.CONNECTED
         val msg = if (hasAngelLive) "Configured • Standby Fallback" else "Active Fallback Market Data"
 
         updateStatus("m.Stock", "Secondary Data Fallback", status, msg)
+        mStockMarketDataService.connect()
     }
 
     suspend fun connectMStock(
+        clientCode: String? = null,
         apiKey: String? = null,
-        clientId: String? = null,
-        passwordPin: String? = null,
-        totp: String? = null
+        totpSecret: String? = null,
+        directTotp: String? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
-            if (!apiKey.isNullOrBlank()) sessionManager.mstockApiKey = apiKey
-            if (!clientId.isNullOrBlank()) sessionManager.mstockClientId = clientId
-            if (!passwordPin.isNullOrBlank()) sessionManager.mstockPasswordPin = passwordPin
-            if (!totp.isNullOrBlank()) sessionManager.mstockAccessToken = totp
+            val code = clientCode?.takeIf { it.isNotBlank() } ?: sessionManager.mstockClientId
+            val key = apiKey?.takeIf { it.isNotBlank() } ?: sessionManager.mstockApiKey
+            val secret = totpSecret?.takeIf { it.isNotBlank() } ?: sessionManager.mstockTotpSecret
+            val direct = directTotp?.takeIf { it.isNotBlank() }
 
+            if (code.isBlank()) throw Exception("m.Stock Client Code is required.")
+            if (key.isBlank()) throw Exception("m.Stock API Key is required.")
+
+            val effectiveTotpInput = when {
+                !direct.isNullOrBlank() -> direct
+                secret.isNotBlank() -> secret
+                else -> throw Exception("m.Stock TOTP Secret or 6-digit TOTP is required.")
+            }
+
+            Log.d(TAG, "Authenticating with m.Stock verifytotp for client: $code")
+            val authResult = MStockAuthHelper.verifyTotp(code, key, effectiveTotpInput)
+            val tokens = authResult.getOrThrow()
+
+            // Securely store credentials and tokens in Encrypted Storage
+            sessionManager.mstockClientId = code
+            sessionManager.mstockApiKey = key
+            if (secret.isNotBlank()) {
+                sessionManager.mstockTotpSecret = secret
+            }
+            sessionManager.mstockAccessToken = tokens.accessToken
+            if (tokens.refreshToken.isNotBlank()) {
+                sessionManager.mstockRefreshToken = tokens.refreshToken
+            }
+            if (tokens.feedToken.isNotBlank()) {
+                sessionManager.mstockFeedToken = tokens.feedToken
+            }
             sessionManager.mstockTokenTimestamp = System.currentTimeMillis()
-            mStockMarketDataService.connect()
 
-            validateMStockSession()
+            val hasAngelLive = getConnectionStatus("Angel One") == BrokerAuthStatus.CONNECTED
+            val status = if (hasAngelLive) BrokerAuthStatus.STANDBY else BrokerAuthStatus.CONNECTED
+            val msg = if (hasAngelLive) "Configured • Standby Fallback" else "Active Fallback Market Data"
+            updateStatus("m.Stock", "Secondary Data Fallback", status, msg)
+
+            mStockMarketDataService.connect()
             true
         }
     }
 
     suspend fun refreshMStock(): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
-            if (!sessionManager.isMStockConfigured()) {
+            val clientCode = sessionManager.mstockClientId
+            val apiKey = sessionManager.mstockApiKey
+            val refreshToken = sessionManager.mstockRefreshToken ?: ""
+            val totpSecret = sessionManager.mstockTotpSecret
+
+            if (clientCode.isBlank() || apiKey.isBlank()) {
                 throw Exception("m.Stock is not configured.")
             }
+
+            val renewResult = MStockAuthHelper.renewSession(
+                clientCode = clientCode,
+                apiKey = apiKey,
+                refreshToken = refreshToken,
+                totpSecret = totpSecret
+            )
+            val tokens = renewResult.getOrThrow()
+
+            if (tokens.accessToken.isNotBlank()) sessionManager.mstockAccessToken = tokens.accessToken
+            if (tokens.refreshToken.isNotBlank()) sessionManager.mstockRefreshToken = tokens.refreshToken
+            if (tokens.feedToken.isNotBlank()) sessionManager.mstockFeedToken = tokens.feedToken
+            sessionManager.mstockTokenTimestamp = System.currentTimeMillis()
+
+            val hasAngelLive = getConnectionStatus("Angel One") == BrokerAuthStatus.CONNECTED
+            val status = if (hasAngelLive) BrokerAuthStatus.STANDBY else BrokerAuthStatus.CONNECTED
+            updateStatus("m.Stock", "Secondary Data Fallback", status, "Session auto-refreshed")
+
             mStockMarketDataService.connect()
-            validateMStockSession()
             true
         }
     }

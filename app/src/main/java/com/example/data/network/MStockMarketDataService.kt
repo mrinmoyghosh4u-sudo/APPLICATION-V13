@@ -110,13 +110,14 @@ class MStockMarketDataService(
                     put("action", "login")
                     put("apiKey", sessionManager.mstockApiKey)
                     put("clientId", sessionManager.mstockClientId)
-                    put("token", sessionManager.mstockAccessToken)
+                    put("token", sessionManager.mstockAccessToken ?: "")
+                    put("feedToken", sessionManager.mstockFeedToken ?: "")
                     put("timestamp", System.currentTimeMillis())
                 }
                 webSocket.send(authPayload.toString())
 
-                _connectionState.value = "LIVE"
-                MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+                _connectionState.value = "CONNECTED"
+                MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "CONNECTED")
 
                 startHeartbeat()
                 startStaleChecker()
@@ -388,6 +389,24 @@ class MStockMarketDataService(
     }
 
     private fun resubscribeAll() {
+        if (subscribedTokens.isEmpty() && instrumentMasterService != null && instrumentMasterService.isLoaded) {
+            val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL")
+            for (idx in indices) {
+                val inst = instrumentMasterService.resolveIndexToken(idx)
+                if (inst != null && inst.token.isNotBlank()) {
+                    val exch = if (inst.exch_seg.isNotBlank()) inst.exch_seg else "NSE"
+                    subscribedTokens[inst.token] = exch
+                }
+            }
+            val defaultStocks = listOf("RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK")
+            for (sym in defaultStocks) {
+                val token = instrumentMasterService.resolveAngelToken(sym, "NSE")
+                if (!token.isNullOrBlank()) {
+                    subscribedTokens[token] = "NSE"
+                }
+            }
+        }
+
         if (subscribedTokens.isEmpty()) return
         val grouped = subscribedTokens.entries.groupBy({ it.value }, { it.key })
         grouped.forEach { (exchange, tokens) ->
