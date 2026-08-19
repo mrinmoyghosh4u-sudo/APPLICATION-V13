@@ -41,17 +41,17 @@ fun BrokerConnectDialog(
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "m.Stock" else initialBroker) }
     var localErrorMsg by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("trading_prefs", android.content.Context.MODE_PRIVATE) }
+    val sessionManager = remember { com.example.data.network.SessionManager(context) }
     val coroutineScope = rememberCoroutineScope()
 
-    var angelClientCode by remember { mutableStateOf(prefs.getString("angel_client_id", "") ?: "") }
-    var angelMpin by remember { mutableStateOf(prefs.getString("angel_mpin_enc", "") ?: "") }
+    var angelClientCode by remember { mutableStateOf(sessionManager.angelClientId) }
+    var angelMpin by remember { mutableStateOf(sessionManager.angelMpin) }
     var angelTotp by remember { mutableStateOf("") }
     var isDhanConsentLoading by remember { mutableStateOf(false) }
 
-    var mstockApiKey by remember { mutableStateOf(prefs.getString("mstock_api_key_enc", "") ?: "") }
-    var mstockClientId by remember { mutableStateOf(prefs.getString("mstock_client_id", "") ?: "") }
-    var mstockPasswordPin by remember { mutableStateOf(prefs.getString("mstock_password_pin_enc", "") ?: "") }
+    var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
+    var mstockClientId by remember { mutableStateOf(sessionManager.mstockClientId) }
+    var mstockPasswordPin by remember { mutableStateOf(sessionManager.mstockPasswordPin) }
     var mstockTotp by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
