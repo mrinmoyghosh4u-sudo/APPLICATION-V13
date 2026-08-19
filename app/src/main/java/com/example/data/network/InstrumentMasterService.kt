@@ -196,8 +196,14 @@ class InstrumentMasterService(
         val uppercaseName = name.uppercase()
         val nfoName = if (uppercaseName == "NIFTY 50") "NIFTY" else uppercaseName
         
+        val exchSeg = when (uppercaseName) {
+            "SENSEX", "BANKEX" -> "BFO"
+            "CRUDEOIL", "CRUDEOIL M" -> "MCX"
+            else -> "NFO"
+        }
+        
         return instrumentMap.values.filter {
-            it.exch_seg == "NFO" && it.name == nfoName && it.expiry == expiry
+            it.exch_seg == exchSeg && it.name == nfoName && it.expiry == expiry
         }
     }
     
@@ -205,8 +211,14 @@ class InstrumentMasterService(
         val uppercaseName = name.uppercase()
         val nfoName = if (uppercaseName == "NIFTY 50") "NIFTY" else uppercaseName
         
+        val exchSeg = when (uppercaseName) {
+            "SENSEX", "BANKEX" -> "BFO"
+            "CRUDEOIL", "CRUDEOIL M" -> "MCX"
+            else -> "NFO"
+        }
+        
         val expiries = instrumentMap.values.filter {
-            it.exch_seg == "NFO" && it.name == nfoName
+            it.exch_seg == exchSeg && it.name == nfoName
         }.map { it.expiry }.distinct().sortedBy {
             // Need a quick way to sort date strings if possible, or just string sort which might be flawed
             // Let's rely on standard format or return them to be sorted outside

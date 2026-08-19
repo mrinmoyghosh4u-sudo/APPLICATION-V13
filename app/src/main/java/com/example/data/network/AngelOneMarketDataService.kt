@@ -114,14 +114,14 @@ class AngelOneMarketDataService(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                _connectionState.value = "DISCONNECTED"
+                _connectionState.value = "CLOSED: $code $reason"
                 isSubscribed = false
                 Log.d("AngelOneMarketDataService", "WebSocket Closed: $reason")
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                _connectionState.value = "ERROR"
+                _connectionState.value = "ERROR: ${t.message ?: "Unknown"} / ${response?.code}"
                 isSubscribed = false
                 Log.e("AngelOneMarketDataService", "WebSocket Failure", t)
                 scheduleReconnect()

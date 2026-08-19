@@ -59,6 +59,8 @@ fun DiagnosticsScreen(
 
         DiagnosticItem("Angel Authentication", authStatus)
         DiagnosticItem("Feed Token", feedTokenStatus)
+        DiagnosticItem("Client Code", if (viewModel.sessionManager.angelClientId.isNullOrBlank()) "FAIL" else "PASS")
+        DiagnosticItem("API Key", if (viewModel.sessionManager.angelApiKey.isNullOrBlank()) "FAIL" else "PASS")
         DiagnosticItem("Instrument Master", if (isMasterLoaded) "PASS" else "FAIL")
         DiagnosticItem("NIFTY Token", if (niftyToken != null) "RESOLVED (${niftyToken.token})" else "FAILED")
         DiagnosticItem("BANKNIFTY Token", if (bankNiftyToken != null) "RESOLVED (${bankNiftyToken.token})" else "FAILED")

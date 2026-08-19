@@ -292,8 +292,14 @@ class AngelOneBrokerService(
             val instrument = instrumentMaster.resolveIndexToken(symbol)
             if (instrument == null) throw Exception("Option Chain unavailable for this instrument.")
             
+            val exchangeForOptions = when (instrument.exch_seg) {
+                "MCX" -> "MCX"
+                "BSE" -> "BFO"
+                else -> "NFO"
+            }
+            
             val request = AngelOptionChainRequest(
-                exchange = if (instrument.exch_seg == "MCX") "MCX" else "NFO", // typical for derivatives
+                exchange = exchangeForOptions,
                 symboltoken = instrument.token,
                 expirydate = expiry
             )

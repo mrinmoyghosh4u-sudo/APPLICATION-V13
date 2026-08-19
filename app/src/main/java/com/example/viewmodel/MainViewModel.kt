@@ -271,9 +271,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
                 dbList.map { item ->
-                    // For index we use the name to map
-                    val symbolToMatch = item.symbol.replace(" 50", "") // "NIFTY 50" -> "NIFTY"
-                    val live = liveData[symbolToMatch]
+                    val dbSymbol = item.symbol.uppercase()
+                    val live = liveData.values.find { liveItem ->
+                        val liveSymbol = liveItem.symbol.uppercase()
+                        when (dbSymbol) {
+                            "NIFTY 50" -> liveSymbol == "NIFTY 50" || liveSymbol == "NIFTY"
+                            "BANKNIFTY" -> liveSymbol == "NIFTY BANK" || liveSymbol == "BANKNIFTY"
+                            "FINNIFTY" -> liveSymbol == "NIFTY FIN SERVICE" || liveSymbol == "FINNIFTY"
+                            "MIDCPNIFTY" -> liveSymbol.contains("MID SELECT") || liveSymbol == "MIDCPNIFTY"
+                            "SENSEX" -> liveSymbol == "SENSEX"
+                            "BANKEX" -> liveSymbol == "BANKEX"
+                            "CRUDEOIL" -> liveSymbol.startsWith("CRUDEOIL") && !liveSymbol.startsWith("CRUDEOILM")
+                            "CRUDEOIL M" -> liveSymbol.startsWith("CRUDEOILM")
+                            else -> liveSymbol == dbSymbol
+                        }
+                    }
                     if (live != null && live.ltp > 0) {
                         item.copy(
                             ltp = live.ltp,
