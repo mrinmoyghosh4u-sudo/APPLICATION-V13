@@ -56,7 +56,7 @@ class MStockMarketDataService(
     private var staleCheckJob: Job? = null
     private var lastTickReceivedTime: Long = 0L
 
-    private val _connectionState = MutableStateFlow("OFFLINE") // OFFLINE, CONNECTING, LIVE, STALE
+    private val _connectionState = MutableStateFlow("OFFLINE") // OFFLINE, CONNECTING, CONNECTED, SUBSCRIBING, LIVE, STALE
     val connectionState: StateFlow<String> = _connectionState.asStateFlow()
 
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -66,10 +66,22 @@ class MStockMarketDataService(
         .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
+    private var hasFirstTick = false
+    private var hasSubscription = false
+
     fun isConfigured(): Boolean {
         val apiKey = sessionManager.mstockApiKey
         val accessToken = sessionManager.mstockAccessToken
         return apiKey.isNotBlank() && !accessToken.isNullOrBlank()
+    }
+
+    fun hasFirstTickReceived(): Boolean = hasFirstTick
+
+    fun hasActiveSubscription(): Boolean = hasSubscription
+
+    fun getTickAgeMs(): Long {
+        if (lastTickReceivedTime <= 0L) return -1L
+        return (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     }
 
     fun getLastUpdatedTime(): String {
@@ -191,6 +203,10 @@ class MStockMarketDataService(
                     val symbol = resolveSymbol(exch, token)
 
                     if (ltp > 0.0) {
+                        hasFirstTick = true
+                        _connectionState.value = "LIVE"
+                        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+
                         MarketDataStore.updateTick(
                             source = MarketDataSourceNames.MSTOCK,
                             symbol = symbol,
@@ -276,6 +292,10 @@ class MStockMarketDataService(
                 val symbol = resolveSymbol(exchange, token)
 
                 if (ltp > 0.0) {
+                    hasFirstTick = true
+                    _connectionState.value = "LIVE"
+                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+
                     MarketDataStore.updateTick(
                         source = MarketDataSourceNames.MSTOCK,
                         symbol = symbol,
@@ -344,6 +364,7 @@ class MStockMarketDataService(
     private fun handleDisconnect() {
         isConnected.set(false)
         isConnecting.set(false)
+        hasSubscription = false
         heartbeatJob?.cancel()
         staleCheckJob?.cancel()
         _connectionState.value = "OFFLINE"
@@ -380,6 +401,7 @@ class MStockMarketDataService(
                 put("tokens", JSONArray(tokens))
             }
             webSocket?.send(subMsg.toString())
+            hasSubscription = true
             Log.d(TAG, "[MSTOCK_SUBSCRIBED] tokens=$tokens exch=$exchange mode=$mode")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send m.Stock subscribe frame", e)

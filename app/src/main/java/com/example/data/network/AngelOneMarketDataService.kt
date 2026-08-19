@@ -478,6 +478,15 @@ class AngelOneMarketDataService(
         return _connectionState.value == "LIVE"
     }
 
+    fun hasFirstTickReceived(): Boolean = hasFirstTick
+
+    fun hasActiveSubscription(): Boolean = isSubscribed
+
+    fun getTickAgeMs(): Long {
+        if (lastTickTimestamp <= 0L) return -1L
+        return (System.currentTimeMillis() - lastTickTimestamp).coerceAtLeast(0L)
+    }
+
     fun getLastUpdatedTime(): String {
         return if (lastTickTimestamp > 0) {
             java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(lastTickTimestamp))

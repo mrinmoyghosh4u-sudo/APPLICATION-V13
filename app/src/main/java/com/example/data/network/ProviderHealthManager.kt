@@ -44,6 +44,7 @@ class ProviderHealthManager {
         const val PROVIDER_NSE = "NSE"
         const val PROVIDER_YAHOO = "Yahoo"
         const val PROVIDER_TRADESMART = "TradeSmart"
+        const val PROVIDER_NONE = "NONE"
     }
 
     private val healthMap = ConcurrentHashMap<String, ProviderHealthState>()

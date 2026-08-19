@@ -71,8 +71,100 @@ class SessionManager(context: Context) {
     }
 
     private fun safeSetToken(key: String, value: String?) {
-        if (!value.isNullOrBlank()) {
+        if (value.isNullOrBlank()) {
+            prefs.edit().remove(key).commit()
+        } else {
             prefs.edit().putString(key, value.trim()).commit()
+        }
+    }
+
+    // ==========================================
+    // EXPLICIT BROKER CREDENTIAL STORE API
+    // ==========================================
+
+    fun saveAngelOneCredentials(
+        clientCode: String,
+        mpin: String = "",
+        apiKey: String = "",
+        totpSecret: String = ""
+    ) {
+        if (clientCode.isNotBlank()) angelClientId = clientCode.trim()
+        if (mpin.isNotBlank()) angelMpin = mpin.trim()
+        if (apiKey.isNotBlank()) angelApiKey = apiKey.trim()
+        if (totpSecret.isNotBlank()) angelTotpSecret = totpSecret.trim()
+    }
+
+    fun clearAngelOneCredentials() {
+        prefs.edit()
+            .remove(KEY_ANGEL_CLIENT_ID)
+            .remove(KEY_ANGEL_API_KEY)
+            .remove("angel_mpin_enc")
+            .remove(KEY_ANGEL_TOTP_SECRET)
+            .remove(KEY_ANGEL_JWT)
+            .remove(KEY_ANGEL_REFRESH)
+            .remove(KEY_ANGEL_FEED)
+            .remove(KEY_ANGEL_TOKEN_TIME)
+            .putBoolean("is_angel_connected", false)
+            .commit()
+        if (activeBroker == "Angel One") {
+            activeBroker = ""
+        }
+    }
+
+    fun clearAngelSessionTokens() {
+        prefs.edit()
+            .remove(KEY_ANGEL_JWT)
+            .remove(KEY_ANGEL_REFRESH)
+            .remove(KEY_ANGEL_FEED)
+            .remove(KEY_ANGEL_TOKEN_TIME)
+            .putBoolean("is_angel_connected", false)
+            .commit()
+    }
+
+    fun saveMStockCredentials(
+        clientCode: String,
+        apiKey: String = "",
+        totpSecret: String = ""
+    ) {
+        if (clientCode.isNotBlank()) mstockClientId = clientCode.trim()
+        if (apiKey.isNotBlank()) mstockApiKey = apiKey.trim()
+        if (totpSecret.isNotBlank()) mstockTotpSecret = totpSecret.trim()
+    }
+
+    fun clearMStockCredentials() {
+        prefs.edit()
+            .remove("mstock_client_id")
+            .remove("mstock_api_key_enc")
+            .remove("mstock_totp_secret_enc")
+            .remove("mstock_password_pin_enc")
+            .remove("mstock_access_token_enc")
+            .remove("mstock_refresh_token_enc")
+            .remove("mstock_feed_token_enc")
+            .remove("mstock_token_time")
+            .commit()
+        if (activeBroker == "m.Stock") {
+            activeBroker = ""
+        }
+    }
+
+    fun clearMStockSessionTokens() {
+        prefs.edit()
+            .remove("mstock_access_token_enc")
+            .remove("mstock_refresh_token_enc")
+            .remove("mstock_feed_token_enc")
+            .remove("mstock_token_time")
+            .commit()
+    }
+
+    fun clearDhanCredentials() {
+        prefs.edit()
+            .remove(KEY_DHAN_TOKEN)
+            .remove(KEY_DHAN_CLIENT_ID)
+            .remove(KEY_DHAN_TOKEN_TIME)
+            .putBoolean("is_dhan_connected", false)
+            .commit()
+        if (activeBroker == "Dhan") {
+            activeBroker = ""
         }
     }
 
@@ -259,17 +351,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearAngelSession() {
-        prefs.edit()
-            .remove(KEY_ANGEL_JWT)
-            .remove(KEY_ANGEL_REFRESH)
-            .remove(KEY_ANGEL_FEED)
-            .remove(KEY_ANGEL_CLIENT_ID)
-            .remove(KEY_ANGEL_TOKEN_TIME)
-            .putBoolean("is_angel_connected", false)
-            .commit()
-        if (activeBroker == "Angel One") {
-            activeBroker = ""
-        }
+        clearAngelOneCredentials()
     }
 
     fun clearActiveBrokerSession() {
@@ -334,19 +416,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearMStockSession() {
-        prefs.edit()
-            .remove("mstock_api_key_enc")
-            .remove("mstock_client_id")
-            .remove("mstock_totp_secret_enc")
-            .remove("mstock_password_pin_enc")
-            .remove("mstock_access_token_enc")
-            .remove("mstock_refresh_token_enc")
-            .remove("mstock_feed_token_enc")
-            .remove("mstock_token_time")
-            .commit()
-        if (activeBroker == "m.Stock") {
-            activeBroker = ""
-        }
+        clearMStockCredentials()
     }
 
     var tradesmartApiKey: String

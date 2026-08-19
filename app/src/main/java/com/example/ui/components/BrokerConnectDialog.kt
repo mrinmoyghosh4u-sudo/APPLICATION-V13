@@ -65,6 +65,23 @@ fun BrokerConnectDialog(
         }
     }
 
+    LaunchedEffect(selectedBroker) {
+        if (selectedBroker == "Angel One") {
+            if (angelClientCode.isBlank()) angelClientCode = sessionManager.angelClientId
+            if (angelMpin.isBlank()) angelMpin = sessionManager.angelMpin
+            if (angelApiKey.isBlank()) angelApiKey = sessionManager.angelApiKey
+            if (angelTotpSecret.isBlank()) angelTotpSecret = sessionManager.angelTotpSecret
+        } else if (selectedBroker == "m.Stock") {
+            if (mstockClientId.isBlank()) mstockClientId = sessionManager.mstockClientId
+            if (mstockApiKey.isBlank()) mstockApiKey = sessionManager.mstockApiKey
+            if (mstockTotpSecret.isBlank()) mstockTotpSecret = sessionManager.mstockTotpSecret
+        } else if (selectedBroker == "TradeSmart") {
+            if (tradeSmartApiKey.isBlank()) tradeSmartApiKey = sessionManager.tradesmartApiKey
+            if (tradeSmartClientId.isBlank()) tradeSmartClientId = sessionManager.tradesmartClientId
+            if (tradeSmartToken.isBlank()) tradeSmartToken = sessionManager.tradesmartAccessToken ?: ""
+        }
+    }
+
     Dialog(
         onDismissRequest = { if (!isAuthInProgress) onDismiss() },
         properties = DialogProperties(
@@ -221,6 +238,11 @@ fun BrokerConnectDialog(
                                     localErrorMsg = "Please enter Client Code, API Key, and TOTP Secret."
                                 } else {
                                     localErrorMsg = null
+                                    sessionManager.saveMStockCredentials(
+                                        clientCode = mstockClientId,
+                                        apiKey = mstockApiKey,
+                                        totpSecret = mstockTotpSecret
+                                    )
                                     onMStockLogin?.invoke(mstockClientId, mstockApiKey, mstockTotpSecret)
                                 }
                             },
@@ -451,6 +473,12 @@ fun BrokerConnectDialog(
                                     localErrorMsg = "Please enter your Angel One TOTP Secret for automated TOTP generation."
                                 } else {
                                     localErrorMsg = null
+                                    sessionManager.saveAngelOneCredentials(
+                                        clientCode = angelClientCode,
+                                        mpin = angelMpin,
+                                        apiKey = angelApiKey,
+                                        totpSecret = angelTotpSecret
+                                    )
                                     onAngelLogin?.invoke(angelClientCode, angelMpin, angelApiKey, angelTotpSecret)
                                 }
                             },

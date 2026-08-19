@@ -63,7 +63,8 @@ fun DiagnosticsScreen(
     val crudeMToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL M")
 
     val hasAngelLiveTick = viewModel.brokerManager.angelMarketDataService.isConnectionLive()
-    val hasLiveStream = hasAngelLiveTick || mStockHealth == "LIVE"
+    val hasMStockLiveTick = viewModel.brokerManager.mStockMarketDataService.isConnectionLive()
+    val hasLiveStream = hasAngelLiveTick || hasMStockLiveTick
 
     val marketData = MarketDataStore.marketData.collectAsStateWithLifecycle().value
 
@@ -150,14 +151,18 @@ fun DiagnosticsScreen(
 
         // Section: Live Feed Providers
         SectionHeader("PRIMARY FEED: ANGEL ONE (SmartAPI)")
-        DiagnosticItem("Authentication Status", angelAuthStatus)
-        DiagnosticItem("Feed Token", angelFeedTokenStatus)
-        DiagnosticItem("Client Code", angelClientIdStatus)
-        DiagnosticItem("API Key", angelApiKeyStatus)
+        DiagnosticItem("Client ID Saved", if (viewModel.sessionManager.angelClientId.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.angelApiKey.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Session Token Saved", if (!viewModel.sessionManager.angelJwtToken.isNullOrBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Feed Token Saved", if (!viewModel.sessionManager.angelFeedToken.isNullOrBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Authentication", if (!viewModel.sessionManager.angelJwtToken.isNullOrBlank()) "PASS" else "FAIL")
         DiagnosticItem("WebSocket State", angelConnectionState)
+        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.angelMarketDataService.hasActiveSubscription()) "PASS" else "NO")
+        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.angelMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
+        DiagnosticItem("Last Tick Time", viewModel.brokerManager.angelMarketDataService.getLastUpdatedTime().ifBlank { "No ticks received yet" })
+        DiagnosticItem("Tick Age", if (viewModel.brokerManager.angelMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.angelMarketDataService.getTickAgeMs()} ms" else "N/A")
         DiagnosticItem("Feed Health Status", angelHealth)
-        DiagnosticItem("First Real Tick Received", if (hasAngelLiveTick) "YES (Verified)" else "NO")
-        DiagnosticItem("Last Tick Time", viewModel.brokerManager.angelMarketDataService.getLastUpdatedTime().ifBlank { "None" })
+        DiagnosticItem("Status Reason", if (!hasAngelLiveTick) "No real tick received yet" else "Operational")
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -166,18 +171,24 @@ fun DiagnosticsScreen(
         val mStockHttpStatus by com.example.util.MStockAuthHelper.lastHttpStatus.collectAsStateWithLifecycle()
         val mStockAuthStage by com.example.util.MStockAuthHelper.authStage.collectAsStateWithLifecycle()
         val mStockAuthMsg by com.example.util.MStockAuthHelper.lastAuthMessage.collectAsStateWithLifecycle()
-        val mStockTokenStatus = if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "VALID (Tokens Stored)" else "NOT CONFIGURED / PENDING"
         val mStockLastTickTime = viewModel.brokerManager.mStockMarketDataService.getLastUpdatedTime()
 
-        DiagnosticItem("Credentials Configured", if (mstockConfigured) "PASS" else "NOT CONFIGURED")
+        DiagnosticItem("Client Code Saved", if (viewModel.sessionManager.mstockClientId.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.mstockApiKey.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("TOTP Secret Saved", if (viewModel.sessionManager.mstockTotpSecret.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Session Token Saved", if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Authentication", if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "PASS" else "FAIL")
         DiagnosticItem("m.Stock API Endpoint", mStockEndpoint)
         DiagnosticItem("HTTP Status", mStockHttpStatus)
         DiagnosticItem("Authentication Stage", mStockAuthStage)
         DiagnosticItem("Auth Diagnostic Message", mStockAuthMsg)
-        DiagnosticItem("Token Status", mStockTokenStatus)
         DiagnosticItem("WebSocket State", mStockConnectionState)
-        DiagnosticItem("Feed Health Status", mStockHealth)
+        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.mStockMarketDataService.hasActiveSubscription()) "PASS" else "NO")
+        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.mStockMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
         DiagnosticItem("Last Tick Time", mStockLastTickTime)
+        DiagnosticItem("Tick Age", if (viewModel.brokerManager.mStockMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.mStockMarketDataService.getTickAgeMs()} ms" else "N/A")
+        DiagnosticItem("Feed Health Status", mStockHealth)
+        DiagnosticItem("Status Reason", if (!hasMStockLiveTick) "No real tick received yet" else "Operational")
 
         Spacer(modifier = Modifier.height(16.dp))
 

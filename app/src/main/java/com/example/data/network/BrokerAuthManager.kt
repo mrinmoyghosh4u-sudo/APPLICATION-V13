@@ -245,6 +245,14 @@ class BrokerAuthManager(
                 throw Exception("Client ID and MPIN are required for Angel One login.")
             }
 
+            // Always save credentials to SessionManager BEFORE network call so they persist even if auth fails
+            sessionManager.saveAngelOneCredentials(
+                clientCode = code,
+                mpin = pass,
+                apiKey = key,
+                totpSecret = secret
+            )
+
             // Determine effective TOTP: Use explicit TOTP if supplied, otherwise generate from TOTP Secret
             val effectiveTotpInput = if (explicitTotp.isNotBlank()) {
                 explicitTotp
@@ -372,6 +380,13 @@ class BrokerAuthManager(
 
             if (code.isBlank()) throw Exception("m.Stock Client Code is required.")
             if (key.isBlank()) throw Exception("m.Stock API Key is required.")
+
+            // Always save credentials to SessionManager BEFORE network call so they persist even if auth fails
+            sessionManager.saveMStockCredentials(
+                clientCode = code,
+                apiKey = key,
+                totpSecret = secret
+            )
 
             val effectiveTotpInput = when {
                 !direct.isNullOrBlank() -> direct

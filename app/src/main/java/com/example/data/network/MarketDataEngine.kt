@@ -5,6 +5,7 @@ import com.example.data.model.HistoricalCandle
 import com.example.data.model.IndexQuote
 import com.example.data.model.MarketBreadth
 import com.example.data.model.MarketDataState
+import com.example.data.model.MarketDataSourceNames
 import com.example.data.model.MarketDataStore
 import com.example.data.model.MarketTick
 import com.example.data.model.OptionChain
@@ -60,7 +61,7 @@ class MarketDataEngine(
     val internalActiveProvider: StateFlow<String> = _internalActiveProvider.asStateFlow()
 
     // Unified user-facing status (Provider names are strictly omitted)
-    private val _unifiedFeedStatus = MutableStateFlow("LIVE") // "LIVE", "MARKET CLOSED", "DATA UNAVAILABLE", "CONNECTING"
+    private val _unifiedFeedStatus = MutableStateFlow("DATA UNAVAILABLE") // "LIVE", "REFERENCE DATA", "DATA UNAVAILABLE", "CONNECTING"
     val unifiedFeedStatus: StateFlow<String> = _unifiedFeedStatus.asStateFlow()
 
     private val _lastTickTimeFormatted = MutableStateFlow("Not Updated")
@@ -158,11 +159,20 @@ class MarketDataEngine(
 
     private fun evaluateLiveLtpFailover() {
         val prev = _internalActiveProvider.value
+
+        // Priority 1: Angel One
+        if (angelMarketDataService.isConnectionLive()) {
+            _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
+            _unifiedFeedStatus.value = "LIVE"
+            updateLastTickTime()
+            return
+        }
         
         // Priority 2: m.Stock
         if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
             _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
             _unifiedFeedStatus.value = "LIVE"
+            updateLastTickTime()
             if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
                 healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
             }
@@ -173,6 +183,7 @@ class MarketDataEngine(
         if (nseFeedService.isConfigured() && nseFeedService.isConnected) {
             _internalActiveProvider.value = ProviderHealthManager.PROVIDER_NSE
             _unifiedFeedStatus.value = "LIVE"
+            updateLastTickTime()
             if (prev != ProviderHealthManager.PROVIDER_NSE) {
                 healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_NSE)
             }
@@ -180,11 +191,19 @@ class MarketDataEngine(
         }
 
         // Priority 4: Yahoo Reference
-        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_YAHOO
-        _unifiedFeedStatus.value = "LIVE"
-        if (prev != ProviderHealthManager.PROVIDER_YAHOO) {
-            healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_YAHOO)
+        val lastYahoo = MarketDataStore.getSourceLastUpdate(MarketDataSourceNames.YAHOO)
+        if (lastYahoo > 0 && System.currentTimeMillis() - lastYahoo < 120000) {
+            _internalActiveProvider.value = ProviderHealthManager.PROVIDER_YAHOO
+            _unifiedFeedStatus.value = "REFERENCE DATA"
+            if (prev != ProviderHealthManager.PROVIDER_YAHOO) {
+                healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_YAHOO)
+            }
+            return
         }
+
+        // No live provider available
+        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_NONE
+        _unifiedFeedStatus.value = "DATA UNAVAILABLE"
     }
 
     private fun updateLastTickTime() {
