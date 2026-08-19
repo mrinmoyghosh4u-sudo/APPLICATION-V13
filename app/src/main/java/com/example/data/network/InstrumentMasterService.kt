@@ -1,12 +1,11 @@
 package com.example.data.network
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-
 
 import android.content.Context
 import android.util.JsonReader
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -15,6 +14,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 data class Instrument(
@@ -29,24 +29,37 @@ data class Instrument(
     val tick_size: String
 )
 
-
-    private fun getExchangeType(exchSeg: String): Int {
-        return when (exchSeg.uppercase()) {
-            "NSE" -> 1
-            "NFO" -> 2
-            "BSE" -> 3
-            "BFO" -> 4
-            "MCX" -> 5
-            "NCDEX" -> 7
-            "CDS" -> 9
-            else -> 1
-        }
-    }
-
 class InstrumentMasterService(
     private val client: OkHttpClient = OkHttpClient(),
     private val context: Context? = null
 ) {
+    companion object {
+        fun normalizeExchange(exchSeg: String): String {
+            return when (exchSeg.trim().lowercase()) {
+                "nse", "nse_cm", "nse-cm", "nse_eq" -> "NSE"
+                "nfo", "nse_fo", "nse-fo", "nse_fno" -> "NFO"
+                "bse", "bse_cm", "bse-cm", "bse_eq" -> "BSE"
+                "bfo", "bse_fo", "bse-fo", "bse_fno" -> "BFO"
+                "mcx", "mcx_fo", "mcx-fo", "mcx_cm", "mcx_comm" -> "MCX"
+                "cds", "cde_fo" -> "CDS"
+                "ncdex", "ncx_fo" -> "NCDEX"
+                else -> exchSeg.trim().uppercase()
+            }
+        }
+
+        fun getExchangeType(exchSeg: String): Int {
+            return when (normalizeExchange(exchSeg)) {
+                "NSE" -> 1
+                "NFO" -> 2
+                "BSE" -> 3
+                "BFO" -> 4
+                "MCX" -> 5
+                "NCDEX" -> 7
+                "CDS" -> 13
+                else -> 1
+            }
+        }
+    }
     
     private val masterClient = client.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -55,37 +68,87 @@ class InstrumentMasterService(
         .retryOnConnectionFailure(true)
         .build()
 
-    private val instrumentMap = mutableMapOf<String, Instrument>()
-    private val indexSymbolMap = mutableMapOf<String, Instrument>()
+    // Composite key: "$exchangeType:$token"
+    private val instrumentMap = ConcurrentHashMap<String, Instrument>()
+    private val symbolExchangeMap = ConcurrentHashMap<String, Instrument>()
+    private val indexSymbolMap = ConcurrentHashMap<String, Instrument>()
 
     private val hardcodedIndices = mapOf(
-        "NIFTY" to Instrument("99926000", "NIFTY", "NIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
-        "BANKNIFTY" to Instrument("99926009", "BANKNIFTY", "BANKNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
-        "FINNIFTY" to Instrument("99926037", "FINNIFTY", "FINNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
-        "MIDCPNIFTY" to Instrument("99926074", "MIDCPNIFTY", "MIDCPNIFTY", "", "0", "1", "AMXIDX", "NSE", "0"),
-        "SENSEX" to Instrument("99919000", "SENSEX", "SENSEX", "", "0", "1", "AMXIDX", "BSE", "0"),
-        "BANKEX" to Instrument("99919012", "BANKEX", "BANKEX", "", "0", "1", "AMXIDX", "BSE", "0")
+        "NIFTY" to Instrument("99926000", "NIFTY 50", "NIFTY", "", "0", "50", "AMXIDX", "NSE", "0.05"),
+        "BANKNIFTY" to Instrument("99926009", "NIFTY BANK", "BANKNIFTY", "", "0", "15", "AMXIDX", "NSE", "0.05"),
+        "FINNIFTY" to Instrument("99926037", "NIFTY FIN SERVICE", "FINNIFTY", "", "0", "25", "AMXIDX", "NSE", "0.05"),
+        "MIDCPNIFTY" to Instrument("99926074", "NIFTY MID SELECT", "MIDCPNIFTY", "", "0", "50", "AMXIDX", "NSE", "0.05"),
+        "SENSEX" to Instrument("99919000", "SENSEX", "SENSEX", "", "0", "10", "AMXIDX", "BSE", "0.05"),
+        "BANKEX" to Instrument("99919012", "BANKEX", "BANKEX", "", "0", "15", "AMXIDX", "BSE", "0.05"),
+        "CRUDEOIL" to Instrument("240683", "CRUDEOIL", "CRUDEOIL", "", "0", "100", "FUTCOM", "MCX", "1.0"),
+        "CRUDEOIL M" to Instrument("240684", "CRUDEOILM", "CRUDEOIL M", "", "0", "10", "FUTCOM", "MCX", "1.0")
     )
 
-
-    private val _isLoaded = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val _isLoaded = MutableStateFlow(false)
     val isLoadedFlow = _isLoaded.asStateFlow()
     val isLoaded: Boolean get() = _isLoaded.value
 
     init {
-        // Pre-populate core index instruments so index quotes and tokens work immediately even before or during download
-        val nifty = Instrument("26000", "NIFTY", "NIFTY", "", "", "50", "AMXIDX", "NSE", "0.05")
-        val bankNifty = Instrument("26009", "BANKNIFTY", "BANKNIFTY", "", "", "15", "AMXIDX", "NSE", "0.05")
-        val finNifty = Instrument("26037", "FINNIFTY", "FINNIFTY", "", "", "25", "AMXIDX", "NSE", "0.05")
-        val midcapNifty = Instrument("26074", "MIDCPNIFTY", "MIDCPNIFTY", "", "", "50", "AMXIDX", "NSE", "0.05")
+        // Pre-populate core index & standard instruments so lookups work immediately
+        hardcodedIndices.forEach { (name, inst) ->
+            val exchType = getExchangeType(inst.exch_seg)
+            val compKey = "$exchType:${inst.token}"
+            instrumentMap[compKey] = inst
+            indexSymbolMap[name] = inst
+            indexSymbolMap[inst.symbol.uppercase()] = inst
+            symbolExchangeMap["${inst.exch_seg}:${inst.symbol.uppercase()}"] = inst
+            symbolExchangeMap["${inst.exch_seg}:$name"] = inst
+        }
 
-        indexSymbolMap["NIFTY"] = nifty
-        indexSymbolMap["BANKNIFTY"] = bankNifty
-        indexSymbolMap["FINNIFTY"] = finNifty
-        indexSymbolMap["MIDCPNIFTY"] = midcapNifty
+        // Standard stock tokens (NSE)
+        val defaultStocks = listOf(
+            Instrument("2885", "RELIANCE-EQ", "RELIANCE", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("11536", "TCS-EQ", "TCS", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("1594", "INFY-EQ", "INFY", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("3045", "SBIN-EQ", "SBIN", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("1333", "HDFCBANK-EQ", "HDFCBANK", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("4963", "ICICIBANK-EQ", "ICICIBANK", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("3499", "TATAMOTORS-EQ", "TATAMOTORS", "", "0", "1", "EQ", "NSE", "0.05"),
+            Instrument("3492", "TATASTEEL-EQ", "TATASTEEL", "", "0", "1", "EQ", "NSE", "0.05")
+        )
+        defaultStocks.forEach { inst ->
+            val compKey = "1:${inst.token}"
+            instrumentMap[compKey] = inst
+            symbolExchangeMap["NSE:${inst.name.uppercase()}"] = inst
+            symbolExchangeMap["NSE:${inst.symbol.uppercase()}"] = inst
+        }
+    }
 
-        listOf(nifty, bankNifty, finNifty, midcapNifty).forEach {
-            instrumentMap["${it.token}_${getExchangeType(it.exch_seg)}"] = it
+    private fun registerInstrument(inst: Instrument) {
+        val normExch = normalizeExchange(inst.exch_seg)
+        val exchType = getExchangeType(normExch)
+        val compKey = "$exchType:${inst.token}"
+        instrumentMap[compKey] = inst
+
+        val symUpper = inst.symbol.uppercase().trim()
+        val nameUpper = inst.name.uppercase().trim()
+
+        if (symUpper.isNotBlank()) {
+            symbolExchangeMap["$normExch:$symUpper"] = inst
+        }
+        if (nameUpper.isNotBlank()) {
+            symbolExchangeMap["$normExch:$nameUpper"] = inst
+        }
+
+        // Index mapping
+        if ((normExch == "NSE" || normExch == "BSE" || normExch == "MCX") &&
+            (inst.instrumenttype == "AMXIDX" || inst.instrumenttype == "" || inst.instrumenttype.contains("IDX") || inst.instrumenttype.contains("FUT"))
+        ) {
+            when {
+                nameUpper == "NIFTY" || symUpper == "NIFTY 50" || symUpper == "NIFTY" -> indexSymbolMap["NIFTY"] = inst
+                nameUpper == "BANKNIFTY" || symUpper == "NIFTY BANK" || symUpper == "BANKNIFTY" -> indexSymbolMap["BANKNIFTY"] = inst
+                nameUpper == "FINNIFTY" || symUpper == "NIFTY FIN SERVICE" || symUpper == "FINNIFTY" -> indexSymbolMap["FINNIFTY"] = inst
+                nameUpper == "MIDCPNIFTY" || symUpper.contains("MID SELECT") || symUpper == "MIDCPNIFTY" -> indexSymbolMap["MIDCPNIFTY"] = inst
+                nameUpper == "SENSEX" || symUpper == "SENSEX" -> indexSymbolMap["SENSEX"] = inst
+                nameUpper == "BANKEX" || symUpper == "BANKEX" -> indexSymbolMap["BANKEX"] = inst
+                symUpper.startsWith("CRUDEOILM") -> indexSymbolMap["CRUDEOIL M"] = inst
+                symUpper.startsWith("CRUDEOIL") -> indexSymbolMap["CRUDEOIL"] = inst
+            }
         }
     }
 
@@ -122,24 +185,7 @@ class InstrumentMasterService(
             
             if (token.isNotBlank()) {
                 val inst = Instrument(token, symbol, name, expiry, strike, lotsize, instType, exch, tickSize)
-                instrumentMap["${token}_${getExchangeType(exch)}"] = inst
-                if ((exch == "NSE" || exch == "BSE" || exch == "MCX") && (instType == "" || instType == "AMXIDX" || instType.contains("FUT") || instType.contains("IDX")) && (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY" || name == "SENSEX" || name == "BANKEX" || symbol.startsWith("CRUDEOIL"))) {
-                    // Prefer AMXIDX for NSE/BSE indices
-                    val isIndex = instType == "AMXIDX" || (exch == "BSE" && instType == "") || (exch == "MCX" && instType.contains("FUT"))
-                    
-                    if (isIndex || indexSymbolMap[name] == null) {
-                        if (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY" || name == "SENSEX" || name == "BANKEX") {
-                           indexSymbolMap[name] = inst
-                        }
-                    }
-                    if (symbol.startsWith("CRUDEOIL")) {
-                        if (symbol.contains("CRUDEOILM")) {
-                            if (indexSymbolMap["CRUDEOIL M"] == null) indexSymbolMap["CRUDEOIL M"] = inst
-                        } else if (symbol.startsWith("CRUDEOIL") && !symbol.contains("M")) {
-                            if (indexSymbolMap["CRUDEOIL"] == null) indexSymbolMap["CRUDEOIL"] = inst
-                        }
-                    }
-                }
+                registerInstrument(inst)
             }
         }
         reader.endArray()
@@ -237,11 +283,25 @@ class InstrumentMasterService(
         }
     }
 
-    fun getInstrumentByToken(token: String, exchangeType: Int): Instrument? = instrumentMap["${token}_${exchangeType}"]
-    
-        fun getOptionInstruments(name: String, expiry: String): List<Instrument> {
-        val uppercaseName = name.uppercase()
-        val nfoName = if (uppercaseName == "NIFTY 50") "NIFTY" else uppercaseName
+    fun getInstrumentByToken(token: String, exchangeType: Int): Instrument? {
+        val compKey = "$exchangeType:${token.trim()}"
+        return instrumentMap[compKey]
+    }
+
+    fun getInstrument(exchange: String, token: String): Instrument? {
+        val exchType = getExchangeType(exchange)
+        return getInstrumentByToken(token, exchType)
+    }
+
+    fun getOptionInstruments(name: String, expiry: String): List<Instrument> {
+        val uppercaseName = name.uppercase().trim()
+        val nfoName = when (uppercaseName) {
+            "NIFTY 50", "NIFTY50" -> "NIFTY"
+            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
+            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
+            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
+            else -> uppercaseName
+        }
         
         val exchSeg = when (uppercaseName) {
             "SENSEX", "BANKEX" -> "BFO"
@@ -250,13 +310,62 @@ class InstrumentMasterService(
         }
         
         return instrumentMap.values.filter {
-            it.exch_seg == exchSeg && it.name == nfoName && it.expiry == expiry
+            normalizeExchange(it.exch_seg) == exchSeg &&
+            (it.name.equals(nfoName, ignoreCase = true) || it.symbol.startsWith(nfoName, ignoreCase = true)) &&
+            (expiry.isBlank() || it.expiry.equals(expiry, ignoreCase = true) || it.expiry.replace("-", "").equals(expiry.replace("-", ""), ignoreCase = true))
         }
     }
-    
+
+    fun resolveOptionInstrument(
+        underlying: String,
+        expiry: String,
+        strike: Double,
+        optionType: String
+    ): Instrument? {
+        val cleanUnderlying = when (underlying.uppercase().trim()) {
+            "NIFTY 50", "NIFTY50" -> "NIFTY"
+            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
+            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
+            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
+            else -> underlying.uppercase().trim()
+        }
+        val cleanType = optionType.uppercase().trim() // CE or PE
+        val exchSeg = when (cleanUnderlying) {
+            "SENSEX", "BANKEX" -> "BFO"
+            "CRUDEOIL", "CRUDEOIL M" -> "MCX"
+            else -> "NFO"
+        }
+
+        val matchingOptions = instrumentMap.values.filter { inst ->
+            normalizeExchange(inst.exch_seg) == exchSeg &&
+            (inst.name.equals(cleanUnderlying, ignoreCase = true) || inst.symbol.startsWith(cleanUnderlying, ignoreCase = true)) &&
+            (inst.symbol.endsWith(cleanType, ignoreCase = true) || inst.symbol.contains(cleanType, ignoreCase = true))
+        }
+
+        // Match strike & expiry
+        return matchingOptions.find { inst ->
+            val instStrike = inst.strike.toDoubleOrNull() ?: 0.0
+            val strikeMatches = kotlin.math.abs(instStrike - strike) < 1.0 ||
+                                kotlin.math.abs(instStrike - (strike * 100.0)) < 1.0 ||
+                                kotlin.math.abs((instStrike / 100.0) - strike) < 1.0
+
+            val expiryMatches = expiry.isBlank() ||
+                                inst.expiry.equals(expiry, ignoreCase = true) ||
+                                inst.expiry.replace("-", "").equals(expiry.replace("-", ""), ignoreCase = true)
+
+            strikeMatches && expiryMatches
+        }
+    }
+
     fun getOptionExpiries(name: String): List<String> {
-        val uppercaseName = name.uppercase()
-        val nfoName = if (uppercaseName == "NIFTY 50") "NIFTY" else uppercaseName
+        val uppercaseName = name.uppercase().trim()
+        val nfoName = when (uppercaseName) {
+            "NIFTY 50", "NIFTY50" -> "NIFTY"
+            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
+            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
+            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
+            else -> uppercaseName
+        }
         
         val exchSeg = when (uppercaseName) {
             "SENSEX", "BANKEX" -> "BFO"
@@ -264,50 +373,59 @@ class InstrumentMasterService(
             else -> "NFO"
         }
         
-        val expiries = instrumentMap.values.filter {
-            it.exch_seg == exchSeg && it.name == nfoName
-        }.map { it.expiry }.distinct().sortedBy {
-            // Need a quick way to sort date strings if possible, or just string sort which might be flawed
-            // Let's rely on standard format or return them to be sorted outside
-            it
-        }
-        return expiries
+        return instrumentMap.values.filter {
+            normalizeExchange(it.exch_seg) == exchSeg &&
+            (it.name.equals(nfoName, ignoreCase = true) || it.symbol.startsWith(nfoName, ignoreCase = true)) &&
+            it.expiry.isNotBlank()
+        }.map { it.expiry }.distinct().sorted()
     }
 
     fun resolveIndexToken(indexName: String): Instrument? {
-        val nameToSymbol = mapOf(
-            "NIFTY 50" to "NIFTY",
-            "BANKNIFTY" to "BANKNIFTY",
-            "FINNIFTY" to "FINNIFTY",
-            "MIDCPNIFTY" to "MIDCPNIFTY",
-            "SENSEX" to "SENSEX",
-            "BANKEX" to "BANKEX",
-            "CRUDEOIL" to "CRUDEOIL",
-            "CRUDEOIL M" to "CRUDEOIL M"
-        )
-        val symbol = nameToSymbol[indexName] ?: indexName
-        return indexSymbolMap[symbol] ?: hardcodedIndices[symbol]
+        val cleanName = when (indexName.uppercase().trim()) {
+            "NIFTY 50", "NIFTY50" -> "NIFTY"
+            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
+            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
+            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
+            else -> indexName.uppercase().trim()
+        }
+        return indexSymbolMap[cleanName] ?: hardcodedIndices[cleanName]
     }
 
     fun resolveAngelToken(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
-        
-        // Check index symbol map first
-        val mappedName = if (uppercaseSymbol == "NIFTY 50") "NIFTY" else uppercaseSymbol
-        val indexInst = indexSymbolMap[mappedName] ?: hardcodedIndices[mappedName]
-        if (indexInst != null) return indexInst.token
-        
-        // Exact token lookup if symbol is already a numeric token
+        val normExch = normalizeExchange(exchange)
+
+        // 1. Check numeric token passed directly
         if (uppercaseSymbol.all { it.isDigit() }) return uppercaseSymbol
 
-        // Search by symbol or name
-        val match = instrumentMap.values.find {
-            (it.symbol.equals(uppercaseSymbol, ignoreCase = true) || it.name.equals(uppercaseSymbol, ignoreCase = true)) &&
-            (exchange.isBlank() || it.exch_seg.equals(exchange, ignoreCase = true))
+        // 2. Check Index mapping
+        val cleanIndex = when (uppercaseSymbol) {
+            "NIFTY 50", "NIFTY50" -> "NIFTY"
+            "BANK NIFTY", "NIFTY BANK" -> "BANKNIFTY"
+            "FIN NIFTY", "NIFTY FIN SERVICE" -> "FINNIFTY"
+            "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
+            else -> uppercaseSymbol
         }
-        return match?.token
-    }
+        val indexInst = indexSymbolMap[cleanIndex] ?: hardcodedIndices[cleanIndex]
+        if (indexInst != null && (exchange.isBlank() || normalizeExchange(indexInst.exch_seg) == normExch)) {
+            return indexInst.token
+        }
 
+        // 3. Check Symbol + Exchange Map
+        val directMatch = symbolExchangeMap["$normExch:$uppercaseSymbol"]
+            ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-EQ"]
+            ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-FUT"]
+        if (directMatch != null) return directMatch.token
+
+        // 4. Scan instrumentMap values
+        val match = instrumentMap.values.find {
+            (exchange.isBlank() || normalizeExchange(it.exch_seg) == normExch) &&
+            (it.symbol.equals(uppercaseSymbol, ignoreCase = true) ||
+             it.name.equals(uppercaseSymbol, ignoreCase = true) ||
+             it.symbol.equals("${uppercaseSymbol}-EQ", ignoreCase = true))
+        }
+        return match?.token ?: indexInst?.token
+    }
 
     fun resolveDhanSecurityId(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
@@ -320,13 +438,12 @@ class InstrumentMasterService(
             "MIDCPNIFTY", "31" -> return "31"
         }
 
-        // If numeric securityId supplied
         if (uppercaseSymbol.all { it.isDigit() }) return uppercaseSymbol
 
-        // Search in instrument master by symbol
         val match = instrumentMap.values.find {
             it.symbol.equals(uppercaseSymbol, ignoreCase = true) || it.name.equals(uppercaseSymbol, ignoreCase = true)
         }
         return match?.token
     }
 }
+

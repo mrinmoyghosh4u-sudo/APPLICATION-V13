@@ -48,13 +48,21 @@ data class AngelRmsData(
 data class AngelOrderBookItem(
     @Json(name = "orderid") val orderId: Any? = "",
     @Json(name = "tradingsymbol") val tradingSymbol: Any? = "",
+    @Json(name = "symboltoken") val symbolToken: Any? = "",
     @Json(name = "exchange") val exchange: Any? = "",
     @Json(name = "transactiontype") val transactionType: Any? = "",
     @Json(name = "ordertype") val orderType: Any? = "",
-    @Json(name = "quantity") val quantity: Any? = "0",
+    @Json(name = "producttype") val productType: Any? = "INTRADAY",
+    @Json(name = "duration") val duration: Any? = "DAY",
     @Json(name = "price") val price: Any? = "0",
+    @Json(name = "triggerprice") val triggerPrice: Any? = "0",
+    @Json(name = "quantity") val quantity: Any? = "0",
+    @Json(name = "filledshares") val filledShares: Any? = "0",
+    @Json(name = "unfilledshares") val unfilledShares: Any? = "0",
+    @Json(name = "averageprice") val averagePrice: Any? = "0",
     @Json(name = "status") val status: Any? = "",
-    @Json(name = "orderupdatetime") val orderUpdateTime: Any? = ""
+    @Json(name = "orderupdatetime") val orderUpdateTime: Any? = "",
+    @Json(name = "updatetime") val updateTime: Any? = ""
 )
 
 @JsonClass(generateAdapter = true)
@@ -127,11 +135,18 @@ data class AngelQuoteRequest(
 
 @JsonClass(generateAdapter = true)
 data class AngelQuoteItem(
-    @Json(name = "tradingSymbol") val tradingSymbol: Any? = "",
-    @Json(name = "exchange") val exchange: Any? = "",
-    @Json(name = "ltp") val ltp: Any? = 0.0,
-    @Json(name = "netChange") val netChange: Any? = 0.0,
-    @Json(name = "percentChange") val percentChange: Any? = 0.0
+    @Json(name = "exchange") val exchange: String? = null,
+    @Json(name = "tradingSymbol") val tradingSymbol: String? = null,
+    @Json(name = "symbolToken") val symbolToken: String? = null,
+    @Json(name = "ltp") val ltp: Double? = 0.0,
+    @Json(name = "open") val open: Double? = 0.0,
+    @Json(name = "high") val high: Double? = 0.0,
+    @Json(name = "low") val low: Double? = 0.0,
+    @Json(name = "close") val close: Double? = 0.0,
+    @Json(name = "netChange") val netChange: Double? = 0.0,
+    @Json(name = "percentChange") val percentChange: Double? = 0.0,
+    @Json(name = "tradeVolume") val tradeVolume: Long? = 0L,
+    @Json(name = "opnInterest") val opnInterest: Double? = 0.0
 )
 
 
@@ -297,4 +312,13 @@ data class AngelOptionChainItem(
     @Json(name = "pe_netchange") val putNetChg: Double?,
     @Json(name = "ce_volume") val callVolume: Double?,
     @Json(name = "pe_volume") val putVolume: Double?
+)
+
+@JsonClass(generateAdapter = true)
+data class AngelHistoricalRequest(
+    @Json(name = "exchange") val exchange: String,
+    @Json(name = "symboltoken") val symboltoken: String,
+    @Json(name = "interval") val interval: String,
+    @Json(name = "fromdate") val fromdate: String,
+    @Json(name = "todate") val todate: String
 )

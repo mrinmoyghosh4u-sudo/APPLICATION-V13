@@ -22,7 +22,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class AngelOneMarketDataService(
@@ -42,10 +42,25 @@ class AngelOneMarketDataService(
     private var reconnectAttempt = 0
     private var isSubscribed = false
     private var hasFirstTick = false
+    private var lastTickTimestamp: Long = 0L
+    private var lastTickSymbol: String = ""
+    private var lastTickLtp: Double = 0.0
+
+    // Deduplicated token registry per exchange
+    private val activeSubscribedTokens = ConcurrentHashMap<Int, MutableSet<String>>()
 
     init {
         scope.launch {
-            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
+            monitorConnection()
+        }
+        scope.launch {
+            launch {
+                instrumentMaster.isLoadedFlow.collect { loaded ->
+                    if (loaded && webSocket != null && (_connectionState.value == "CONNECTED" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "LIVE")) {
+                        resubscribeAll(webSocket!!)
+                    }
+                }
+            }
             instrumentMaster.loadMaster()
             connectWebSocket()
         }
@@ -68,6 +83,8 @@ class AngelOneMarketDataService(
         }
 
         _connectionState.value = "CONNECTING"
+        hasFirstTick = false
+        isSubscribed = false
         
         val request = Request.Builder()
             .url("wss://smartapisocket.angelone.in/smart-stream")
@@ -84,7 +101,6 @@ class AngelOneMarketDataService(
                 Log.d("AngelOneMarketDataService", "WebSocket Opened")
                 
                 pingJob = scope.launch {
-            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
                     while (true) {
                         delay(30_000)
                         try {
@@ -95,11 +111,10 @@ class AngelOneMarketDataService(
                     }
                 }
                 
-                subscribeToIndices(webSocket)
+                resubscribeAll(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("AngelOneMarketDataService", "Text Message: $text")
                 try {
                     val json = JSONObject(text)
                     if (json.optBoolean("status", false)) {
@@ -116,16 +131,18 @@ class AngelOneMarketDataService(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                _connectionState.value = "CLOSED: $code $reason"
+                _connectionState.value = "DISCONNECTED"
                 isSubscribed = false
+                hasFirstTick = false
                 Log.d("AngelOneMarketDataService", "WebSocket Closed: $reason")
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                _connectionState.value = "ERROR: ${t.message ?: "Unknown"} / ${response?.code}"
+                _connectionState.value = "ERROR"
                 isSubscribed = false
-                Log.e("AngelOneMarketDataService", "WebSocket Failure", t)
+                hasFirstTick = false
+                Log.e("AngelOneMarketDataService", "WebSocket Failure: ${t.message}")
                 scheduleReconnect()
             }
         })
@@ -141,73 +158,70 @@ class AngelOneMarketDataService(
         _connectionState.value = "RECONNECTING"
         
         scope.launch {
-            launch { instrumentMaster.isLoadedFlow.collect { loaded -> if (loaded && _connectionState.value == "CONNECTED") { webSocket?.let { subscribeToIndices(it) } } } }
             delay(delayTime)
             connectWebSocket()
         }
     }
 
-    private fun getExchangeType(exchSeg: String): Int {
-        return when (exchSeg.uppercase()) {
-            "NSE" -> 1
-            "NFO" -> 2
-            "BSE" -> 3
-            "BFO" -> 4
-            "MCX" -> 5
-            "NCDEX" -> 7
-            "CDS" -> 9
-            else -> 1
-        }
-    }
-
-    private fun subscribeToIndices(ws: WebSocket) {
-        // if (!instrumentMaster.isLoaded) return // No need to wait, hardcoded fallback exists
-        
-        val tokensByExchange = mutableMapOf<Int, MutableList<String>>()
+    private fun resubscribeAll(ws: WebSocket) {
+        // Register core indices
         val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
-        
         for (index in indices) {
             val inst = instrumentMaster.resolveIndexToken(index)
             if (inst != null) {
-                val exType = getExchangeType(inst.exch_seg)
-                tokensByExchange.getOrPut(exType) { mutableListOf() }.add(inst.token)
+                val exType = InstrumentMasterService.getExchangeType(inst.exch_seg)
+                activeSubscribedTokens.getOrPut(exType) { ConcurrentHashMap.newKeySet() }.add(inst.token)
             }
         }
-        
-        if (tokensByExchange.isNotEmpty()) {
-            val req = JSONObject().apply {
-                put("correlationID", "initial_sub")
-                put("action", 1)
-                put("params", JSONObject().apply {
-                    put("mode", 1)
-                    put("tokenList", JSONArray().apply {
-                        for ((exType, tokens) in tokensByExchange) {
-                            put(JSONObject().apply {
-                                put("exchangeType", exType)
-                                put("tokens", JSONArray(tokens))
-                            })
-                        }
+
+        // Standard stock tokens
+        val defaultStocks = listOf("2885", "11536", "1594", "3045", "1333", "4963", "3499", "3492")
+        val nseTokens = activeSubscribedTokens.getOrPut(1) { ConcurrentHashMap.newKeySet() }
+        nseTokens.addAll(defaultStocks)
+
+        if (activeSubscribedTokens.isNotEmpty()) {
+            val tokenListJson = JSONArray()
+            for ((exType, tokens) in activeSubscribedTokens) {
+                if (tokens.isNotEmpty()) {
+                    tokenListJson.put(JSONObject().apply {
+                        put("exchangeType", exType)
+                        put("tokens", JSONArray(tokens.toList()))
                     })
-                })
+                }
             }
-            ws.send(req.toString())
-            _connectionState.value = "SUBSCRIBING"
+            if (tokenListJson.length() > 0) {
+                val req = JSONObject().apply {
+                    put("correlationID", "market_sub_${System.currentTimeMillis()}")
+                    put("action", 1)
+                    put("params", JSONObject().apply {
+                        put("mode", 1) // Mode 1: LTP
+                        put("tokenList", tokenListJson)
+                    })
+                }
+                ws.send(req.toString())
+                _connectionState.value = "SUBSCRIBING"
+            }
         }
     }
 
     fun subscribeToTokens(exchangeType: Int, tokens: List<String>) {
-        val ws = webSocket ?: return
         if (tokens.isEmpty()) return
-        
+        val currentSet = activeSubscribedTokens.getOrPut(exchangeType) { ConcurrentHashMap.newKeySet() }
+        val newTokens = tokens.filter { !currentSet.contains(it) }
+        if (newTokens.isEmpty()) return // Deduplicated
+
+        currentSet.addAll(newTokens)
+        val ws = webSocket ?: return
+
         val req = JSONObject().apply {
-            put("correlationID", "dynamic_sub")
+            put("correlationID", "dynamic_sub_${System.currentTimeMillis()}")
             put("action", 1)
             put("params", JSONObject().apply {
                 put("mode", 1)
                 put("tokenList", JSONArray().apply {
                     put(JSONObject().apply {
                         put("exchangeType", exchangeType)
-                        put("tokens", JSONArray(tokens))
+                        put("tokens", JSONArray(newTokens))
                     })
                 })
             })
@@ -217,44 +231,87 @@ class AngelOneMarketDataService(
 
     private fun handleBinaryTick(bytes: ByteArray) {
         try {
-            if (bytes.size < 47) {
-                Log.d("AngelOneMarketDataService", "Ignoring binary tick of size ${bytes.size}")
+            if (bytes.size < 51) {
                 return
             }
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             val subscriptionMode = buffer.get()
-            val exchangeType = buffer.get()
+            val exchangeType = buffer.get().toInt()
             
             val tokenBytes = ByteArray(25)
             buffer.get(tokenBytes)
-            val token = String(tokenBytes, Charsets.US_ASCII).trimEnd('\u0000')
+            val token = String(tokenBytes, Charsets.US_ASCII).trimEnd('\u0000', ' ').trim()
             
             val sequenceNumber = buffer.getLong()
             val exchangeTimestamp = buffer.getLong()
-            val ltpInt = buffer.getInt()
+            val ltpInt = buffer.getLong() // 8-byte integer for LTP
             
             if (ltpInt <= 0) return
             
-            val divisor = if (exchangeType.toInt() == 9) 10000000.0 else 100.0
+            val divisor = if (exchangeType == 9 || exchangeType == 13) 10000000.0 else 100.0
             val ltp = ltpInt / divisor
+
+            var open = 0.0
+            var high = 0.0
+            var low = 0.0
+            var close = 0.0
+            var volume = 0L
+
+            if (bytes.size >= 123) {
+                val lastTradedQty = buffer.getLong()
+                val avgPriceInt = buffer.getLong()
+                volume = buffer.getLong()
+                val totalBuyQty = buffer.getLong()
+                val totalSellQty = buffer.getLong()
+                val openInt = buffer.getLong()
+                val highInt = buffer.getLong()
+                val lowInt = buffer.getLong()
+                val closeInt = buffer.getLong()
+
+                open = openInt / divisor
+                high = highInt / divisor
+                low = lowInt / divisor
+                close = closeInt / divisor
+            }
             
-            val inst = instrumentMaster.getInstrumentByToken(token, exchangeType.toInt()) ?: return
+            // Composite lookup: "$exchangeType:$token"
+            val inst = instrumentMaster.getInstrumentByToken(token, exchangeType)
+            val symbol = inst?.symbol ?: token
+            val exchange = inst?.exch_seg ?: when (exchangeType) {
+                1 -> "NSE"
+                2 -> "NFO"
+                3 -> "BSE"
+                4 -> "BFO"
+                5 -> "MCX"
+                else -> "NSE"
+            }
             
-            if (!hasFirstTick) {
+            if (!hasFirstTick || _connectionState.value != "LIVE") {
                 hasFirstTick = true
                 _connectionState.value = "LIVE"
             }
+            lastTickTimestamp = System.currentTimeMillis()
+            lastTickSymbol = symbol
+            lastTickLtp = ltp
+            
+            // Diagnostic logging of parsed LTP only (no tokens or credentials)
+            Log.d("SmartStreamParser", "LTP TICK: exchangeType=$exchangeType symbol=$symbol ltp=$ltp (raw=$ltpInt)")
             
             MarketDataStore.updateTick(
-                symbol = inst.symbol,
+                symbol = symbol,
                 token = token,
-                exchange = inst.exch_seg,
+                exchange = exchange,
                 ltp = ltp,
-                timestamp = exchangeTimestamp
+                timestamp = if (exchangeTimestamp > 0) exchangeTimestamp else System.currentTimeMillis(),
+                open = open,
+                high = high,
+                low = low,
+                close = close,
+                volume = volume
             )
             
         } catch (e: Exception) {
-            Log.e("AngelOneMarketDataService", "Error parsing binary tick", e)
+            Log.e("SmartStreamParser", "Error parsing binary tick: ${e.message}")
         }
     }
 
@@ -263,7 +320,9 @@ class AngelOneMarketDataService(
     }
 
     fun getLastUpdatedTime(): String {
-        return ""
+        return if (lastTickTimestamp > 0) {
+            java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(lastTickTimestamp))
+        } else ""
     }
 
     fun reconnect() {
@@ -271,8 +330,23 @@ class AngelOneMarketDataService(
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.ui.components.CandleData>> {
-        // Returns real historical candle data or empty if unavailable
-        return Result.success(emptyList())
+        val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val cal = java.util.Calendar.getInstance()
+        val toDate = format.format(cal.time)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -5)
+        val fromDate = format.format(cal.time)
+        
+        val angelInterval = when (interval) {
+            "1m" -> "ONE_MINUTE"
+            "5m" -> "FIVE_MINUTE"
+            "15m" -> "FIFTEEN_MINUTE"
+            "30m" -> "THIRTY_MINUTE"
+            "1h" -> "ONE_HOUR"
+            "1d" -> "ONE_DAY"
+            else -> "FIFTEEN_MINUTE"
+        }
+        
+        return angelOneService.getHistoricalCandles(symbol, angelInterval, fromDate, toDate)
     }
 
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
@@ -311,4 +385,17 @@ class AngelOneMarketDataService(
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
         return angelOneService.getOptionExpiries(symbol)
     }
+
+    private suspend fun monitorConnection() {
+        while (true) {
+            delay(15000)
+            if (_connectionState.value == "LIVE") {
+                if (System.currentTimeMillis() - lastTickTimestamp > 15000) {
+                    _connectionState.value = "STALE"
+                    Log.w("AngelOneMarketData", "No ticks received for 15s. Marking connection STALE.")
+                }
+            }
+        }
+    }
 }
+

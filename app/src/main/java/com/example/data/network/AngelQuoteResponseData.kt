@@ -11,7 +11,9 @@ data class AngelQuoteResponseData(
 
 @JsonClass(generateAdapter = true)
 data class AngelUnfetchedQuote(
-    @Json(name = "exchange") val exchange: Any? = "",
-    @Json(name = "symbolToken") val symbolToken: Any? = "",
-    @Json(name = "message") val message: Any? = ""
+    @Json(name = "exchange") val exchange: String? = null,
+    @Json(name = "symbolToken") val symbolToken: String? = null,
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "errorCode") val errorCode: String? = null
 )
+

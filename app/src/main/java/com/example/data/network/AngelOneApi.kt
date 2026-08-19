@@ -53,4 +53,9 @@ interface AngelOneApi {
     suspend fun getOptionChain(
         @Body request: AngelOptionChainRequest
     ): Response<AngelOptionChainResponse>
+
+    @POST("rest/secure/angelbroking/historical/v1/getCandleData")
+    suspend fun getHistoricalData(
+        @Body request: AngelHistoricalRequest
+    ): Response<AngelOneResponse<List<List<Any>>>>
 }

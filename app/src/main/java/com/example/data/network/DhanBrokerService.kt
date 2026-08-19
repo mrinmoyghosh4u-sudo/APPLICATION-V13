@@ -349,4 +349,8 @@ class DhanBrokerService(
     suspend fun searchInstrument(query: String): Result<List<WatchlistItem>> {
         return Result.success(emptyList())
     }
+
+    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> {
+        return Result.success(emptyList())
+    }
 }

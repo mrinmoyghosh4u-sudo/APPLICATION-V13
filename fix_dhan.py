@@ -1,18 +1,11 @@
 import re
-
-with open('app/src/main/java/com/example/data/network/DhanBrokerService.kt', 'r') as f:
-    content = f.read()
-
-content = re.sub(r'import com\.example\.data\.model\.OptionChainInstrumentMaster\n', '', content)
-content = re.sub(r'override suspend fun getOptionChain.*?\n\s+\}', 
-"""override suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> {
-        return Result.failure(Exception("Dhan Option Chain disabled"))
-    }""", content, flags=re.DOTALL)
-
-content = re.sub(r'override suspend fun getOptionExpiries.*?\n\s+\}', 
-"""override suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return Result.failure(Exception("Dhan Option Chain disabled"))
-    }""", content, flags=re.DOTALL)
-
-with open('app/src/main/java/com/example/data/network/DhanBrokerService.kt', 'w') as f:
-    f.write(content)
+content = open("app/src/main/java/com/example/data/network/DhanBrokerService.kt").read()
+if "override suspend fun getHistoricalCandles" not in content:
+    func = """
+    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> {
+        return Result.success(emptyList())
+    }
+}
+"""
+    content = re.sub(r'\}\s*$', func, content)
+open("app/src/main/java/com/example/data/network/DhanBrokerService.kt", "w").write(content)

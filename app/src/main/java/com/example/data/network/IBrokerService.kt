@@ -20,4 +20,5 @@ interface IBrokerService {
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>>
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>>
     suspend fun getOptionExpiries(symbol: String): Result<List<String>>
+    suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>>
 }

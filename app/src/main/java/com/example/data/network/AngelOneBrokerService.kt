@@ -1,289 +1,306 @@
 package com.example.data.network
 
-import com.example.data.model.OptionStrikeItem
-import com.example.data.model.OrderEntity
-import com.example.data.model.PortfolioHoldingEntity
-import com.example.data.model.UserProfileEntity
-import com.example.data.model.WatchlistItem
+import android.util.Log
+import com.example.data.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class AngelOneBrokerService(
     private val api: AngelOneApi,
     private val sessionManager: SessionManager,
     private val instrumentMaster: InstrumentMasterService
 ) : IBrokerService {
-
     override val brokerName: String = "Angel One"
 
-    override suspend fun getProfile(): Result<UserProfileEntity> {
-        if (sessionManager.angelJwtToken.isNullOrEmpty()) {
-            return Result.failure(Exception("Angel One account is not connected. Please connect your account."))
-        }
-        return runCatching {
-            val response = runCatching { api.getProfile() }.getOrNull()
-            if (response != null && response.isSuccessful && response.body()?.status == true) {
-                val data = response.body()?.data
-                val rms = runCatching { api.getRMS().body()?.data }.getOrNull()
-                val margin = rms?.availableMargin.toDoubleOrDefault(0.0)
-                val balance = rms?.net.toDoubleOrDefault(0.0)
-
-                var totalRealized = 0.0
-                var totalUnrealized = 0.0
-                val posRes = runCatching { api.getPositions() }.getOrNull()
-                if (posRes != null && posRes.isSuccessful && posRes.body()?.status == true) {
-                    posRes.body()?.data?.forEach { item ->
-                        totalRealized += item.realisedPnL.toDoubleOrDefault(0.0)
-                        totalUnrealized += item.unrealisedPnL.toDoubleOrDefault(0.0)
-                    }
-                }
-
+    override suspend fun getProfile(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val res = api.getProfile()
+            if (res.isSuccessful && res.body()?.status == true) {
+                val data = res.body()?.data ?: throw Exception("Empty profile data from Angel One")
                 UserProfileEntity(
-                    name = data?.name.toStringOrDefault(""),
-                    email = data?.email.toStringOrDefault(""),
-                    phone = data?.mobileNo.toStringOrDefault(""),
+                    id = 1,
+                    name = data.name?.toString() ?: "",
+                    email = data.email?.toString() ?: "",
+                    phone = data.mobileNo?.toString() ?: "",
                     connectedBroker = "Angel One",
                     isAngelConnected = true,
-                    angelClientId = data?.clientCode.toStringOrDefault(sessionManager.angelClientId),
-                    availableMargin = margin,
-                    accountBalance = balance,
-                    realizedPnl = totalRealized,
-                    unrealizedPnl = totalUnrealized
+                    angelClientId = data.clientCode?.toString() ?: sessionManager.angelClientId ?: ""
                 )
             } else {
-                val code = response?.code() ?: 0
-                val msg = response?.body()?.message ?: ""
-                if (code == 401 || code == 403 || response?.body()?.status == false || msg.contains("invalid", ignoreCase = true) || msg.contains("token", ignoreCase = true) || msg.contains("expired", ignoreCase = true)) {
-                    throw Exception("Angel One session expired: $msg (Code: $code)")
-                }
-                throw Exception("Angel One profile request failed with code $code: $msg")
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Failed to get Angel One profile"
+                Log.e("AngelOneBrokerService", "Profile API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun getFunds(): Result<Double> {
-        if (sessionManager.angelJwtToken.isNullOrEmpty()) return Result.success(0.0)
-        return runCatching {
-            val response = runCatching { api.getRMS() }.getOrNull()
-            if (response != null && response.isSuccessful && response.body()?.status == true) {
-                response.body()?.data?.availableMargin.toDoubleOrDefault(0.0)
+    override suspend fun getFunds(): Result<Double> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val res = api.getRMS()
+            if (res.isSuccessful && res.body()?.status == true) {
+                res.body()?.data?.net?.toString()?.toDoubleOrNull() ?: 0.0
             } else {
-                0.0
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Failed to get RMS funds"
+                Log.e("AngelOneBrokerService", "RMS API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun getOrders(): Result<List<OrderEntity>> {
-        if (sessionManager.angelJwtToken.isNullOrEmpty()) return Result.success(emptyList())
-        return runCatching {
-            val response = runCatching { api.getOrderBook() }.getOrNull()
-            if (response != null && response.isSuccessful && response.body()?.status == true) {
-                val items = response.body()?.data ?: emptyList()
-                items.map { item ->
-                    val qty = item.quantity.toIntOrDefault(0)
-                    val price = item.price.toDoubleOrDefault(0.0)
-                    val sym = item.tradingSymbol.toStringOrDefault("")
-                    val ex = item.exchange.toStringOrDefault("NSE")
-                    val lot = com.example.util.AppPreferences.getGlobalLotSize(sym)
-                    val orderIdStr = item.orderId.toStringOrDefault("")
+    override suspend fun getOrders(): Result<List<OrderEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val res = api.getOrderBook()
+            if (res.isSuccessful && res.body()?.status == true) {
+                val data = res.body()?.data ?: emptyList()
+                data.map { item ->
+                    val lot = com.example.util.AppPreferences.getGlobalLotSize(item.tradingSymbol?.toString() ?: "")
+                    val qty = item.quantity?.toString()?.toDoubleOrNull()?.toInt() ?: 0
+                    val filled = item.filledShares?.toString()?.toDoubleOrNull()?.toInt() ?: 0
+                    val price = item.price?.toString()?.toDoubleOrNull() ?: 0.0
+                    val avgPrice = item.averagePrice?.toString()?.toDoubleOrNull() ?: price
+                    
                     OrderEntity(
-                        orderId = orderIdStr,
-                        symbol = sym,
-                        exchange = ex,
+                        orderId = item.orderId?.toString() ?: "",
+                        symbol = item.tradingSymbol?.toString() ?: "",
+                        exchange = item.exchange?.toString() ?: "NSE",
                         lotSize = lot,
                         qty = qty,
-                        orderType = item.orderType.toStringOrDefault("LIMIT"),
-                        side = item.transactionType.toStringOrDefault("BUY"),
+                        filledQty = filled,
+                        remainingQty = if (qty >= filled) qty - filled else 0,
+                        orderType = item.orderType?.toString() ?: "LIMIT",
+                        productType = item.productType?.toString() ?: "INTRADAY",
+                        side = item.transactionType?.toString() ?: "BUY",
                         price = price,
-                        value = qty * price,
-                        stopLoss = 0.0,
+                        avgPrice = avgPrice,
+                        value = price * qty,
+                        stopLoss = item.triggerPrice?.toString()?.toDoubleOrNull() ?: 0.0,
                         target = 0.0,
-                        status = item.status.toStringOrDefault("").uppercase(),
-                        time = item.orderUpdateTime.toStringOrDefault(""),
-                        brokerOrderId = orderIdStr
+                        status = item.status?.toString()?.uppercase() ?: "PENDING",
+                        time = item.orderUpdateTime?.toString() ?: item.updateTime?.toString() ?: "",
+                        brokerOrderId = item.orderId?.toString() ?: ""
                     )
                 }
             } else {
-                emptyList()
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Failed to get order book"
+                Log.e("AngelOneBrokerService", "OrderBook API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun placeOrder(order: OrderEntity): Result<String> {
-        return runCatching {
-            val token = if (order.symbolToken.isNotBlank()) order.symbolToken else instrumentMaster.resolveAngelToken(order.symbol, order.exchange) ?: ""
+    override suspend fun placeOrder(order: OrderEntity): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val token = if (order.symbolToken.isNotBlank()) order.symbolToken else {
+                instrumentMaster.resolveAngelToken(order.symbol, order.exchange) ?: ""
+            }
+            if (token.isBlank()) {
+                throw Exception("Cannot resolve Angel One symbol token for ${order.symbol} on ${order.exchange}")
+            }
+
             val req = AngelPlaceOrderRequest(
+                variety = "NORMAL",
                 tradingSymbol = order.symbol,
                 symbolToken = token,
                 transactionType = order.side.uppercase(),
-                exchange = order.exchange.uppercase(),
+                exchange = InstrumentMasterService.normalizeExchange(order.exchange),
                 orderType = order.orderType.uppercase(),
-                productType = if (order.productType.isNotBlank()) order.productType.uppercase() else "INTRADAY",
+                productType = order.productType.uppercase(),
+                duration = "DAY",
                 price = order.price.toString(),
                 quantity = order.qty.toString()
             )
-            val response = api.placeOrder(req)
-            if (response.isSuccessful && response.body()?.status == true) {
-                response.body()?.data?.orderId ?: throw Exception("Angel One returned success but no order ID.")
+            val res = api.placeOrder(req)
+            if (res.isSuccessful && res.body()?.status == true) {
+                res.body()?.data?.orderId ?: throw Exception("No order ID returned by Angel One API")
             } else {
-                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Unknown API Error"
-                throw Exception("API Error ${response.code()}: $errorMsg")
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Order placement failed"
+                Log.e("AngelOneBrokerService", "PlaceOrder API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun modifyOrder(orderId: String, newPrice: Double, newQty: Int, orderType: String): Result<Boolean> {
-        return runCatching {
+    override suspend fun modifyOrder(orderId: String, newPrice: Double, newQty: Int, orderType: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
             val req = AngelModifyOrderRequest(
                 orderId = orderId,
-                orderType = orderType,
+                variety = "NORMAL",
+                orderType = orderType.uppercase(),
                 price = newPrice.toString(),
                 quantity = newQty.toString()
             )
-            val response = api.modifyOrder(req)
-            if (response.isSuccessful && response.body()?.status == true) true else throw Exception(response.body()?.message ?: "Modify Order Failed")
+            val res = api.modifyOrder(req)
+            if (res.isSuccessful && res.body()?.status == true) {
+                true
+            } else {
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Modify order failed"
+                Log.e("AngelOneBrokerService", "ModifyOrder API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
+            }
         }
     }
 
-    override suspend fun cancelOrder(orderId: String): Result<Boolean> {
-        return runCatching {
-            val req = mapOf("orderid" to orderId, "variety" to "NORMAL")
-            val response = api.cancelOrder(req)
-            if (response.isSuccessful && response.body()?.status == true) true else throw Exception(response.body()?.message ?: "Cancel Order Failed")
+    override suspend fun cancelOrder(orderId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val req = mapOf("variety" to "NORMAL", "orderId" to orderId)
+            val res = api.cancelOrder(req)
+            if (res.isSuccessful && res.body()?.status == true) {
+                true
+            } else {
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Cancel order failed"
+                Log.e("AngelOneBrokerService", "CancelOrder API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
+            }
         }
     }
 
-    override suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> {
-        if (sessionManager.angelJwtToken.isNullOrEmpty()) return Result.success(emptyList())
-        return runCatching {
-            val response = runCatching { api.getHoldings() }.getOrNull()
-            if (response != null && response.isSuccessful && response.body()?.status == true) {
-                val items = response.body()?.data ?: emptyList()
-                items.map { item ->
-                    val sym = item.tradingSymbol.toStringOrDefault("")
-                    val ex = item.exchange.toStringOrDefault("NSE")
-                    val qty = item.quantity.toIntOrDefault(0)
-                    val avgPrice = if (item.averagePrice != null && item.averagePrice != 0.0) item.averagePrice.toDoubleOrDefault(0.0) else item.avgPrice.toDoubleOrDefault(0.0)
-                    val ltp = item.ltp.toDoubleOrDefault(0.0)
-                    val pnl = if (item.pnl != null && item.pnl != 0.0) item.pnl.toDoubleOrDefault(0.0) else item.realisedPnL.toDoubleOrDefault(item.unrealisedPnL.toDoubleOrDefault(0.0))
-                    val pnlPct = item.pnlPercentage.toDoubleOrDefault(0.0)
+    override suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val res = api.getHoldings()
+            if (res.isSuccessful && res.body()?.status == true) {
+                val data = res.body()?.data ?: emptyList()
+                data.map { item ->
+                    val qty = item.quantity?.toString()?.toDoubleOrNull()?.toInt() ?: 0
+                    val avgPrice = item.averagePrice?.toString()?.toDoubleOrNull() ?: item.avgPrice?.toString()?.toDoubleOrNull() ?: 0.0
+                    val ltp = item.ltp?.toString()?.toDoubleOrNull() ?: 0.0
+                    val invested = qty * avgPrice
+                    val currentValue = qty * ltp
+                    val pnl = currentValue - invested
+                    val pnlPct = if (invested > 0) (pnl / invested) * 100 else 0.0
+
                     PortfolioHoldingEntity(
-                        symbol = sym,
-                        exchange = ex,
-                        type = "EQUITY",
+                        symbol = item.tradingSymbol?.toString() ?: "",
+                        exchange = item.exchange?.toString() ?: "NSE",
                         qty = qty,
                         avgPrice = avgPrice,
                         ltp = ltp,
-                        currentValue = qty * ltp,
+                        currentValue = currentValue,
                         pnl = pnl,
-                        pnlPercent = pnlPct
+                        pnlPercent = pnlPct,
+                        type = "EQUITY"
                     )
                 }
             } else {
-                emptyList()
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Failed to get holdings"
+                Log.e("AngelOneBrokerService", "Holdings API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun getPositions(): Result<List<PortfolioHoldingEntity>> {
-        if (sessionManager.angelJwtToken.isNullOrEmpty()) return Result.success(emptyList())
-        return runCatching {
-            val response = runCatching { api.getPositions() }.getOrNull()
-            if (response != null && response.isSuccessful && response.body()?.status == true) {
-                val items = response.body()?.data ?: emptyList()
-                items.map { item ->
-                    val sym = item.tradingSymbol.toStringOrDefault("")
-                    val ex = item.exchange.toStringOrDefault("NSE")
-                    val pType = item.productType.toStringOrDefault("INTRADAY")
-                    val qty = item.netQty.toIntOrDefault(0)
-                    val ltp = item.ltp.toDoubleOrDefault(0.0)
-                    val pnl = if (item.pnl != null && item.pnl != "0") item.pnl.toDoubleOrDefault(0.0) else item.realisedPnL.toDoubleOrDefault(item.unrealisedPnL.toDoubleOrDefault(0.0))
-                    val buyAvg = item.buyAvgPrice.toDoubleOrDefault(item.sellAvgPrice.toDoubleOrDefault(0.0))
+    override suspend fun getPositions(): Result<List<PortfolioHoldingEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val res = api.getPositions()
+            if (res.isSuccessful && res.body()?.status == true) {
+                val data = res.body()?.data ?: emptyList()
+                data.map { item ->
+                    val netQty = item.netQty?.toString()?.toIntOrNull() ?: 0
+                    val buyAvg = item.buyAvgPrice?.toString()?.toDoubleOrNull() ?: 0.0
+                    val sellAvg = item.sellAvgPrice?.toString()?.toDoubleOrNull() ?: 0.0
+                    val avgPrice = if (netQty >= 0) buyAvg else sellAvg
+                    val ltp = item.ltp?.toString()?.toDoubleOrNull() ?: 0.0
+                    val pnl = item.pnl?.toString()?.toDoubleOrNull() ?: 0.0
+                    val invested = kotlin.math.abs(netQty * avgPrice)
+                    val pnlPct = if (invested > 0) (pnl / invested) * 100 else 0.0
+                    val isClosed = netQty == 0
+
                     PortfolioHoldingEntity(
-                        symbol = sym,
-                        exchange = ex,
-                        type = pType,
-                        qty = qty,
-                        avgPrice = buyAvg,
+                        symbol = item.tradingSymbol?.toString() ?: "",
+                        exchange = item.exchange?.toString() ?: "NSE",
+                        qty = netQty,
+                        avgPrice = avgPrice,
                         ltp = ltp,
-                        currentValue = qty * ltp,
+                        currentValue = if (isClosed) 0.0 else (invested + pnl),
                         pnl = pnl,
-                        pnlPercent = if (buyAvg > 0 && qty != 0) (pnl / (buyAvg * Math.abs(qty))) * 100 else 0.0
+                        pnlPercent = pnlPct,
+                        positionStatus = if (isClosed) "CLOSED" else "OPEN",
+                        productType = item.productType?.toString() ?: "INTRADAY"
                     )
                 }
             } else {
-                emptyList()
+                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Failed to get positions"
+                Log.e("AngelOneBrokerService", "Positions API Error (Status ${res.code()}): $errorMsg")
+                throw Exception("API Error ${res.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
-        return runCatching {
+    override suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
             val tokenMap = mutableMapOf<String, MutableList<String>>()
             symbols.forEach { sym ->
-                val token = instrumentMaster.resolveAngelToken(sym, "NSE") ?: ""
-                if (token.isNotBlank()) {
-                    val ex = when {
-                        sym.contains("CRUDE", ignoreCase = true) -> "MCX"
-                        sym.contains("SENSEX", ignoreCase = true) || sym.contains("BANKEX", ignoreCase = true) -> "BSE"
-                        else -> "NSE"
-                    }
-                    tokenMap.getOrPut(ex) { mutableListOf() }.add(token)
+                val normExchange = if (sym.contains("SENSEX") || sym.contains("BANKEX")) "BSE" else if (sym.contains("CRUDE")) "MCX" else "NSE"
+                val token = instrumentMaster.resolveAngelToken(sym, normExchange)
+                if (!token.isNullOrBlank()) {
+                    tokenMap.getOrPut(normExchange) { mutableListOf() }.add(token)
                 }
             }
-
+            if (tokenMap.isEmpty()) return@runCatching emptyList()
+            
             val response = api.getQuotes(AngelQuoteRequest(exchangeTokens = tokenMap))
             if (response.isSuccessful && response.body()?.status == true) {
                 val quotes = response.body()?.data?.fetched ?: emptyList()
                 val unfetched = response.body()?.data?.unfetched ?: emptyList()
-                unfetched.forEach { u -> android.util.Log.w("AngelOneBrokerService", "Unfetched quote: exchange=${u.exchange} token=${u.symbolToken} reason=${u.message}") }
-                
+                if (unfetched.isNotEmpty()) {
+                    Log.w("AngelOneBrokerService", "Unfetched quote items: size=${unfetched.size}")
+                }
                 quotes.map { q ->
-                    val sym = q.tradingSymbol.toStringOrDefault("")
-                    val ex = q.exchange.toStringOrDefault("NSE")
-                    val ltp = q.ltp.toDoubleOrDefault(0.0)
-                    val change = q.netChange.toDoubleOrDefault(0.0)
-                    val pct = q.percentChange.toDoubleOrDefault(0.0)
+                    val sym = q.tradingSymbol ?: ""
+                    val ex = q.exchange ?: "NSE"
+                    val ltpVal = q.ltp ?: 0.0
+                    val changeVal = q.netChange ?: 0.0
+                    val changePctVal = q.percentChange ?: 0.0
+
+                    if (ltpVal > 0.0 && sym.isNotBlank()) {
+                        MarketDataStore.updateTick(
+                            symbol = sym,
+                            token = q.symbolToken ?: "",
+                            exchange = ex,
+                            ltp = ltpVal,
+                            timestamp = System.currentTimeMillis(),
+                            open = q.open ?: 0.0,
+                            high = q.high ?: 0.0,
+                            low = q.low ?: 0.0,
+                            close = q.close ?: 0.0,
+                            volume = q.tradeVolume ?: 0L
+                        )
+                    }
+
                     WatchlistItem(
                         symbol = sym,
                         exchange = ex,
-                        ltp = ltp,
-                        change = change,
-                        changePercent = pct,
+                        ltp = ltpVal,
+                        change = changeVal,
+                        changePercent = changePctVal,
                         lotSize = com.example.util.AppPreferences.getGlobalLotSize(sym),
-                        isPositive = change >= 0
+                        isPositive = changeVal >= 0
                     )
                 }
             } else {
-                val errorMsg = response.errorBody()?.string() ?: response.body()?.message ?: "Unknown API Error"
+                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Quote API error"
+                Log.e("AngelOneBrokerService", "Quote API Error (Status ${response.code()}): $errorMsg")
                 throw Exception("API Error ${response.code()}: $errorMsg")
             }
         }
     }
 
-    override suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return runCatching {
-            val apiResponse = api.getOptionExpiries(symbol)
-            val liveExpiries = if (apiResponse.isSuccessful) {
-                apiResponse.body()?.data ?: emptyList()
-            } else {
-                emptyList()
-            }
-            com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, liveExpiries)
-        }
-    }
-
-    override suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> {
-        return runCatching {
+    override suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
             val instrument = instrumentMaster.resolveIndexToken(symbol)
-            if (instrument == null) throw Exception("Option Chain unavailable for this instrument.")
-            
-            val exchangeForOptions = when (instrument.exch_seg) {
-                "MCX" -> "MCX"
-                "BSE" -> "BFO"
-                else -> "NFO"
-            }
+                ?: throw Exception("Index token not found for option chain: $symbol")
             
             val request = AngelOptionChainRequest(
-                exchange = exchangeForOptions,
+                exchange = instrument.exch_seg,
                 symboltoken = instrument.token,
                 expirydate = expiry
             )
@@ -307,9 +324,73 @@ class AngelOneBrokerService(
                     )
                 } ?: emptyList()
             } else {
-                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Unknown error"
+                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Option chain request failed"
+                Log.e("AngelOneBrokerService", "OptionChain API Error (Status ${response.code()}): $errorMsg")
+                throw Exception("API Error ${response.code()}: $errorMsg")
+            }
+        }
+    }
+
+    override suspend fun getOptionExpiries(symbol: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val apiResponse = api.getOptionExpiries(symbol)
+            if (apiResponse.isSuccessful && apiResponse.body()?.status == true) {
+                apiResponse.body()?.data ?: emptyList()
+            } else {
+                val errorMsg = apiResponse.body()?.message ?: apiResponse.errorBody()?.string() ?: "Option expiries request failed"
+                Log.e("AngelOneBrokerService", "OptionExpiries API Error (Status ${apiResponse.code()}): $errorMsg")
+                throw Exception("API Error ${apiResponse.code()}: $errorMsg")
+            }
+        }
+    }
+
+    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            val ex = when {
+                symbol.contains("CRUDE", ignoreCase = true) -> "MCX"
+                symbol.contains("SENSEX", ignoreCase = true) || symbol.contains("BANKEX", ignoreCase = true) -> "BSE"
+                else -> "NSE"
+            }
+            val token = instrumentMaster.resolveAngelToken(symbol, ex)
+                ?: throw Exception("Cannot resolve Angel One token for historical data of $symbol on $ex")
+
+            val request = AngelHistoricalRequest(
+                exchange = ex,
+                symboltoken = token,
+                interval = interval,
+                fromdate = fromDate,
+                todate = toDate
+            )
+            val response = api.getHistoricalData(request)
+            if (response.isSuccessful && response.body()?.status == true) {
+                val data = response.body()?.data ?: throw Exception("Empty candle data from Angel One Historical API")
+                val candles = data.mapNotNull { row ->
+                    try {
+                        if (row.size >= 6) {
+                            com.example.ui.components.CandleData(
+                                open = row[1].toString().toFloat(),
+                                high = row[2].toString().toFloat(),
+                                low = row[3].toString().toFloat(),
+                                close = row[4].toString().toFloat(),
+                                volume = row[5].toString().toFloat()
+                            )
+                        } else null
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (candles.isEmpty()) {
+                    throw Exception("No valid candle records returned for $symbol ($interval)")
+                }
+                candles
+            } else {
+                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Historical data request failed"
+                Log.e("AngelOneBrokerService", "Historical API Error (Status ${response.code()}): $errorMsg for $symbol, token=$token")
                 throw Exception("API Error ${response.code()}: $errorMsg")
             }
         }
     }
 }
+
