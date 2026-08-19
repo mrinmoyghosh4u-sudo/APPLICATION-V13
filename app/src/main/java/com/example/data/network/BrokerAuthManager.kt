@@ -380,7 +380,12 @@ class BrokerAuthManager(
             }
 
             Log.d(TAG, "Authenticating with m.Stock verifytotp for client: $code")
-            val authResult = MStockAuthHelper.verifyTotp(code, key, effectiveTotpInput)
+            val authResult = MStockAuthHelper.verifyTotp(
+                clientCode = code,
+                apiKey = key,
+                totpOrSecret = effectiveTotpInput,
+                refreshToken = sessionManager.mstockRefreshToken
+            )
             val tokens = authResult.getOrThrow()
 
             // Securely store credentials and tokens in Encrypted Storage
