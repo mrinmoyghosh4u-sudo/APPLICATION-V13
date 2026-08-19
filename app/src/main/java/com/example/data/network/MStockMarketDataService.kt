@@ -72,6 +72,11 @@ class MStockMarketDataService(
         return apiKey.isNotBlank() && !accessToken.isNullOrBlank()
     }
 
+    fun getLastUpdatedTime(): String {
+        if (lastTickReceivedTime <= 0L) return "No ticks received yet"
+        return java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
+    }
+
     fun isConnectionLive(): Boolean {
         return isConnected.get() && _connectionState.value == "LIVE"
     }

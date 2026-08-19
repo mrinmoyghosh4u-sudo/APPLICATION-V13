@@ -162,9 +162,22 @@ fun DiagnosticsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         SectionHeader("SECONDARY FEED: m.STOCK (Mirae Asset)")
+        val mStockEndpoint by com.example.util.MStockAuthHelper.lastEndpoint.collectAsStateWithLifecycle()
+        val mStockHttpStatus by com.example.util.MStockAuthHelper.lastHttpStatus.collectAsStateWithLifecycle()
+        val mStockAuthStage by com.example.util.MStockAuthHelper.authStage.collectAsStateWithLifecycle()
+        val mStockAuthMsg by com.example.util.MStockAuthHelper.lastAuthMessage.collectAsStateWithLifecycle()
+        val mStockTokenStatus = if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "VALID (Tokens Stored)" else "NOT CONFIGURED / PENDING"
+        val mStockLastTickTime = viewModel.brokerManager.mStockMarketDataService.getLastUpdatedTime()
+
         DiagnosticItem("Credentials Configured", if (mstockConfigured) "PASS" else "NOT CONFIGURED")
+        DiagnosticItem("m.Stock API Endpoint", mStockEndpoint)
+        DiagnosticItem("HTTP Status", mStockHttpStatus)
+        DiagnosticItem("Authentication Stage", mStockAuthStage)
+        DiagnosticItem("Auth Diagnostic Message", mStockAuthMsg)
+        DiagnosticItem("Token Status", mStockTokenStatus)
         DiagnosticItem("WebSocket State", mStockConnectionState)
         DiagnosticItem("Feed Health Status", mStockHealth)
+        DiagnosticItem("Last Tick Time", mStockLastTickTime)
 
         Spacer(modifier = Modifier.height(16.dp))
 

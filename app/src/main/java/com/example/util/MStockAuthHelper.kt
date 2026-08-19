@@ -2,6 +2,9 @@ package com.example.util
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -29,6 +32,18 @@ object MStockAuthHelper {
 
     private const val TYPE_A_VERIFY_TOTP_URL = "https://api.mstock.trade/openapi/typea/session/verifytotp"
     private const val TYPE_B_VERIFY_TOTP_URL = "https://api.mstock.trade/openapi/typeb/session/verifytotp"
+
+    private val _lastEndpoint = MutableStateFlow(TYPE_A_VERIFY_TOTP_URL)
+    val lastEndpoint: StateFlow<String> = _lastEndpoint.asStateFlow()
+
+    private val _lastHttpStatus = MutableStateFlow("Not Executed")
+    val lastHttpStatus: StateFlow<String> = _lastHttpStatus.asStateFlow()
+
+    private val _authStage = MutableStateFlow("IDLE")
+    val authStage: StateFlow<String> = _authStage.asStateFlow()
+
+    private val _lastAuthMessage = MutableStateFlow("Idle")
+    val lastAuthMessage: StateFlow<String> = _lastAuthMessage.asStateFlow()
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -58,21 +73,31 @@ object MStockAuthHelper {
             val sanitizedTotpInput = totpOrSecret.trim()
             val sanitizedRefreshToken = refreshToken?.trim() ?: ""
 
+            _authStage.value = "INITIALIZING"
+            _lastAuthMessage.value = "Validating input parameters"
+
             if (sanitizedApiKey.isBlank()) {
+                _authStage.value = "FAILED"
+                _lastAuthMessage.value = "m.Stock API Key is required"
                 throw Exception("m.Stock API Key is required.")
             }
             if (sanitizedTotpInput.isBlank()) {
+                _authStage.value = "FAILED"
+                _lastAuthMessage.value = "m.Stock TOTP Secret or 6-digit TOTP code is required"
                 throw Exception("m.Stock TOTP Secret or 6-digit TOTP code is required.")
             }
 
             Log.d(TAG, "Initiating m.Stock TOTP authentication for client: ${sanitizedClientCode.ifBlank { "N/A" }}")
 
             // 1. Generate standard 6-digit RFC 6238 TOTP locally if TOTP secret key is provided
+            _authStage.value = "GENERATING_TOTP"
             val effectiveTotp = if (sanitizedTotpInput.length == 6 && sanitizedTotpInput.all { it.isDigit() }) {
                 sanitizedTotpInput
             } else {
                 val generated = TotpUtil.generateTotp(sanitizedTotpInput)
                 if (generated.isBlank()) {
+                    _authStage.value = "FAILED"
+                    _lastAuthMessage.value = "Failed to generate 6-digit TOTP from secret"
                     throw Exception("Failed to generate 6-digit TOTP. Please verify your m.Stock Base32 TOTP Secret.")
                 }
                 generated
@@ -81,17 +106,28 @@ object MStockAuthHelper {
             // 2. Decide between Type B (if refreshToken present) and Type A
             if (sanitizedRefreshToken.isNotBlank()) {
                 try {
+                    _lastEndpoint.value = TYPE_B_VERIFY_TOTP_URL
+                    _authStage.value = "VERIFYING_TOTP_TYPE_B"
                     Log.d(TAG, "Attempting m.Stock Type B authentication...")
                     val result = executeTypeBAuth(sanitizedApiKey, sanitizedRefreshToken, effectiveTotp)
-                    if (result.isSuccess) return@withContext result
+                    if (result.isSuccess) {
+                        _authStage.value = "AUTHENTICATED"
+                        _lastAuthMessage.value = "Success (Type B Tokens Stored)"
+                        return@withContext result
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Type B authentication failed: ${e.localizedMessage}. Falling back to Type A...")
                 }
             }
 
             // 3. Execute Type A Authentication
+            _lastEndpoint.value = TYPE_A_VERIFY_TOTP_URL
+            _authStage.value = "VERIFYING_TOTP_TYPE_A"
             Log.d(TAG, "Executing m.Stock Type A authentication...")
-            executeTypeAAuth(sanitizedApiKey, effectiveTotp, sanitizedClientCode)
+            val tokens = executeTypeAAuth(sanitizedApiKey, effectiveTotp, sanitizedClientCode)
+            _authStage.value = "AUTHENTICATED"
+            _lastAuthMessage.value = "Success (Type A Tokens Stored)"
+            tokens
         }
     }
 
@@ -148,6 +184,7 @@ object MStockAuthHelper {
         val respCode = response.code
         val respString = response.body?.string() ?: ""
 
+        _lastHttpStatus.value = "$respCode ${response.message.ifBlank { if (response.isSuccessful) "OK" else "Error" }}"
         Log.d(TAG, "m.Stock $typeName verifytotp returned HTTP $respCode")
 
         if (response.isSuccessful || respCode == 200 || respCode == 201) {
@@ -187,8 +224,12 @@ object MStockAuthHelper {
                     .ifBlank { json.optString("error") }
                     .ifBlank { json.optString("description") }
                     .ifBlank { "Authentication failed: invalid credentials or TOTP code" }
+                _authStage.value = "FAILED"
+                _lastAuthMessage.value = errorMsg
                 throw Exception("m.Stock $typeName error: $errorMsg")
             } else {
+                _authStage.value = "FAILED"
+                _lastAuthMessage.value = "Empty response payload (HTTP $respCode)"
                 throw Exception("m.Stock $typeName empty response payload (HTTP $respCode)")
             }
         } else {
@@ -197,6 +238,8 @@ object MStockAuthHelper {
                 ?.ifBlank { errorJson?.optString("error") }
                 ?.ifBlank { errorJson?.optString("description") }
                 ?: "HTTP $respCode ${response.message.ifBlank { "Authentication failed" }}"
+            _authStage.value = "FAILED"
+            _lastAuthMessage.value = errorMsg
             throw Exception("m.Stock $typeName verifytotp failed: $errorMsg")
         }
     }
