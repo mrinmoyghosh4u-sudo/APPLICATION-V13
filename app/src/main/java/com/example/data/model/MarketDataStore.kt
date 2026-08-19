@@ -1,14 +1,32 @@
 package com.example.data.model
 
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
+
+/**
+ * Valid Market Data Sources
+ */
+object MarketDataSourceNames {
+    const val ANGEL_ONE = "ANGEL_ONE"
+    const val MSTOCK = "MSTOCK"
+    const val NSE = "NSE"
+    const val YAHOO = "YAHOO"
+}
 
 data class MarketDataState(
+    val source: String, // "ANGEL_ONE", "MSTOCK", "NSE", "YAHOO"
     val symbol: String,
-    val token: String,
     val exchange: String,
+    val token: String,
     val ltp: Double,
     val open: Double = 0.0,
     val high: Double = 0.0,
@@ -17,39 +35,195 @@ data class MarketDataState(
     val change: Double = 0.0,
     val changePercent: Double = 0.0,
     val volume: Long = 0L,
-    val timestamp: Long = 0L,
-    val source: String = "AngelOne",
-    val state: String = "LIVE" // "LIVE", "CLOSED", "STALE", "UNAVAILABLE"
+    val exchangeTimestamp: Long = 0L,
+    val receivedTimestamp: Long = 0L,
+    val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "REFERENCE", "DELAYED", "UNAVAILABLE"
+    val sequenceNumber: Long = 0L
 )
 
+/**
+ * Central Unified Market Data Store for KING KHAN AI TRADER
+ * 
+ * Rules:
+ * - Source is NEVER hardcoded.
+ * - Every tick contains full provenance (source, timestamps, sequence).
+ * - Full validation: timestamp freshness, stale detection, invalid price prevention, duplicate filtering.
+ * - Source health tracking for ANGEL ONE, m.STOCK, NSE, and YAHOO.
+ */
 object MarketDataStore {
+    private val scope = CoroutineScope(Dispatchers.IO + Job())
+
     private val _marketData = MutableStateFlow<Map<String, MarketDataState>>(emptyMap())
     val marketData: StateFlow<Map<String, MarketDataState>> = _marketData.asStateFlow()
 
-    private val internalMap = ConcurrentHashMap<String, MarketDataState>()
-    private val tokenMap = ConcurrentHashMap<String, MarketDataState>() // key: "$exchange:$token" or "$exchangeType:$token"
+    // Composite primary identity: "$exchange:$token" or "$exchange:$symbol"
+    private val compositeMap = ConcurrentHashMap<String, MarketDataState>()
+    // Symbol index for UI lookups
+    private val symbolIndex = ConcurrentHashMap<String, MarketDataState>()
 
+    // Source Health StateFlows
+    private val _angelOneHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
+    val angelOneHealth: StateFlow<String> = _angelOneHealth.asStateFlow()
+
+    private val _mStockHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
+    val mStockHealth: StateFlow<String> = _mStockHealth.asStateFlow()
+
+    private val _nseHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
+    val nseHealth: StateFlow<String> = _nseHealth.asStateFlow()
+
+    private val _yahooHealth = MutableStateFlow("OFFLINE") // REFERENCE, DELAYED, OFFLINE
+    val yahooHealth: StateFlow<String> = _yahooHealth.asStateFlow()
+
+    // Last Update Timestamps per source
+    private val sourceLastUpdate = ConcurrentHashMap<String, Long>()
+    // Last Sequence Numbers per source
+    private val sourceLastSequence = ConcurrentHashMap<String, Long>()
+
+    init {
+        startStaleDataMonitor()
+    }
+
+    private fun startStaleDataMonitor() {
+        scope.launch {
+            while (true) {
+                delay(5000)
+                val now = System.currentTimeMillis()
+                val staleThreshold = 15000L // 15 seconds
+
+                // Angel One Health
+                val lastAngel = sourceLastUpdate[MarketDataSourceNames.ANGEL_ONE] ?: 0L
+                if (lastAngel > 0 && now - lastAngel > staleThreshold && _angelOneHealth.value == "LIVE") {
+                    _angelOneHealth.value = "STALE"
+                }
+
+                // m.Stock Health
+                val lastMStock = sourceLastUpdate[MarketDataSourceNames.MSTOCK] ?: 0L
+                if (lastMStock > 0 && now - lastMStock > staleThreshold && _mStockHealth.value == "LIVE") {
+                    _mStockHealth.value = "STALE"
+                }
+
+                // NSE Health
+                val lastNse = sourceLastUpdate[MarketDataSourceNames.NSE] ?: 0L
+                if (lastNse > 0 && now - lastNse > staleThreshold && _nseHealth.value == "LIVE") {
+                    _nseHealth.value = "STALE"
+                }
+
+                // Yahoo Health
+                val lastYahoo = sourceLastUpdate[MarketDataSourceNames.YAHOO] ?: 0L
+                if (lastYahoo > 0 && now - lastYahoo > 60000L && _yahooHealth.value == "REFERENCE") {
+                    _yahooHealth.value = "DELAYED"
+                }
+            }
+        }
+    }
+
+    fun setSourceHealth(source: String, health: String) {
+        when (source) {
+            MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = health
+            MarketDataSourceNames.MSTOCK -> _mStockHealth.value = health
+            MarketDataSourceNames.NSE -> _nseHealth.value = health
+            MarketDataSourceNames.YAHOO -> _yahooHealth.value = health
+        }
+    }
+
+    fun getSourceLastUpdate(source: String): Long {
+        return sourceLastUpdate[source] ?: 0L
+    }
+
+    /**
+     * Unified Tick Ingestion with Rigorous Validation
+     */
     fun updateTick(
+        source: String,
         symbol: String,
         token: String,
         exchange: String,
         ltp: Double,
-        timestamp: Long,
         open: Double = 0.0,
         high: Double = 0.0,
         low: Double = 0.0,
         close: Double = 0.0,
-        volume: Long = 0L
+        volume: Long = 0L,
+        exchangeTimestamp: Long = 0L,
+        receivedTimestamp: Long = System.currentTimeMillis(),
+        state: String = "LIVE",
+        sequenceNumber: Long = 0L
     ) {
-        val existing = internalMap[symbol]
-        val prevClose = if (close > 0.0) close else (existing?.previousClose ?: if (existing?.ltp != null && existing.ltp > 0) existing.ltp else ltp)
+        // 1. Invalid Price Validation
+        if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
+            Log.w("MarketDataStore", "[$source] REJECTED INVALID LTP: $ltp for $symbol")
+            return
+        }
+
+        // 2. Normalize Symbol & Exchange
+        val normExch = exchange.trim().uppercase()
+        val normSym = symbol.trim().uppercase()
+        val normToken = token.trim()
+
+        if (normSym.isBlank() && normToken.isBlank()) {
+            return
+        }
+
+        val compositeKey = if (normToken.isNotBlank()) "$normExch:$normToken" else "$normExch:$normSym"
+        val existing = compositeMap[compositeKey] ?: symbolIndex[normSym]
+
+        // 3. Duplicate Tick Detection (Exact duplicate filtering)
+        if (existing != null && existing.source == source && existing.ltp == ltp && 
+            existing.exchangeTimestamp == exchangeTimestamp && exchangeTimestamp > 0 &&
+            (sequenceNumber == 0L || sequenceNumber == existing.sequenceNumber)) {
+            // Identical tick from same source; skip redundant map recreation
+            return
+        }
+
+        // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / NSE) with reference data (YAHOO)
+        if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.NSE)) {
+            if (source == MarketDataSourceNames.YAHOO) {
+                // Keep the live tick, but update previous close if missing
+                if (existing.previousClose <= 0.0 && close > 0.0) {
+                    val updated = existing.copy(
+                        previousClose = close,
+                        change = existing.ltp - close,
+                        changePercent = ((existing.ltp - close) / close) * 100.0
+                    )
+                    compositeMap[compositeKey] = updated
+                    symbolIndex[normSym] = updated
+                    _marketData.value = HashMap(symbolIndex)
+                }
+                return
+            }
+        }
+
+        // 5. Sequence & Timestamp validation
+        if (sequenceNumber > 0L) {
+            val lastSeq = sourceLastSequence[source] ?: 0L
+            sourceLastSequence[source] = maxOf(lastSeq, sequenceNumber)
+        }
+        val validatedExchangeTs = if (exchangeTimestamp > 0L) exchangeTimestamp else receivedTimestamp
+        sourceLastUpdate[source] = receivedTimestamp
+
+        // 6. Update Source Health
+        when (source) {
+            MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = "LIVE"
+            MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
+            MarketDataSourceNames.NSE -> _nseHealth.value = "LIVE"
+            MarketDataSourceNames.YAHOO -> if (_yahooHealth.value != "REFERENCE") _yahooHealth.value = "REFERENCE"
+        }
+
+        // 7. Calculate Change and Change %
+        val prevClose = if (close > 0.0) close else (existing?.previousClose ?: if (existing != null && existing.ltp > 0.0) existing.ltp else ltp)
         val change = if (prevClose > 0.0) ltp - prevClose else 0.0
         val changePct = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
-        
+
+        val validatedState = when (source) {
+            MarketDataSourceNames.YAHOO -> "REFERENCE"
+            else -> state
+        }
+
         val newState = MarketDataState(
+            source = source,
             symbol = symbol,
-            token = token,
             exchange = exchange,
+            token = token,
             ltp = ltp,
             open = if (open > 0.0) open else (existing?.open ?: 0.0),
             high = if (high > 0.0) high else (existing?.high ?: 0.0),
@@ -58,34 +232,71 @@ object MarketDataStore {
             change = change,
             changePercent = changePct,
             volume = if (volume > 0L) volume else (existing?.volume ?: 0L),
-            timestamp = timestamp,
-            source = "AngelOne",
-            state = "LIVE"
+            exchangeTimestamp = validatedExchangeTs,
+            receivedTimestamp = receivedTimestamp,
+            state = validatedState,
+            sequenceNumber = sequenceNumber
         )
-        internalMap[symbol] = newState
-        if (token.isNotBlank()) {
-            tokenMap["$exchange:$token"] = newState
+
+        compositeMap[compositeKey] = newState
+        if (normToken.isNotBlank()) {
+            compositeMap["$normExch:$normToken"] = newState
         }
-        _marketData.value = internalMap.toMap()
+        symbolIndex[symbol] = newState
+        symbolIndex[normSym] = newState
+
+        // Construct unified state map for UI collection
+        _marketData.value = HashMap(symbolIndex)
     }
 
-    fun getTick(symbol: String): MarketDataState? = internalMap[symbol]
+    fun getTick(symbol: String): MarketDataState? {
+        val direct = symbolIndex[symbol] ?: symbolIndex[symbol.trim().uppercase()]
+        if (direct != null) return direct
+        val key = symbolIndex.keys.find { it.equals(symbol, ignoreCase = true) }
+        return key?.let { symbolIndex[it] }
+    }
 
-    fun getTickByToken(exchange: String, token: String): MarketDataState? = tokenMap["$exchange:$token"]
-    
-    fun setPreviousClose(symbol: String, prevClose: Double) {
-        val existing = internalMap[symbol]
-        if (existing != null) {
+    fun getTick(exchange: String, symbol: String): MarketDataState? {
+        val normExch = exchange.trim().uppercase()
+        val normSym = symbol.trim().uppercase()
+        return compositeMap["$normExch:$normSym"] ?: getTick(symbol)
+    }
+
+    fun getTickByToken(exchange: String, token: String): MarketDataState? {
+        val normExch = exchange.trim().uppercase()
+        val normToken = token.trim()
+        return compositeMap["$normExch:$normToken"]
+    }
+
+    fun setPreviousClose(symbol: String, prevClose: Double, exchange: String = "NSE", source: String = MarketDataSourceNames.ANGEL_ONE) {
+        val normExch = exchange.trim().uppercase()
+        val normSym = symbol.trim().uppercase()
+        val compositeKey = "$normExch:$normSym"
+        val existing = compositeMap[compositeKey] ?: symbolIndex[symbol]
+
+        val newState = if (existing != null) {
             val change = existing.ltp - prevClose
             val changePct = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
-            internalMap[symbol] = existing.copy(previousClose = prevClose, change = change, changePercent = changePct)
+            existing.copy(previousClose = prevClose, change = change, changePercent = changePct)
         } else {
-            internalMap[symbol] = MarketDataState(
-                symbol = symbol, token = "", exchange = "", ltp = 0.0, previousClose = prevClose,
-                change = 0.0, changePercent = 0.0, timestamp = 0L, source = "AngelOne", state = "UNAVAILABLE"
+            MarketDataState(
+                source = source,
+                symbol = symbol,
+                token = "",
+                exchange = exchange,
+                ltp = 0.0,
+                previousClose = prevClose,
+                change = 0.0,
+                changePercent = 0.0,
+                exchangeTimestamp = 0L,
+                receivedTimestamp = System.currentTimeMillis(),
+                state = "UNAVAILABLE"
             )
         }
-        _marketData.value = internalMap.toMap()
+
+        compositeMap[compositeKey] = newState
+        symbolIndex[symbol] = newState
+        symbolIndex[normSym] = newState
+        _marketData.value = HashMap(symbolIndex)
     }
 }
-

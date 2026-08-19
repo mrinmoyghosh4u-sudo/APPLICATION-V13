@@ -8,7 +8,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.util.concurrent.TimeUnit
+import java.io.ByteArrayInputStream
 import okhttp3.OkHttpClient
 
 @RunWith(RobolectricTestRunner::class)
@@ -16,33 +16,61 @@ import okhttp3.OkHttpClient
 class InstrumentMasterServiceTest {
 
     @Test
-    fun testInstrumentMasterService() = runBlocking {
+    fun testInstrumentMasterServiceParsingWithNulls() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val client = OkHttpClient.Builder()
-            .readTimeout(120, TimeUnit.SECONDS)
-            .build()
-        val service = InstrumentMasterService(client, context)
-        service.loadMaster()
+        val service = InstrumentMasterService(OkHttpClient(), context)
         
-        val map = service.javaClass.getDeclaredField("instrumentMap").apply { isAccessible = true }.get(service) as Map<String, Instrument>
-        println("Total instruments loaded: ${map.size}")
-        
-        println("NIFTY 50 token: ${service.resolveAngelToken("NIFTY 50", "NSE")}")
-        println("BANKNIFTY token: ${service.resolveAngelToken("BANKNIFTY", "NSE")}")
-        println("RELIANCE token: ${service.resolveAngelToken("RELIANCE-EQ", "NSE") ?: service.resolveAngelToken("RELIANCE", "NSE")}")
-        println("TCS token: ${service.resolveAngelToken("TCS-EQ", "NSE") ?: service.resolveAngelToken("TCS", "NSE")}")
-        println("INFY token: ${service.resolveAngelToken("INFY-EQ", "NSE") ?: service.resolveAngelToken("INFY", "NSE")}")
-        println("SBIN token: ${service.resolveAngelToken("SBIN-EQ", "NSE") ?: service.resolveAngelToken("SBIN", "NSE")}")
-        
-        val niftyOpts = service.getOptionExpiries("NIFTY")
-        if (niftyOpts.isNotEmpty()) {
-            val opts = service.getOptionInstruments("NIFTY", niftyOpts[0])
-            if (opts.isNotEmpty()) {
-                val ce = opts.firstOrNull { it.symbol.endsWith("CE") }
-                val pe = opts.firstOrNull { it.symbol.endsWith("PE") }
-                println("Sample NIFTY CE: ${ce?.token} - ${ce?.symbol}")
-                println("Sample NIFTY PE: ${pe?.token} - ${pe?.symbol}")
+        val sampleJson = """
+        [
+            {
+                "token": "26000",
+                "symbol": "NIFTY 50",
+                "name": "NIFTY",
+                "expiry": null,
+                "strike": null,
+                "lotsize": null,
+                "instrumenttype": "AMXIDX",
+                "exch_seg": "nse_cm",
+                "tick_size": null
+            },
+            {
+                "token": "2885",
+                "symbol": "RELIANCE-EQ",
+                "name": "RELIANCE",
+                "expiry": "",
+                "strike": -1.0,
+                "lotsize": 1,
+                "instrumenttype": "",
+                "exch_seg": "NSE",
+                "tick_size": 5.0
+            },
+            {
+                "token": "45000",
+                "symbol": "NIFTY28AUG2622000CE",
+                "name": "NIFTY",
+                "expiry": "28AUG2026",
+                "strike": 2200000.0,
+                "lotsize": 50,
+                "instrumenttype": "OPTIDX",
+                "exch_seg": "NFO",
+                "tick_size": 5.0
             }
+        ]
+        """.trimIndent()
+
+        val parseMethod = service.javaClass.getDeclaredMethod("parseInputStream", java.io.InputStream::class.java).apply {
+            isAccessible = true
         }
+        parseMethod.invoke(service, ByteArrayInputStream(sampleJson.toByteArray(Charsets.UTF_8)))
+
+        val niftyToken = service.resolveAngelToken("NIFTY 50", "NSE")
+        assertEquals("26000", niftyToken)
+
+        val relianceToken = service.resolveAngelToken("RELIANCE", "NSE")
+        assertEquals("2885", relianceToken)
+
+        val opt = service.resolveOptionInstrument("NIFTY", "28AUG2026", 22000.0, "CE")
+        assertNotNull(opt)
+        assertEquals("45000", opt?.token)
     }
 }

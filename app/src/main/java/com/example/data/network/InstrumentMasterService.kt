@@ -73,50 +73,13 @@ class InstrumentMasterService(
     private val symbolExchangeMap = ConcurrentHashMap<String, Instrument>()
     private val indexSymbolMap = ConcurrentHashMap<String, Instrument>()
 
-    private val hardcodedIndices = mapOf(
-        "NIFTY" to Instrument("99926000", "NIFTY 50", "NIFTY", "", "0", "50", "AMXIDX", "NSE", "0.05"),
-        "BANKNIFTY" to Instrument("99926009", "NIFTY BANK", "BANKNIFTY", "", "0", "15", "AMXIDX", "NSE", "0.05"),
-        "FINNIFTY" to Instrument("99926037", "NIFTY FIN SERVICE", "FINNIFTY", "", "0", "25", "AMXIDX", "NSE", "0.05"),
-        "MIDCPNIFTY" to Instrument("99926074", "NIFTY MID SELECT", "MIDCPNIFTY", "", "0", "50", "AMXIDX", "NSE", "0.05"),
-        "SENSEX" to Instrument("99919000", "SENSEX", "SENSEX", "", "0", "10", "AMXIDX", "BSE", "0.05"),
-        "BANKEX" to Instrument("99919012", "BANKEX", "BANKEX", "", "0", "15", "AMXIDX", "BSE", "0.05"),
-        "CRUDEOIL" to Instrument("240683", "CRUDEOIL", "CRUDEOIL", "", "0", "100", "FUTCOM", "MCX", "1.0"),
-        "CRUDEOIL M" to Instrument("240684", "CRUDEOILM", "CRUDEOIL M", "", "0", "10", "FUTCOM", "MCX", "1.0")
-    )
-
     private val _isLoaded = MutableStateFlow(false)
     val isLoadedFlow = _isLoaded.asStateFlow()
     val isLoaded: Boolean get() = _isLoaded.value
 
     init {
-        // Pre-populate core index & standard instruments so lookups work immediately
-        hardcodedIndices.forEach { (name, inst) ->
-            val exchType = getExchangeType(inst.exch_seg)
-            val compKey = "$exchType:${inst.token}"
-            instrumentMap[compKey] = inst
-            indexSymbolMap[name] = inst
-            indexSymbolMap[inst.symbol.uppercase()] = inst
-            symbolExchangeMap["${inst.exch_seg}:${inst.symbol.uppercase()}"] = inst
-            symbolExchangeMap["${inst.exch_seg}:$name"] = inst
-        }
-
-        // Standard stock tokens (NSE)
-        val defaultStocks = listOf(
-            Instrument("2885", "RELIANCE-EQ", "RELIANCE", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("11536", "TCS-EQ", "TCS", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("1594", "INFY-EQ", "INFY", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("3045", "SBIN-EQ", "SBIN", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("1333", "HDFCBANK-EQ", "HDFCBANK", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("4963", "ICICIBANK-EQ", "ICICIBANK", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("3499", "TATAMOTORS-EQ", "TATAMOTORS", "", "0", "1", "EQ", "NSE", "0.05"),
-            Instrument("3492", "TATASTEEL-EQ", "TATASTEEL", "", "0", "1", "EQ", "NSE", "0.05")
-        )
-        defaultStocks.forEach { inst ->
-            val compKey = "1:${inst.token}"
-            instrumentMap[compKey] = inst
-            symbolExchangeMap["NSE:${inst.name.uppercase()}"] = inst
-            symbolExchangeMap["NSE:${inst.symbol.uppercase()}"] = inst
-        }
+        // No hardcoded stock/option tokens populated here.
+        // Instrument Master is the single source of truth.
     }
 
     private fun registerInstrument(inst: Instrument) {
@@ -152,6 +115,36 @@ class InstrumentMasterService(
         }
     }
 
+    private fun readNextStringSafe(reader: JsonReader): String {
+        return try {
+            when (reader.peek()) {
+                android.util.JsonToken.NULL -> {
+                    reader.nextNull()
+                    ""
+                }
+                android.util.JsonToken.STRING -> reader.nextString() ?: ""
+                android.util.JsonToken.NUMBER -> {
+                    try {
+                        reader.nextString() ?: ""
+                    } catch (e: Exception) {
+                        try {
+                            reader.nextDouble().toString()
+                        } catch (e2: Exception) {
+                            ""
+                        }
+                    }
+                }
+                android.util.JsonToken.BOOLEAN -> reader.nextBoolean().toString()
+                else -> {
+                    reader.skipValue()
+                    ""
+                }
+            }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     private fun parseInputStream(inputStream: InputStream) {
         val reader = JsonReader(InputStreamReader(inputStream, "UTF-8"))
         reader.beginArray()
@@ -169,15 +162,15 @@ class InstrumentMasterService(
             reader.beginObject()
             while (reader.hasNext()) {
                 when (reader.nextName()) {
-                    "token" -> token = reader.nextString()
-                    "symbol" -> symbol = reader.nextString()
-                    "name" -> name = reader.nextString()
-                    "expiry" -> expiry = reader.nextString()
-                    "strike" -> strike = reader.nextString()
-                    "lotsize" -> lotsize = reader.nextString()
-                    "instrumenttype" -> instType = reader.nextString()
-                    "exch_seg" -> exch = reader.nextString()
-                    "tick_size" -> tickSize = reader.nextString()
+                    "token" -> token = readNextStringSafe(reader)
+                    "symbol" -> symbol = readNextStringSafe(reader)
+                    "name" -> name = readNextStringSafe(reader)
+                    "expiry" -> expiry = readNextStringSafe(reader)
+                    "strike" -> strike = readNextStringSafe(reader)
+                    "lotsize" -> lotsize = readNextStringSafe(reader)
+                    "instrumenttype" -> instType = readNextStringSafe(reader)
+                    "exch_seg" -> exch = readNextStringSafe(reader)
+                    "tick_size" -> tickSize = readNextStringSafe(reader)
                     else -> reader.skipValue()
                 }
             }
@@ -254,7 +247,7 @@ class InstrumentMasterService(
                     if (instrumentMap.size > 1000) {
                         _isLoaded.value = true
                         success = true
-                        Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments successfully")
+                        Log.d("InstrumentMaster", "[INSTRUMENT_MASTER_READY] count=${instrumentMap.size}")
                     } else {
                         throw Exception("Parsing completed but not enough instruments: ${instrumentMap.size}")
                     }
@@ -275,7 +268,7 @@ class InstrumentMasterService(
                 FileInputStream(cacheFile).use { parseInputStream(it) }
                 if (instrumentMap.size > 1000) {
                     _isLoaded.value = true
-                    Log.d("InstrumentMaster", "Loaded ${instrumentMap.size} instruments from fallback cache")
+                    Log.d("InstrumentMaster", "[INSTRUMENT_MASTER_READY] fallback_count=${instrumentMap.size}")
                 }
             } catch (e: Exception) {
                 Log.e("InstrumentMaster", "Failed reading fallback cache file", e)
@@ -342,12 +335,19 @@ class InstrumentMasterService(
             (inst.symbol.endsWith(cleanType, ignoreCase = true) || inst.symbol.contains(cleanType, ignoreCase = true))
         }
 
-        // Match strike & expiry
+        // Match exact strike & expiry from Instrument Master
         return matchingOptions.find { inst ->
-            val instStrike = inst.strike.toDoubleOrNull() ?: 0.0
-            val strikeMatches = kotlin.math.abs(instStrike - strike) < 1.0 ||
-                                kotlin.math.abs(instStrike - (strike * 100.0)) < 1.0 ||
-                                kotlin.math.abs((instStrike / 100.0) - strike) < 1.0
+            val instStrikeRaw = inst.strike.toDoubleOrNull() ?: 0.0
+            // Angel One option strikes are either in paise (e.g. 2485000 for 24850.0) or rupees (24850)
+            val instStrike = if (instStrikeRaw > 10000.0 && strike < 10000.0) {
+                instStrikeRaw / 100.0
+            } else if (instStrikeRaw > 100000.0 && strike < 100000.0) {
+                instStrikeRaw / 100.0
+            } else {
+                instStrikeRaw
+            }
+
+            val strikeMatches = kotlin.math.abs(instStrike - strike) < 0.01
 
             val expiryMatches = expiry.isBlank() ||
                                 inst.expiry.equals(expiry, ignoreCase = true) ||
@@ -388,7 +388,7 @@ class InstrumentMasterService(
             "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
             else -> indexName.uppercase().trim()
         }
-        return indexSymbolMap[cleanName] ?: hardcodedIndices[cleanName]
+        return indexSymbolMap[cleanName]
     }
 
     fun resolveAngelToken(symbol: String, exchange: String = "NSE"): String? {
@@ -406,8 +406,9 @@ class InstrumentMasterService(
             "MIDCAP NIFTY", "MIDCP NIFTY" -> "MIDCPNIFTY"
             else -> uppercaseSymbol
         }
-        val indexInst = indexSymbolMap[cleanIndex] ?: hardcodedIndices[cleanIndex]
+        val indexInst = indexSymbolMap[cleanIndex]
         if (indexInst != null && (exchange.isBlank() || normalizeExchange(indexInst.exch_seg) == normExch)) {
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] index=$symbol exch=$exchange token=${indexInst.token}")
             return indexInst.token
         }
 
@@ -415,7 +416,10 @@ class InstrumentMasterService(
         val directMatch = symbolExchangeMap["$normExch:$uppercaseSymbol"]
             ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-EQ"]
             ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-FUT"]
-        if (directMatch != null) return directMatch.token
+        if (directMatch != null) {
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange token=${directMatch.token}")
+            return directMatch.token
+        }
 
         // 4. Scan instrumentMap values
         val match = instrumentMap.values.find {
@@ -424,7 +428,11 @@ class InstrumentMasterService(
              it.name.equals(uppercaseSymbol, ignoreCase = true) ||
              it.symbol.equals("${uppercaseSymbol}-EQ", ignoreCase = true))
         }
-        return match?.token ?: indexInst?.token
+        val resolved = match?.token ?: indexInst?.token
+        if (resolved != null) {
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange token=$resolved")
+        }
+        return resolved
     }
 
     fun resolveDhanSecurityId(symbol: String, exchange: String = "NSE"): String? {

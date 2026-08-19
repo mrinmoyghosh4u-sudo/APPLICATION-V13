@@ -556,8 +556,8 @@ fun OptionChainTabContent(
                                 Text(strike.callChgOi, fontSize = 9.sp, color = ProfitGreen)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(String.format("%,.2f", strike.callLtp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                                Text("IV: ${String.format("%.1f", strike.callIv)}", fontSize = 9.sp, color = TextGray)
+                                Text(if (strike.callLtp > 0.0) String.format("%,.2f", strike.callLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                Text(if (strike.callIv > 0.0) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                         }
 
@@ -586,8 +586,8 @@ fun OptionChainTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(String.format("%,.2f", strike.putLtp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                                Text("IV: ${String.format("%.1f", strike.putIv)}", fontSize = 9.sp, color = TextGray)
+                                Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                Text(if (strike.putIv > 0.0) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(strike.putOi, fontSize = 11.sp, color = TextWhite)

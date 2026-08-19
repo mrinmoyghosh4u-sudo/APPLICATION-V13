@@ -267,7 +267,7 @@ object AlgoEngine {
         } ?: quotes.firstOrNull()
 
         if (targetQuote == null || targetQuote.ltp <= 0) {
-            _engineStatusMessage.value = "LIVE DATA UNAVAILABLE"
+            _engineStatusMessage.value = "SIGNAL PAUSED — LIVE MARKET DATA UNAVAILABLE"
             _currentSignal.value = null
             _marketBias.value = "NEUTRAL"
             _ceBuyScore.value = 0
@@ -276,6 +276,14 @@ object AlgoEngine {
                 "EMA" to false, "VWAP" to false, "RSI" to false,
                 "SUPERTREND" to false, "OI" to false, "VOLUME" to false
             )
+            return
+        }
+
+        // Validate MarketDataStore status for target symbol
+        val storeTick = com.example.data.model.MarketDataStore.getTick(targetQuote.symbol)
+        if (storeTick != null && (storeTick.state == "STALE" || storeTick.state == "OFFLINE" || storeTick.source == com.example.data.model.MarketDataSourceNames.YAHOO)) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — LIVE FEED ${storeTick.state}"
+            _currentSignal.value = null
             return
         }
 
@@ -324,31 +332,64 @@ object AlgoEngine {
             else -> "NEUTRAL"
         }
         
-        // Generate actionable signal if threshold met
+        // Generate actionable signal if threshold met and real option LTP exists in MarketDataStore
         if (ceScore >= 75 || peScore >= 75) {
             val signalType = if (ceScore >= 75) "BUY CE" else "BUY PE"
-            val strikeOffset = if (ceScore >= 75) 50 else -50
-            val optionSymbol = "${targetQuote.symbol} ${(targetQuote.ltp / 50).toInt() * 50 + strikeOffset} ${if (ceScore >= 75) "CE" else "PE"}"
-            
-            _currentSignal.value = com.example.data.model.AISignalEntity(
-                symbol = optionSymbol,
-                exchange = targetQuote.exchange,
-                side = "BUY",
-                actionType = signalType,
-                trend = if (ceScore >= 75) "BULLISH" else "BEARISH",
-                ltp = 120.0 + (Math.random() * 5),
-                changePercent = intensity,
-                entryZone = "115 - 125",
-                target1 = 140.0,
-                target2 = 160.0,
-                stopLoss = 90.0,
-                confidence = if (ceScore >= 75) ceScore else peScore,
-                riskReward = "1:2",
-                lotSize = targetQuote.lotSize,
-                timeframe = "5M",
-                timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-            )
-            _engineStatusMessage.value = "SIGNAL GENERATED"
+            val isCe = ceScore >= 75
+            val strikeInterval = when {
+                targetQuote.symbol.contains("BANKNIFTY", ignoreCase = true) -> 100
+                targetQuote.symbol.contains("SENSEX", ignoreCase = true) -> 100
+                targetQuote.symbol.contains("MIDCPNIFTY", ignoreCase = true) -> 25
+                else -> 50
+            }
+            val strikeOffset = if (isCe) strikeInterval else -strikeInterval
+            val roundedStrike = ((targetQuote.ltp / strikeInterval).roundToInt() * strikeInterval) + strikeOffset
+            val optType = if (isCe) "CE" else "PE"
+            val optionSymbol = "${targetQuote.symbol} $roundedStrike $optType"
+
+            // Get REAL tick from MarketDataStore for the option contract
+            val optionTick = com.example.data.model.MarketDataStore.getTick(optionSymbol)
+                ?: quotes.find { it.symbol.equals(optionSymbol, ignoreCase = true) }?.let {
+                    com.example.data.model.MarketDataState(
+                        source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                        symbol = it.symbol,
+                        token = "",
+                        exchange = it.exchange,
+                        ltp = it.ltp
+                    )
+                }
+
+            val realOptionLtp = optionTick?.ltp ?: 0.0
+
+            if (realOptionLtp > 0.0) {
+                val sl = (realOptionLtp * 0.75).roundToInt().toDouble()
+                val t1 = (realOptionLtp * 1.25).roundToInt().toDouble()
+                val t2 = (realOptionLtp * 1.50).roundToInt().toDouble()
+
+                _currentSignal.value = com.example.data.model.AISignalEntity(
+                    symbol = optionSymbol,
+                    exchange = targetQuote.exchange,
+                    side = "BUY",
+                    actionType = signalType,
+                    trend = if (isCe) "BULLISH" else "BEARISH",
+                    ltp = realOptionLtp,
+                    changePercent = intensity,
+                    entryZone = "${String.format(java.util.Locale.US, "%.1f", realOptionLtp * 0.98)} - ${String.format(java.util.Locale.US, "%.1f", realOptionLtp * 1.02)}",
+                    target1 = t1,
+                    target2 = t2,
+                    stopLoss = sl,
+                    confidence = if (isCe) ceScore else peScore,
+                    riskReward = "1:2",
+                    lotSize = targetQuote.lotSize,
+                    timeframe = "5M",
+                    timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                )
+                _engineStatusMessage.value = "SIGNAL GENERATED FROM REAL DATA"
+            } else {
+                // Do not generate fake/guessed signal if real option price is unavailable
+                _currentSignal.value = null
+                _engineStatusMessage.value = "WAITING FOR OPTION TICK"
+            }
         } else {
             _currentSignal.value = null
         }

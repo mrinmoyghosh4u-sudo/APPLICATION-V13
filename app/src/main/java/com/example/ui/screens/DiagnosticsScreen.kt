@@ -78,7 +78,7 @@ fun DiagnosticsScreen(
             Text("RECEIVED TICKS:", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             marketData.entries.take(10).forEach { (token, data) ->
-                val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(data.timestamp))
+                val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(data.receivedTimestamp))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -87,10 +87,10 @@ fun DiagnosticsScreen(
                         .padding(12.dp)
                 ) {
                     Text("Symbol: ${data.symbol}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("Token: $token", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Source: ${data.source} | Token: $token", color = Color.LightGray, fontSize = 12.sp)
                     Text("LTP: ${data.ltp}", color = Color(0xFF00C853), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text("Timestamp: $timeStr", color = Color.LightGray, fontSize = 12.sp)
-                    Text("Connection State: $connectionState", color = Color.LightGray, fontSize = 12.sp)
+                    Text("State: ${data.state} | Connection: $connectionState", color = Color.LightGray, fontSize = 12.sp)
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))

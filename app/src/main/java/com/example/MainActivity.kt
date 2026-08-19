@@ -465,19 +465,19 @@ class MainActivity : FragmentActivity() {
                             }
                             composable("orders") {
                                 LaunchedEffect(Unit) {
-                                    pagerState.scrollToPage(2)
+                                    pagerState.scrollToPage(3)
                                     navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                 }
                             }
                             composable("algo") {
                                 LaunchedEffect(Unit) {
-                                    pagerState.scrollToPage(3)
+                                    pagerState.scrollToPage(4)
                                     navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                 }
                             }
                             composable("profile") {
                                 LaunchedEffect(Unit) {
-                                    pagerState.scrollToPage(4)
+                                    pagerState.scrollToPage(5)
                                     navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                 }
                             }

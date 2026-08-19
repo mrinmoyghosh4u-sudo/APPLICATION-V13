@@ -178,7 +178,7 @@ class TradingRepository(
         val finalOrder = order.copy(
             orderId = realOrderId,
             brokerOrderId = realOrderId,
-            status = if (manager != null) "PENDING" else "EXECUTED"
+            status = "PENDING"
         )
         dao.insertOrder(finalOrder)
     }

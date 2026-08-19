@@ -6,6 +6,15 @@ import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
 
+/**
+ * Broker Manager for KING KHAN AI TRADER
+ * 
+ * Rules:
+ * - Market Data Providers: ANGEL ONE (Primary Live), m.STOCK (Live), NSE (Authorized Feed), YAHOO (Reference Only).
+ * - Dhan is STRICTLY FOR ORDER EXECUTION ONLY. Dhan NEVER provides market data.
+ * - ALL live orders route strictly through OrderManager -> DhanTradingService -> Dhan API.
+ * - Angel One NEVER receives live trading orders.
+ */
 class BrokerManager(
     private val sessionManager: SessionManager,
     val angelOneService: AngelOneBrokerService,
@@ -14,8 +23,14 @@ class BrokerManager(
 ) {
     val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService)
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
-    val mStockMarketDataService = MStockMarketDataService(sessionManager)
+    val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService)
     val tradeSmartMarketDataService = TradeSmartMarketDataService(sessionManager)
+
+    // Central Order Execution Manager (Dhan-only)
+    val orderManager = OrderManager(
+        dhanTradingService = dhanTradingService,
+        instrumentMasterService = instrumentMasterService
+    )
 
     val marketDataManager = MarketDataManager(
         angelMarketDataService = angelMarketDataService,
@@ -39,8 +54,8 @@ class BrokerManager(
         } else if (sessionManager.activeBroker == "Angel One") {
             angelOneService.getProfile()
         } else if (sessionManager.activeBroker == "m.Stock") {
-            Result.success(com.example.data.model.UserProfileEntity(
-                name = "", // Blank so repository keeps existing name
+            Result.success(UserProfileEntity(
+                name = "",
                 connectedBroker = "m.Stock",
                 isAngelConnected = false,
                 isDhanConnected = false
@@ -66,28 +81,30 @@ class BrokerManager(
         }
     }
 
+    /**
+     * Live Order Placement: FORCED to OrderManager -> DhanTradingService -> Dhan API
+     */
     suspend fun placeOrder(order: OrderEntity): Result<String> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.placeOrder(order)
+        val result = orderManager.executeOrder(order, isUserConfirmed = true)
+        return if (result.isSuccess) {
+            Result.success(result.getOrThrow().orderId)
         } else {
-            angelOneService.placeOrder(order)
+            Result.failure(result.exceptionOrNull() ?: Exception("Order Execution Failed"))
         }
     }
 
+    /**
+     * Live Order Modification: FORCED to OrderManager -> DhanTradingService -> Dhan API
+     */
     suspend fun modifyOrder(orderId: String, newPrice: Double, newQty: Int, orderType: String): Result<Boolean> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.modifyOrder(orderId, newPrice, newQty, orderType)
-        } else {
-            angelOneService.modifyOrder(orderId, newPrice, newQty, orderType)
-        }
+        return orderManager.modifyOrder(orderId, newPrice, newQty, orderType)
     }
 
+    /**
+     * Live Order Cancellation: FORCED to OrderManager -> DhanTradingService -> Dhan API
+     */
     suspend fun cancelOrder(orderId: String): Result<Boolean> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.cancelOrder(orderId)
-        } else {
-            angelOneService.cancelOrder(orderId)
-        }
+        return orderManager.cancelOrder(orderId)
     }
 
     suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> {

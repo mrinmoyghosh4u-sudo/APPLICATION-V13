@@ -1,8 +1,23 @@
 package com.example.util
 
+import com.example.data.network.InstrumentMasterService
+
 object InstrumentMapUtil {
+    @Volatile
+    private var instrumentMasterService: InstrumentMasterService? = null
+
+    fun setInstrumentMaster(service: InstrumentMasterService) {
+        instrumentMasterService = service
+    }
+
     fun getAngelTokenForSymbol(symbol: String, exchange: String = "NSE"): String {
-        return getAngelSymbolToken(symbol, exchange)
+        val master = instrumentMasterService
+        if (master != null && master.isLoaded) {
+            val resolved = master.resolveAngelToken(symbol, exchange)
+            if (!resolved.isNullOrBlank()) return resolved
+        }
+        val upper = symbol.uppercase().trim()
+        return if (upper.all { it.isDigit() }) upper else ""
     }
     
     fun getDhanTokenForSymbol(symbol: String, exchange: String = "NSE"): String {
@@ -10,14 +25,7 @@ object InstrumentMapUtil {
     }
     
     fun getAngelSymbolToken(symbol: String, exchange: String = "NSE"): String {
-        val upper = symbol.uppercase().trim()
-        return when (upper) {
-            "NIFTY", "NIFTY 50", "NIFTY50" -> "99926000"
-            "BANKNIFTY" -> "99926009"
-            "FINNIFTY" -> "99926037"
-            "MIDCPNIFTY" -> "99926014"
-            else -> if (upper.all { it.isDigit() }) upper else ""
-        }
+        return getAngelTokenForSymbol(symbol, exchange)
     }
     
     fun getDhanSecurityId(symbol: String, exchange: String = "NSE"): String {
@@ -31,3 +39,4 @@ object InstrumentMapUtil {
         }
     }
 }
+

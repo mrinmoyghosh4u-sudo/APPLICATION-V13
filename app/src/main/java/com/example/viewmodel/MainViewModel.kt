@@ -128,6 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        com.example.util.InstrumentMapUtil.setInstrumentMaster(instrumentMasterService)
         com.example.util.AlgoEngine.telegramService = telegramService
         viewModelScope.launch {
             repository.checkAndSeedInitialData()
@@ -453,15 +454,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun connectMStock(apiKey: String, clientId: String, passwordPin: String, totpToken: String) {
+    fun connectMStock(apiKey: String, clientId: String, passwordPin: String, accessToken: String) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
 
+            if (apiKey.isBlank() || clientId.isBlank()) {
+                _authErrorMessage.value = "m.Stock API Key and Client ID are required."
+                _isAuthInProgress.value = false
+                return@launch
+            }
+
             sessionManager.mstockApiKey = apiKey
             sessionManager.mstockClientId = clientId
             sessionManager.mstockPasswordPin = passwordPin
-            sessionManager.mstockAccessToken = totpToken.ifBlank { "mstock_token_${System.currentTimeMillis()}" }
+            sessionManager.mstockAccessToken = accessToken
             sessionManager.mstockTokenTimestamp = System.currentTimeMillis()
             sessionManager.activeBroker = "m.Stock"
             brokerManager.setActiveBroker("m.Stock")
@@ -478,7 +485,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient ID: <code>${clientId}</code>\nStatus: <b>Active Real Trading Session</b>"
                 )
             } else {
-                _authErrorMessage.value = "Failed to validate m.Stock connection. Please check API Key and Client ID."
+                _authErrorMessage.value = "Failed to validate m.Stock connection. Please check API Key, Client ID and Access Token."
             }
         }
     }

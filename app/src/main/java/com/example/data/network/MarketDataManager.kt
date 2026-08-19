@@ -62,16 +62,29 @@ class MarketDataManager(
             angelMarketDataService.connectionState.collectLatest { state ->
                 Log.d("MarketDataManager", "Angel One WebSocket State: $state")
                 when (state) {
-                    "CONNECTED", "SUBSCRIBED" -> {
+                    "LIVE" -> {
                         _activeProvider.value = "Angel One"
                         _connectionStatus.value = "LIVE"
                         _error.value = null
                         updateTimestamp()
                     }
-                    "CONNECTING" -> {
+                    "SUBSCRIBED", "SUBSCRIBING" -> {
+                        _activeProvider.value = "Angel One"
+                        _connectionStatus.value = "SUBSCRIBED"
+                        _error.value = null
+                    }
+                    "CONNECTED" -> {
+                        _activeProvider.value = "Angel One"
+                        _connectionStatus.value = "CONNECTED"
+                        _error.value = null
+                    }
+                    "CONNECTING", "RECONNECTING" -> {
                         if (_activeProvider.value == "Angel One") {
                             _connectionStatus.value = "CONNECTING"
                         }
+                    }
+                    "STALE" -> {
+                        _connectionStatus.value = "STALE"
                     }
                     "DISCONNECTED", "ERROR" -> {
                         // Angel One failed or disconnected -> Attempt failover to m.Stock if configured
@@ -112,7 +125,6 @@ class MarketDataManager(
         val angelResult = angelMarketDataService.getMarketQuotes(symbols)
         if (angelResult.isSuccess) {
             _activeProvider.value = "Angel One"
-            _connectionStatus.value = "LIVE"
             updateTimestamp()
             return angelResult
         }
@@ -124,7 +136,6 @@ class MarketDataManager(
             val mStockResult = mStockMarketDataService.getMarketQuotes(symbols)
             if (mStockResult.isSuccess) {
                 _activeProvider.value = "m.Stock"
-                _connectionStatus.value = "LIVE"
                 updateTimestamp()
                 return mStockResult
             }
@@ -135,7 +146,9 @@ class MarketDataManager(
         val yahooResult = YahooFinanceService.getMarketQuotes(symbols)
         if (yahooResult.isNotEmpty()) {
             _activeProvider.value = "Yahoo Finance (Delayed)"
-            _connectionStatus.value = "CLOSED" // Show closed because it's fallback
+            if (_connectionStatus.value != "LIVE") {
+                _connectionStatus.value = "CLOSED" // Show closed because it's fallback
+            }
             updateTimestamp()
             return Result.success(yahooResult)
         }

@@ -98,7 +98,7 @@ class AngelOneMarketDataService(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 _connectionState.value = "CONNECTED"
                 reconnectAttempt = 0
-                Log.d("AngelOneMarketDataService", "WebSocket Opened")
+                Log.d("SmartStream", "[WEBSOCKET_CONNECTED]")
                 
                 pingJob = scope.launch {
                     while (true) {
@@ -111,7 +111,9 @@ class AngelOneMarketDataService(
                     }
                 }
                 
-                resubscribeAll(webSocket)
+                if (instrumentMaster.isLoaded) {
+                    resubscribeAll(webSocket)
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -120,6 +122,7 @@ class AngelOneMarketDataService(
                     if (json.optBoolean("status", false)) {
                         _connectionState.value = "SUBSCRIBED"
                         isSubscribed = true
+                        Log.d("SmartStream", "[SUBSCRIPTION_RESPONSE] status=true")
                     }
                 } catch (e: Exception) {
                     Log.e("AngelOneMarketDataService", "Error parsing text message", e)
@@ -134,7 +137,7 @@ class AngelOneMarketDataService(
                 _connectionState.value = "DISCONNECTED"
                 isSubscribed = false
                 hasFirstTick = false
-                Log.d("AngelOneMarketDataService", "WebSocket Closed: $reason")
+                Log.d("SmartStream", "WebSocket Closed: $reason")
                 scheduleReconnect()
             }
 
@@ -142,7 +145,7 @@ class AngelOneMarketDataService(
                 _connectionState.value = "ERROR"
                 isSubscribed = false
                 hasFirstTick = false
-                Log.e("AngelOneMarketDataService", "WebSocket Failure: ${t.message}")
+                Log.e("SmartStream", "WebSocket Failure: ${t.message}")
                 scheduleReconnect()
             }
         })
@@ -164,7 +167,12 @@ class AngelOneMarketDataService(
     }
 
     private fun resubscribeAll(ws: WebSocket) {
-        // Register core indices
+        if (!instrumentMaster.isLoaded) {
+            Log.d("SmartStream", "Instrument Master not loaded yet. Delaying subscription until loaded.")
+            return
+        }
+
+        // Register core indices via Instrument Master lookup
         val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
         for (index in indices) {
             val inst = instrumentMaster.resolveIndexToken(index)
@@ -174,15 +182,21 @@ class AngelOneMarketDataService(
             }
         }
 
-        // Standard stock tokens
-        val defaultStocks = listOf("2885", "11536", "1594", "3045", "1333", "4963", "3499", "3492")
-        val nseTokens = activeSubscribedTokens.getOrPut(1) { ConcurrentHashMap.newKeySet() }
-        nseTokens.addAll(defaultStocks)
+        // Register default stocks via Instrument Master lookup
+        val watchlistStockSymbols = listOf("RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "TATAMOTORS", "TATASTEEL")
+        for (sym in watchlistStockSymbols) {
+            val token = instrumentMaster.resolveAngelToken(sym, "NSE")
+            if (!token.isNullOrBlank()) {
+                activeSubscribedTokens.getOrPut(1) { ConcurrentHashMap.newKeySet() }.add(token)
+            }
+        }
 
         if (activeSubscribedTokens.isNotEmpty()) {
             val tokenListJson = JSONArray()
+            var totalTokens = 0
             for ((exType, tokens) in activeSubscribedTokens) {
                 if (tokens.isNotEmpty()) {
+                    totalTokens += tokens.size
                     tokenListJson.put(JSONObject().apply {
                         put("exchangeType", exType)
                         put("tokens", JSONArray(tokens.toList()))
@@ -200,6 +214,7 @@ class AngelOneMarketDataService(
                 }
                 ws.send(req.toString())
                 _connectionState.value = "SUBSCRIBING"
+                Log.d("SmartStream", "[SUBSCRIPTION_SENT] count=$totalTokens")
             }
         }
     }
@@ -227,6 +242,7 @@ class AngelOneMarketDataService(
             })
         }
         ws.send(req.toString())
+        Log.d("SmartStream", "[SUBSCRIPTION_SENT] dynamic_tokens=${newTokens.size} exchangeType=$exchangeType")
     }
 
     private fun handleBinaryTick(bytes: ByteArray) {
@@ -238,10 +254,14 @@ class AngelOneMarketDataService(
             val subscriptionMode = buffer.get()
             val exchangeType = buffer.get().toInt()
             
+            if (exchangeType !in 1..13) return
+
             val tokenBytes = ByteArray(25)
             buffer.get(tokenBytes)
             val token = String(tokenBytes, Charsets.US_ASCII).trimEnd('\u0000', ' ').trim()
             
+            if (token.isBlank()) return
+
             val sequenceNumber = buffer.getLong()
             val exchangeTimestamp = buffer.getLong()
             val ltpInt = buffer.getLong() // 8-byte integer for LTP
@@ -250,6 +270,7 @@ class AngelOneMarketDataService(
             
             val divisor = if (exchangeType == 9 || exchangeType == 13) 10000000.0 else 100.0
             val ltp = ltpInt / divisor
+            if (ltp <= 0.0) return
 
             var open = 0.0
             var high = 0.0
@@ -289,26 +310,31 @@ class AngelOneMarketDataService(
             if (!hasFirstTick || _connectionState.value != "LIVE") {
                 hasFirstTick = true
                 _connectionState.value = "LIVE"
+                Log.d("SmartStream", "[LIVE]")
             }
             lastTickTimestamp = System.currentTimeMillis()
             lastTickSymbol = symbol
             lastTickLtp = ltp
             
-            // Diagnostic logging of parsed LTP only (no tokens or credentials)
-            Log.d("SmartStreamParser", "LTP TICK: exchangeType=$exchangeType symbol=$symbol ltp=$ltp (raw=$ltpInt)")
+            Log.d("SmartStream", "[REAL_TICK_RECEIVED] symbol=$symbol exch=$exchange ltp=$ltp ts=$exchangeTimestamp")
             
             MarketDataStore.updateTick(
+                source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
                 symbol = symbol,
                 token = token,
                 exchange = exchange,
                 ltp = ltp,
-                timestamp = if (exchangeTimestamp > 0) exchangeTimestamp else System.currentTimeMillis(),
                 open = open,
                 high = high,
                 low = low,
                 close = close,
-                volume = volume
+                volume = volume,
+                exchangeTimestamp = if (exchangeTimestamp > 0) exchangeTimestamp else System.currentTimeMillis(),
+                receivedTimestamp = System.currentTimeMillis(),
+                state = "LIVE",
+                sequenceNumber = sequenceNumber
             )
+            Log.d("SmartStream", "[MARKET_DATA_STORE_UPDATED] symbol=$symbol ltp=$ltp")
             
         } catch (e: Exception) {
             Log.e("SmartStreamParser", "Error parsing binary tick: ${e.message}")
