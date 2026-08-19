@@ -65,7 +65,7 @@ class TradingRepository(
 
                 dao.insertOrUpdateProfile(
                     current.copy(
-                        name = prof.name,
+                        name = if (prof.name.isNotBlank()) prof.name else current.name,
                         email = if (prof.email.isNotBlank()) prof.email else current.email,
                         phone = if (prof.phone.isNotBlank()) prof.phone else current.phone,
                         connectedBroker = prof.connectedBroker,

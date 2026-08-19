@@ -39,7 +39,7 @@ class DhanBrokerService(
 
                 UserProfileEntity(
                     id = 1,
-                    name = clientId,
+                    name = "",
                     email = "",
                     availableMargin = avail,
                     accountBalance = avail,

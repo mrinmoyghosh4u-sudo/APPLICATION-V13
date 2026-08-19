@@ -40,7 +40,7 @@ class BrokerManager(
             angelOneService.getProfile()
         } else if (sessionManager.activeBroker == "m.Stock") {
             Result.success(com.example.data.model.UserProfileEntity(
-                name = "m.Stock User",
+                name = "", // Blank so repository keeps existing name
                 connectedBroker = "m.Stock",
                 isAngelConnected = false,
                 isDhanConnected = false

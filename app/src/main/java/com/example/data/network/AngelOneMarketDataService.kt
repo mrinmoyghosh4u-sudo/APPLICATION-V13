@@ -159,7 +159,7 @@ class AngelOneMarketDataService(
         if (!instrumentMaster.isLoaded) return
         
         val tokensByExchange = mutableMapOf<Int, MutableList<String>>()
-        val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY")
+        val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
         
         for (index in indices) {
             val inst = instrumentMaster.resolveIndexToken(index)

@@ -2,9 +2,6 @@ package com.example.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkCardBorder
@@ -41,31 +43,53 @@ fun PullToRefreshLayout(
         label = "pullToRefreshOffset"
     )
 
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                return if (available.y < 0 && offsetY > 0) {
+                    val newOffset = (offsetY + available.y).coerceAtLeast(0f)
+                    val consumed = offsetY - newOffset
+                    offsetY = newOffset
+                    Offset(0f, consumed)
+                } else {
+                    Offset.Zero
+                }
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (available.y > 0 && !isRefreshing && !refreshingInternal) {
+                    offsetY = (offsetY + available.y * 0.4f).coerceAtMost(220f)
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (offsetY >= 120f && !isRefreshing && !refreshingInternal) {
+                    refreshingInternal = true
+                    onRefresh()
+                    coroutineScope.launch {
+                        delay(1200)
+                        refreshingInternal = false
+                        offsetY = 0f
+                    }
+                } else if (!isRefreshing && !refreshingInternal) {
+                    offsetY = 0f
+                }
+                return super.onPreFling(available)
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .draggable(
-                orientation = Orientation.Vertical,
-                state = rememberDraggableState { delta ->
-                    if (!isRefreshing && !refreshingInternal) {
-                        val newOffset = offsetY + (delta * 0.4f)
-                        offsetY = newOffset.coerceIn(0f, 220f)
-                    }
-                },
-                onDragStopped = {
-                    if (offsetY >= 120f && !isRefreshing && !refreshingInternal) {
-                        refreshingInternal = true
-                        onRefresh()
-                        coroutineScope.launch {
-                            delay(1200)
-                            refreshingInternal = false
-                            offsetY = 0f
-                        }
-                    } else {
-                        offsetY = 0f
-                    }
-                }
-            )
+            .nestedScroll(nestedScrollConnection)
     ) {
         content()
 

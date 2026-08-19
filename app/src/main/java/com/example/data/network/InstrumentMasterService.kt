@@ -95,8 +95,22 @@ class InstrumentMasterService(
             if (token.isNotBlank()) {
                 val inst = Instrument(token, symbol, name, expiry, strike, lotsize, instType, exch, tickSize)
                 instrumentMap[token] = inst
-                if (exch == "NSE" && (instType == "" || instType == "AMXIDX") && (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY")) {
-                    indexSymbolMap[name] = inst
+                if ((exch == "NSE" || exch == "BSE" || exch == "MCX") && (instType == "" || instType == "AMXIDX" || instType.contains("FUT") || instType.contains("IDX")) && (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY" || name == "SENSEX" || name == "BANKEX" || symbol.startsWith("CRUDEOIL"))) {
+                    // Prefer AMXIDX for NSE/BSE indices
+                    val isIndex = instType == "AMXIDX" || (exch == "BSE" && instType == "") || (exch == "MCX" && instType.contains("FUT"))
+                    
+                    if (isIndex || indexSymbolMap[name] == null) {
+                        if (name == "NIFTY" || name == "BANKNIFTY" || name == "FINNIFTY" || name == "MIDCPNIFTY" || name == "SENSEX" || name == "BANKEX") {
+                           indexSymbolMap[name] = inst
+                        }
+                    }
+                    if (symbol.startsWith("CRUDEOIL")) {
+                        if (symbol.contains("CRUDEOILM")) {
+                            if (indexSymbolMap["CRUDEOIL M"] == null) indexSymbolMap["CRUDEOIL M"] = inst
+                        } else if (symbol.startsWith("CRUDEOIL") && !symbol.contains("M")) {
+                            if (indexSymbolMap["CRUDEOIL"] == null) indexSymbolMap["CRUDEOIL"] = inst
+                        }
+                    }
                 }
             }
         }
@@ -206,7 +220,11 @@ class InstrumentMasterService(
             "NIFTY 50" to "NIFTY",
             "BANKNIFTY" to "BANKNIFTY",
             "FINNIFTY" to "FINNIFTY",
-            "MIDCPNIFTY" to "MIDCPNIFTY"
+            "MIDCPNIFTY" to "MIDCPNIFTY",
+            "SENSEX" to "SENSEX",
+            "BANKEX" to "BANKEX",
+            "CRUDEOIL" to "CRUDEOIL",
+            "CRUDEOIL M" to "CRUDEOIL M"
         )
         val symbol = nameToSymbol[indexName] ?: indexName
         return indexSymbolMap[symbol]

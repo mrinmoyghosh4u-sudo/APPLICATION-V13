@@ -331,7 +331,8 @@ class MainActivity : FragmentActivity() {
                                                 coroutineScope.launch { pagerState.animateScrollToPage(5) }
                                             },
                                             onNavigateToIndexDetails = { exchange, indexName ->
-                                                navController.navigate("index_details/$exchange/$indexName")
+                                                val encodedIndexName = android.net.Uri.encode(indexName)
+                                                navController.navigate("index_details/$exchange/$encodedIndexName")
                                             },
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onOpenOrderDialog = { symbol, side, price, lot ->
