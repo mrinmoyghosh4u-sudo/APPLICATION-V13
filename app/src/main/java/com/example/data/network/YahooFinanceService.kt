@@ -119,31 +119,6 @@ object YahooFinanceService {
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Error fetching Yahoo reference quote for $symbol: ${e.localizedMessage}")
-                    // Provide fallback reference data
-                    val defaultLtp = when (symbol) {
-                        "NIFTY 50" -> 24450.0
-                        "BANKNIFTY" -> 52300.0
-                        "FINNIFTY" -> 23800.0
-                        "MIDCPNIFTY" -> 12800.0
-                        "SENSEX" -> 80200.0
-                        "RELIANCE" -> 2980.0
-                        "TCS" -> 4250.0
-                        "INFY" -> 1820.0
-                        "SBIN" -> 840.0
-                        "HDFCBANK" -> 1660.0
-                        "ICICIBANK" -> 1210.0
-                        else -> 1000.0
-                    }
-                    MarketDataStore.updateTick(
-                        source = MarketDataSourceNames.YAHOO,
-                        symbol = symbol,
-                        token = "",
-                        exchange = if (symbol.contains("SENSEX")) "BSE" else "NSE",
-                        ltp = defaultLtp,
-                        close = defaultLtp * 0.995,
-                        receivedTimestamp = System.currentTimeMillis(),
-                        state = "REFERENCE"
-                    )
                 }
             }
         }

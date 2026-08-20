@@ -66,11 +66,9 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.AlgoStrategy
 
 import com.example.ui.components.CrownLogo
-
+import com.example.ui.components.PullToRefreshLayout
 import com.example.ui.theme.*
-
 import com.example.util.AlgoEngine
-
 import com.example.viewmodel.MainViewModel
 
 
@@ -104,15 +102,18 @@ enum class AlgoScreenState {
 fun AlgoScreen(
     viewModel: MainViewModel,
     onOpenNotificationCenter: () -> Unit,
-    onNavigateToAISignals: () -> Unit = {}
+    onNavigateToAISignals: () -> Unit = {},
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {}
 ) {
     var currentState by remember { mutableStateOf(AlgoScreenState.DASHBOARD) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-    ) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkBackground)
+        ) {
         // Top Navigation Bar
         Row(
             modifier = Modifier
@@ -182,6 +183,7 @@ fun AlgoScreen(
             AlgoScreenState.TRADE_HISTORY -> TradeHistory()
         }
     }
+}
 }
 
 @Composable

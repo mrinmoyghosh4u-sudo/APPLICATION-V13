@@ -73,7 +73,6 @@ class MStockMarketDataService(
 
     private var hasFirstTick = false
     private var hasSubscription = false
-    private var fallbackTickerJob: Job? = null
 
     init {
         scope.launch {
@@ -119,7 +118,6 @@ class MStockMarketDataService(
      */
     fun connect() {
         hasSubscription = true
-        startFallbackTicker()
 
         if (!isConfigured()) {
             Log.d(TAG, "m.Stock credentials not configured. Connection skipped.")
@@ -147,67 +145,7 @@ class MStockMarketDataService(
         webSocket = client.newWebSocket(request, createWebSocketListener())
     }
 
-    private fun startFallbackTicker() {
-        if (fallbackTickerJob?.isActive == true) return
-        fallbackTickerJob = scope.launch {
-            val defaultPrices = mutableMapOf(
-                "NIFTY 50" to 24450.0,
-                "BANKNIFTY" to 52300.0,
-                "FINNIFTY" to 23800.0,
-                "MIDCPNIFTY" to 12800.0,
-                "SENSEX" to 80200.0,
-                "RELIANCE" to 2980.0,
-                "TCS" to 4250.0,
-                "INFY" to 1820.0,
-                "SBIN" to 840.0,
-                "HDFCBANK" to 1660.0,
-                "ICICIBANK" to 1210.0,
-                "TATAMOTORS" to 1080.0,
-                "TATASTEEL" to 165.0,
-                "CRUDEOIL" to 6350.0
-            )
 
-            while (isActive) {
-                delay(800)
-                if (isConfigured()) {
-                    hasSubscription = true
-                    hasFirstTick = true
-                    val now = System.currentTimeMillis()
-                    lastTickReceivedTime = now
-
-                    _connectionState.value = "LIVE"
-                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
-
-                    defaultPrices.keys.forEach { sym ->
-                        val currentPrice = defaultPrices[sym] ?: 1000.0
-                        val noise = (Math.random() - 0.5) * (currentPrice * 0.0008)
-                        val newPrice = Math.round((currentPrice + noise) * 100.0) / 100.0
-                        defaultPrices[sym] = newPrice
-
-                        val token = instrumentMasterService?.resolveIndexToken(sym)?.token 
-                            ?: instrumentMasterService?.resolveAngelToken(sym, "NSE") 
-                            ?: sym
-
-                        MarketDataStore.updateTick(
-                            source = MarketDataSourceNames.MSTOCK,
-                            symbol = sym,
-                            token = token,
-                            exchange = if (sym == "SENSEX") "BSE" else "NSE",
-                            ltp = newPrice,
-                            open = currentPrice * 0.998,
-                            high = currentPrice * 1.004,
-                            low = currentPrice * 0.995,
-                            close = currentPrice,
-                            volume = 1500000L,
-                            exchangeTimestamp = now,
-                            receivedTimestamp = now,
-                            state = "LIVE"
-                        )
-                    }
-                }
-            }
-        }
-    }
 
     private fun createWebSocketListener(): WebSocketListener {
         return object : WebSocketListener() {

@@ -540,6 +540,8 @@ private fun AccountSummarySection(
     userProfile: UserProfileEntity,
     orders: List<OrderEntity>
 ) {
+    val isDhanConnected = userProfile.isDhanConnected
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -549,55 +551,75 @@ private fun AccountSummarySection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("ACCOUNT SUMMARY", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                Text("ACCOUNT SUMMARY (DHAN)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
             Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Row 1: Available Margin & Account Balance
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SummaryMiniCard(
-                title = "Available Margin",
-                value = String.format("₹%,.2f", if (userProfile.availableMargin > 0) userProfile.availableMargin else 50000.0),
-                icon = Icons.Default.AccountBalanceWallet,
-                modifier = Modifier.weight(1f)
-            )
-            SummaryMiniCard(
-                title = "Account Balance",
-                value = String.format("₹%,.2f", if (userProfile.accountBalance > 0) userProfile.accountBalance else 125000.0),
-                icon = Icons.Default.Savings,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        if (!isDhanConnected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF14171C), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFF2A2E35), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Connect Dhan to view account details",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextGray
+                )
+            }
+        } else {
+            // Row 1: Available Margin & Account Balance
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SummaryMiniCard(
+                    title = "Available Margin",
+                    value = String.format("₹%,.2f", userProfile.availableMargin),
+                    icon = Icons.Default.AccountBalanceWallet,
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryMiniCard(
+                    title = "Account Balance",
+                    value = String.format("₹%,.2f", userProfile.accountBalance),
+                    icon = Icons.Default.Savings,
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // Row 2: Today's P&L & Unrealized P&L
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SummaryMiniCard(
-                title = "Today's P&L",
-                value = "+₹2,350.75",
-                subText = "(+1.92%)",
-                isPositive = true,
-                icon = Icons.Default.ShowChart,
-                modifier = Modifier.weight(1f)
-            )
-            SummaryMiniCard(
-                title = "Unrealized P&L",
-                value = "+₹1,150.25",
-                subText = "(+0.94%)",
-                isPositive = true,
-                icon = Icons.Default.PieChart,
-                modifier = Modifier.weight(1f)
-            )
+            // Row 2: Today's P&L & Unrealized P&L
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val todayText = if (userProfile.todaysPnl >= 0) "+₹%,.2f".format(userProfile.todaysPnl) else "-₹%,.2f".format(-userProfile.todaysPnl)
+                val unrealizedText = if (userProfile.unrealizedPnl >= 0) "+₹%,.2f".format(userProfile.unrealizedPnl) else "-₹%,.2f".format(-userProfile.unrealizedPnl)
+                SummaryMiniCard(
+                    title = "Today's P&L",
+                    value = todayText,
+                    subText = if (userProfile.todaysPnlPercent != 0.0) "(%.2f%%)".format(userProfile.todaysPnlPercent) else "",
+                    isPositive = userProfile.todaysPnl >= 0,
+                    icon = Icons.Default.ShowChart,
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryMiniCard(
+                    title = "Unrealized P&L",
+                    value = unrealizedText,
+                    subText = "",
+                    isPositive = userProfile.unrealizedPnl >= 0,
+                    icon = Icons.Default.PieChart,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))

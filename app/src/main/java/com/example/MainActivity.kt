@@ -425,7 +425,9 @@ class MainActivity : FragmentActivity() {
                                         "algo" -> AlgoScreen(
                                             viewModel = viewModel,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
-                                            onNavigateToAISignals = { navController.navigate("ai_signals") }
+                                            onNavigateToAISignals = { navController.navigate("ai_signals") },
+                                            isRefreshing = isRefreshing,
+                                            onRefresh = { viewModel.refreshBrokerData() }
                                         )
                                         "profile" -> {
                                             val brokerStatuses by viewModel.brokerStatuses.collectAsStateWithLifecycle()
