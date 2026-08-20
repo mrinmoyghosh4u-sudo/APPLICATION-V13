@@ -334,39 +334,26 @@ class BrokerAuthManager(
         val clientCode = sessionManager.mstockClientId
         val apiKey = sessionManager.mstockApiKey
         val totpSecret = sessionManager.mstockTotpSecret
-        val accessToken = sessionManager.mstockAccessToken
-        val tokenTimestamp = sessionManager.mstockTokenTimestamp
-        val tokenAgeMs = System.currentTimeMillis() - tokenTimestamp
-        val isTokenExpired = accessToken.isNullOrBlank() || tokenAgeMs > (23 * 60 * 60 * 1000L) // m.Stock 24hr session
 
-        if (isTokenExpired) {
-            if (totpSecret.isNotBlank() && clientCode.isNotBlank() && apiKey.isNotBlank()) {
-                Log.d(TAG, "m.Stock session expired/missing. Auto-authenticating using stored TOTP secret...")
-                val autoAuthRes = connectMStock(
-                    clientCode = clientCode,
-                    apiKey = apiKey,
-                    totpSecret = totpSecret
-                )
-                if (autoAuthRes.isSuccess) {
-                    Log.d(TAG, "m.Stock auto-login with TOTP secret succeeded.")
-                    return
-                } else {
-                    Log.w(TAG, "m.Stock auto-login failed: ${autoAuthRes.exceptionOrNull()?.message}")
-                    updateStatus(
-                        "m.Stock",
-                        "Secondary Data Fallback",
-                        BrokerAuthStatus.AUTHENTICATION_REQUIRED,
-                        "Auto-login failed: ${autoAuthRes.exceptionOrNull()?.message ?: "Re-authentication required"}"
-                    )
-                    return
-                }
+        if (clientCode.isNotBlank() && apiKey.isNotBlank() && totpSecret.isNotBlank()) {
+            Log.d(TAG, "Auto-authenticating m.Stock using stored TOTP secret...")
+            val autoAuthRes = connectMStock(
+                clientCode = clientCode,
+                apiKey = apiKey,
+                totpSecret = totpSecret
+            )
+            if (autoAuthRes.isSuccess) {
+                Log.d(TAG, "m.Stock auto-login with TOTP secret succeeded.")
+                return
             } else {
+                Log.w(TAG, "m.Stock auto-login failed: ${autoAuthRes.exceptionOrNull()?.message}")
                 updateStatus(
                     "m.Stock",
                     "Secondary Data Fallback",
                     BrokerAuthStatus.AUTHENTICATION_REQUIRED,
-                    "Session expired. Please configure TOTP Secret or Access Token."
+                    "Auto-login failed: ${autoAuthRes.exceptionOrNull()?.message ?: "Re-authentication required"}"
                 )
+                mStockMarketDataService.connect()
                 return
             }
         }

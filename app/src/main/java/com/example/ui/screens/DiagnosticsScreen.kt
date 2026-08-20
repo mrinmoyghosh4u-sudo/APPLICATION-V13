@@ -70,6 +70,15 @@ fun DiagnosticsScreen(
 
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        viewModel.brokerManager.mStockMarketDataService.connect()
+        if (viewModel.sessionManager.isMStockConfigured()) {
+            scope.launch {
+                viewModel.brokerAuthManager.reconnectBroker("m.Stock")
+            }
+        }
+    }
+
     com.example.ui.components.PullToRefreshLayout(
         isRefreshing = isRefreshing,
         onRefresh = { viewModel.refreshMarketData() }
