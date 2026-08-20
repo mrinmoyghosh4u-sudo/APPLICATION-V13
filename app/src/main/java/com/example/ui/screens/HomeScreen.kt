@@ -324,7 +324,12 @@ private fun IndexCardItem(
     }
     val liveItem = itemFlow?.collectAsStateWithLifecycle(initialValue = null)?.value
 
-    val indexItem = liveItem ?: fallbackWatchlist.find {
+    var cachedItem by remember(indexName) { mutableStateOf<WatchlistItem?>(null) }
+    if (liveItem != null) {
+        cachedItem = liveItem
+    }
+
+    val indexItem = liveItem ?: cachedItem ?: fallbackWatchlist.find {
         it.symbol.equals(indexName, ignoreCase = true) ||
         (indexName == "MIDCPNIFTY" && it.symbol.contains("MID", ignoreCase = true))
     }
@@ -335,9 +340,6 @@ private fun IndexCardItem(
     val isPositive = indexItem?.isPositive ?: true
     val color = if (isPositive) ProfitGreen else LossRed
     val hasData = ltp > 0.0
-
-    val lastUpdatedState = viewModel?.marketDataLastUpdated?.collectAsStateWithLifecycle()
-    val marketDataLastUpdated = lastUpdatedState?.value ?: ""
 
     Surface(
         modifier = Modifier
@@ -402,16 +404,6 @@ private fun IndexCardItem(
                     color = if (isMarketOpen) ProfitGreen else Color(0xFFFFB300),
                     fontWeight = FontWeight.Bold
                 )
-                if (marketDataLastUpdated.isNotBlank() && marketDataLastUpdated != "Not Updated") {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = marketDataLastUpdated,
-                        fontSize = 8.sp,
-                        color = TextMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             } else {
                 Text(
                     text = "DISCONNECTED",

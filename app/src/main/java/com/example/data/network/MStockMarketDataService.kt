@@ -163,12 +163,10 @@ class MStockMarketDataService(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                lastTickReceivedTime = System.currentTimeMillis()
                 parseTextMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                lastTickReceivedTime = System.currentTimeMillis()
                 parseBinaryPacket(bytes.toByteArray())
             }
 
@@ -198,8 +196,10 @@ class MStockMarketDataService(
 
             when (type.lowercase()) {
                 "auth", "login", "success", "ok" -> {
-                    _connectionState.value = "SUBSCRIBED"
+                    _connectionState.value = "AUTHENTICATED"
+                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
                     Log.d(TAG, "[MSTOCK_AUTH_SUCCESS]")
+                    resubscribeAll()
                 }
                 "tick", "quote", "ltp" -> {
                     val token = json.optString("token", json.optString("scripCode", ""))
@@ -217,6 +217,7 @@ class MStockMarketDataService(
 
                     if (ltp > 0.0) {
                         hasFirstTick = true
+                        lastTickReceivedTime = System.currentTimeMillis()
                         _connectionState.value = "LIVE"
                         MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
 
@@ -437,9 +438,13 @@ class MStockMarketDataService(
                 put("exchange", exchange)
                 put("tokens", JSONArray(validTokens))
             }
+            _connectionState.value = "SUBSCRIBING"
             webSocket?.send(subMsg.toString())
             hasSubscription = true
-            _connectionState.value = "SUBSCRIBING"
+            _connectionState.value = "SUBSCRIBED"
+            if (!hasFirstTick) {
+                _connectionState.value = "WAITING_FOR_TICK"
+            }
             Log.d(TAG, "[MSTOCK_SUBSCRIBED] tokens=$validTokens exch=$exchange mode=$mode")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send m.Stock subscribe frame", e)
