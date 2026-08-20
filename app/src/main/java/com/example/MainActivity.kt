@@ -67,6 +67,7 @@ class MainActivity : FragmentActivity() {
                 val marketDataSource by viewModel.marketDataSource.collectAsStateWithLifecycle()
                 val marketDataLastUpdated by viewModel.marketDataLastUpdated.collectAsStateWithLifecycle()
                 val apiError by viewModel.apiError.collectAsStateWithLifecycle()
+                val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
                 val telegramBotToken by viewModel.telegramBotToken.collectAsStateWithLifecycle()
                 val telegramChatId by viewModel.telegramChatId.collectAsStateWithLifecycle()
@@ -360,11 +361,9 @@ class MainActivity : FragmentActivity() {
                                                     snackbarHostState.showSnackbar("Added $symbol ($exchange) to Watchlist")
                                                 }
                                             },
+                                            isRefreshing = isRefreshing,
                                             onRefresh = {
                                                 viewModel.refreshMarketData()
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar("Refreshing market quotes...")
-                                                }
                                             }
                                         )
                                         "ai_signals" -> AISignalsScreen(
@@ -420,6 +419,7 @@ class MainActivity : FragmentActivity() {
                                                     snackbarHostState.showSnackbar("Stop Loss & Target updated for $id")
                                                 }
                                             },
+                                            isRefreshing = isRefreshing,
                                             onRefresh = { viewModel.refreshBrokerData() }
                                         )
                                         "algo" -> AlgoScreen(
@@ -455,6 +455,7 @@ class MainActivity : FragmentActivity() {
                                                         popUpTo("main") { inclusive = true }
                                                     }
                                                 },
+                                                isRefreshing = isRefreshing,
                                                 onRefresh = { viewModel.refreshBrokerData() }
                                             )
                                         }
@@ -514,6 +515,7 @@ class MainActivity : FragmentActivity() {
                                 PortfolioScreen(
                                     holdings = holdings,
                                     userProfile = userProfile,
+                                    isRefreshing = isRefreshing,
                                     onRefresh = { viewModel.refreshBrokerData() },
                                     onNavigateToPositions = {
                                         coroutineScope.launch { pagerState.animateScrollToPage(3) }

@@ -96,7 +96,10 @@ fun HomeScreen(
     val detailedStatus = remember(selectedExchange) { MarketStatusUtil.getDetailedMarketStatus(selectedExchange) }
     val isMarketOpen = detailedStatus.isOpen
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    val isRefreshingState = viewModel?.isRefreshing?.collectAsStateWithLifecycle()
+    val isRefreshing = isRefreshingState?.value ?: false
+
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

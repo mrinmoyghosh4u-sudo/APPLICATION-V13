@@ -70,7 +70,9 @@ fun IndexDetailsScreen(
         viewModel.setSelectedOptionIndex(indexName)
     }
 
-    PullToRefreshLayout(onRefresh = { viewModel.refreshMarketData() }) {
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = { viewModel.refreshMarketData() }) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -521,16 +523,12 @@ fun OptionChainTabContent(
                         fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = { viewModel.setSelectedOptionIndex(indexName) },
-                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryGold),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("RETRY", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Pull down from top to refresh",
+                        fontSize = 12.sp,
+                        color = TextGray
+                    )
                 }
             }
         } else {

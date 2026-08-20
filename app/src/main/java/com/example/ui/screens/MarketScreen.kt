@@ -54,6 +54,7 @@ fun MarketScreen(
     onToggleFavorite: (symbol: String, currentStatus: Boolean) -> Unit = { _, _ -> },
     onAddRecentSearch: (query: String) -> Unit = {},
     onClearRecentSearches: () -> Unit = {},
+    isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -201,7 +202,7 @@ fun MarketScreen(
     val isBrokerConnected = (userProfile.isAngelConnected || userProfile.isDhanConnected) && userProfile.connectedBroker.isNotBlank()
     val activeBrokerName = if (isBrokerConnected) userProfile.connectedBroker else "Broker API"
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -421,17 +422,6 @@ fun MarketScreen(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (marketStatus.isOpen) ProfitGreen else SecondaryGold
-                        )
-                    }
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = SecondaryGold,
-                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }

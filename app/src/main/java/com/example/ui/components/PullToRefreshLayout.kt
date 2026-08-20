@@ -36,14 +36,38 @@ fun PullToRefreshLayout(
     var refreshingInternal by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    val pullProgress = (offsetY / 180f).coerceIn(0f, 1f)
+    LaunchedEffect(isRefreshing) {
+        if (!isRefreshing) {
+            refreshingInternal = false
+            offsetY = 0f
+        }
+    }
+
+    val pullProgress = (offsetY / 140f).coerceIn(0f, 1f)
+    val isBusy = isRefreshing || refreshingInternal
+
     val animatedOffsetY by animateFloatAsState(
-        targetValue = if (isRefreshing || refreshingInternal) 100f else offsetY,
+        targetValue = if (isBusy) 64f else offsetY,
         animationSpec = tween(durationMillis = 200),
         label = "pullToRefreshOffset"
     )
 
-    val nestedScrollConnection = remember {
+    fun triggerRefreshIfThreshold() {
+        if (offsetY >= 100f && !isBusy) {
+            refreshingInternal = true
+            offsetY = 100f
+            onRefresh()
+            coroutineScope.launch {
+                delay(1200)
+                refreshingInternal = false
+                offsetY = 0f
+            }
+        } else if (!isBusy) {
+            offsetY = 0f
+        }
+    }
+
+    val nestedScrollConnection = remember(isBusy) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 return if (available.y < 0 && offsetY > 0) {
@@ -61,8 +85,8 @@ fun PullToRefreshLayout(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                return if (available.y > 0 && !isRefreshing && !refreshingInternal) {
-                    offsetY = (offsetY + available.y * 0.4f).coerceAtMost(220f)
+                return if (available.y > 0 && !isBusy) {
+                    offsetY = (offsetY + available.y * 0.4f).coerceAtMost(180f)
                     Offset(0f, available.y)
                 } else {
                     Offset.Zero
@@ -70,18 +94,13 @@ fun PullToRefreshLayout(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (offsetY >= 120f && !isRefreshing && !refreshingInternal) {
-                    refreshingInternal = true
-                    onRefresh()
-                    coroutineScope.launch {
-                        delay(1200)
-                        refreshingInternal = false
-                        offsetY = 0f
-                    }
-                } else if (!isRefreshing && !refreshingInternal) {
-                    offsetY = 0f
-                }
+                triggerRefreshIfThreshold()
                 return super.onPreFling(available)
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                triggerRefreshIfThreshold()
+                return super.onPostFling(consumed, available)
             }
         }
     }
@@ -93,7 +112,7 @@ fun PullToRefreshLayout(
     ) {
         content()
 
-        if (animatedOffsetY > 0f || isRefreshing || refreshingInternal) {
+        if (animatedOffsetY > 0f || isBusy) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -113,7 +132,7 @@ fun PullToRefreshLayout(
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isRefreshing || refreshingInternal) {
+                        if (isBusy) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(22.dp),
                                 color = PrimaryGold,

@@ -35,6 +35,7 @@ fun AISignalsScreen(
     signals: List<AISignalEntity>,
     onOpenNotificationCenter: () -> Unit = {},
     onExecuteSignal: (AISignalEntity) -> Unit,
+    isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
     var selectedFilter by remember { mutableStateOf("ALL") }
@@ -46,7 +47,7 @@ fun AISignalsScreen(
 
     val isAnyMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
 
         // Filter Signals
         val filteredSignals = remember(signals, selectedFilter) {
@@ -121,16 +122,6 @@ fun AISignalsScreen(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Live Broker - $activeBrokerName", fontSize = 9.sp, color = PrimaryGold, fontWeight = FontWeight.Bold)
                         }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .border(1.dp, PrimaryGold.copy(alpha=0.5f), RoundedCornerShape(4.dp))
-                            .clickable { onRefresh() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Sync, contentDescription = "Refresh", tint = PrimaryGold, modifier = Modifier.size(16.dp))
                     }
                 }
             }

@@ -49,6 +49,7 @@ fun ProfileScreen(
     onNavigateToDiagnostics: () -> Unit = {},
     onOpenNotificationCenter: () -> Unit = {},
     onLogout: () -> Unit,
+    isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
     var showAccountOverviewDialog by remember { mutableStateOf(false) }
@@ -142,7 +143,7 @@ fun ProfileScreen(
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
     }
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -42,6 +42,7 @@ fun PortfolioScreen(
     userProfile: UserProfileEntity,
     onNavigateToPositions: () -> Unit,
     onNavigateToOrders: () -> Unit,
+    isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
     val totalVal = holdings.sumOf { it.currentValue }
@@ -52,7 +53,7 @@ fun PortfolioScreen(
 
     var activeTab by remember { mutableStateOf("Holdings (${holdings.size})") }
 
-    com.example.ui.components.PullToRefreshLayout(onRefresh = onRefresh) {
+    com.example.ui.components.PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
         modifier = Modifier
             .fillMaxSize()

@@ -93,19 +93,7 @@ fun MarketDataStatusIndicator(
                     }
                 }
                 
-                if (isLive && onRefresh != null) {
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh Feed",
-                            tint = SecondaryGold,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                } else if (!isLive && onReconnect != null) {
+                if (!isLive && onReconnect != null) {
                     Surface(
                         onClick = onReconnect,
                         color = LossRed.copy(alpha = 0.2f),

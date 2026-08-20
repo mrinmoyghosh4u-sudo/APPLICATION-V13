@@ -42,6 +42,7 @@ fun OptionChainScreen(
     onOpenNotificationCenter: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    isRefreshing: Boolean = false,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
 ) {
     val currentIndex = if (selectedOptionIndex.isEmpty()) "NIFTY 50" else selectedOptionIndex
@@ -52,7 +53,7 @@ fun OptionChainScreen(
         }
     }
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

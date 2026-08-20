@@ -49,6 +49,7 @@ fun OrdersScreen(
     onExitPosition: ((orderId: String, exitPrice: Double, realizedPnl: Double) -> Unit)? = null,
     onPartialExitPosition: ((orderId: String, exitLots: Int, exitPrice: Double, partialPnl: Double) -> Unit)? = null,
     onUpdateStopLossTarget: ((orderId: String, newSl: Double, newTarget: Double) -> Unit)? = null,
+    isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
     val isBrokerConnected = (userProfile.isAngelConnected || userProfile.isDhanConnected) && userProfile.connectedBroker.isNotBlank()
@@ -160,7 +161,7 @@ fun OrdersScreen(
     val overallPnl = todayPnl
     val mtmVal = unrealizedPnl
 
-    PullToRefreshLayout(onRefresh = onRefresh) {
+    PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

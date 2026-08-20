@@ -68,41 +68,35 @@ fun DiagnosticsScreen(
 
     val marketData = MarketDataStore.marketData.collectAsStateWithLifecycle().value
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0F1115))
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState())
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+
+    com.example.ui.components.PullToRefreshLayout(
+        isRefreshing = isRefreshing,
+        onRefresh = { viewModel.refreshMarketData() }
     ) {
-        // Top App Bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F1115))
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-            }
-            Text(
-                "REAL DATA DIAGNOSTICS",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = {
-                    scope.launch {
-                        viewModel.brokerManager.angelMarketDataService.reconnect()
-                        if (viewModel.sessionManager.isMStockConfigured()) {
-                            viewModel.brokerManager.mStockMarketDataService.connect()
-                        }
-                    }
-                }
+            // Top App Bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reconnect", tint = Color(0xFF00C853))
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                }
+                Text(
+                    "REAL DATA DIAGNOSTICS",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
             }
-        }
 
         // Real Data Status Banner
         Card(
@@ -286,6 +280,7 @@ fun DiagnosticsScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 

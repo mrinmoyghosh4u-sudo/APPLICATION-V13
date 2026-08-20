@@ -126,6 +126,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _brokerSwitchStatus = MutableStateFlow<String?>(null)
     val brokerSwitchStatus: StateFlow<String?> = _brokerSwitchStatus.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     val brokerAuthManager = brokerManager.brokerAuthManager
     val brokerStatuses = brokerAuthManager.statuses
     val isBrokerAuthInitializing = brokerAuthManager.isInitializing
@@ -729,18 +732,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshBrokerData() {
-        if (!sessionManager.hasValidSession()) return
+        if (_isRefreshing.value) return
+        _isRefreshing.value = true
         viewModelScope.launch {
-            runCatching {
-                repository.syncWithBroker()
-            }.onFailure { e ->
-                _apiError.value = e.message
+            try {
+                if (sessionManager.hasValidSession()) {
+                    runCatching {
+                        repository.syncWithBroker()
+                    }.onFailure { e ->
+                        _apiError.value = e.message
+                    }
+                }
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }
 
     fun refreshMarketData() {
-        refreshBrokerData()
+        if (_isRefreshing.value) return
+        _isRefreshing.value = true
+        viewModelScope.launch {
+            try {
+                if (sessionManager.hasValidSession()) {
+                    runCatching {
+                        repository.syncWithBroker()
+                    }.onFailure { e ->
+                        _apiError.value = e.message
+                    }
+                }
+                val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
+                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
     }
 
     fun onAppResume() {
