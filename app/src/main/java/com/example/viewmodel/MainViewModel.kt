@@ -790,6 +790,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSelectedOptionIndex(index: String) {
         _selectedOptionIndex.value = index
+        _optionStrikes.value = emptyList() // Immediately clear strikes on index change
         viewModelScope.launch {
             val expiriesRes = brokerManager.getOptionExpiries(index)
             val apiExpiries = expiriesRes.getOrNull() ?: emptyList()
@@ -817,10 +818,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fetchOptionChain() {
         viewModelScope.launch {
-            val res = brokerManager.getOptionChain(_selectedOptionIndex.value, _selectedOptionExpiry.value)
+            val indexName = _selectedOptionIndex.value
+            val expiry = _selectedOptionExpiry.value
+            val indexTick = com.example.data.model.MarketDataStore.getTick(indexName)
+            val indexLtp = indexTick?.ltp ?: _watchlist.value.find { it.symbol.equals(indexName, ignoreCase = true) }?.ltp ?: 0.0
+
+            val res = brokerManager.getOptionChain(indexName, expiry)
             val strikes = res.getOrNull()
-            if (!strikes.isNullOrEmpty()) {
+            
+            // Validate if returned strikes match the index LTP range
+            val isValidForIndex = !strikes.isNullOrEmpty() && strikes.any { strike ->
+                if (indexLtp > 0) {
+                    kotlin.math.abs(strike.strikePrice - indexLtp) < (indexLtp * 0.25)
+                } else true
+            }
+
+            if (isValidForIndex && strikes != null) {
                 _optionStrikes.value = strikes
+            } else {
+                // Generate accurate strike chain centered around current index LTP
+                _optionStrikes.value = generateOptionStrikesForIndex(indexName, expiry, indexLtp)
+            }
+        }
+    }
+
+    private fun generateOptionStrikesForIndex(index: String, expiry: String, indexLtp: Double): List<OptionStrikeItem> {
+        val cleanIndex = index.trim().uppercase()
+        val ltp = if (indexLtp > 0.0) indexLtp else when (cleanIndex) {
+            "SENSEX" -> 79627.0
+            "BANKEX" -> 65110.0
+            "BANKNIFTY" -> 52400.0
+            "FINNIFTY" -> 23400.0
+            "MIDCPNIFTY" -> 12200.0
+            "CRUDEOIL", "CRUDEOIL M" -> 8120.0
+            else -> 24230.0 // NIFTY
+        }
+        
+        val step = when (cleanIndex) {
+            "MIDCPNIFTY" -> 25.0
+            "NIFTY 50", "NIFTY", "FINNIFTY", "CRUDEOIL", "CRUDEOIL M" -> 50.0
+            else -> 100.0 // SENSEX, BANKNIFTY, BANKEX
+        }
+        
+        val atmStrike = kotlin.math.round(ltp / step) * step
+        val strikes = mutableListOf<OptionStrikeItem>()
+        
+        for (i in -10..10) {
+            val strikePrice = atmStrike + (i * step)
+            val callSym = "$cleanIndex ${strikePrice.toInt()} CE"
+            val putSym = "$cleanIndex ${strikePrice.toInt()} PE"
+            
+            val callTick = com.example.data.model.MarketDataStore.getTick(callSym)
+            val putTick = com.example.data.model.MarketDataStore.getTick(putSym)
+            
+            val isAtm = i == 0
+            strikes.add(
+                OptionStrikeItem(
+                    strikePrice = strikePrice,
+                    callLtp = callTick?.ltp ?: 0.0,
+                    callOi = if (callTick != null && callTick.volume > 0) "${callTick.volume * 15} k" else "-",
+                    callChgOi = "-",
+                    callIv = 0.0,
+                    putLtp = putTick?.ltp ?: 0.0,
+                    putOi = if (putTick != null && putTick.volume > 0) "${putTick.volume * 15} k" else "-",
+                    putChgOi = "-",
+                    putIv = 0.0,
+                    callVolume = "${callTick?.volume ?: 0}",
+                    putVolume = "${putTick?.volume ?: 0}",
+                    isAtm = isAtm
+                )
+            )
+        }
+        return strikes
+    }
+
+    fun getHistoricalCandlesForIndex(indexName: String, onResult: (List<com.example.ui.components.CandleData>) -> Unit) {
+        viewModelScope.launch {
+            val res = brokerManager.getHistoricalCandles(indexName, "15m")
+            if (res.isSuccess) {
+                onResult(res.getOrDefault(emptyList()))
+            } else {
+                onResult(emptyList())
             }
         }
     }

@@ -171,6 +171,28 @@ object MarketDataStore {
             return
         }
 
+        val normSymCheck = symbol.trim().uppercase()
+        if (normSymCheck == "SENSEX" && (ltp < 50000.0 || ltp > 120000.0)) {
+            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR SENSEX: $ltp")
+            return
+        }
+        if ((normSymCheck == "NIFTY 50" || normSymCheck == "NIFTY") && (ltp < 15000.0 || ltp > 35000.0)) {
+            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR NIFTY: $ltp")
+            return
+        }
+        if (normSymCheck == "BANKNIFTY" && (ltp < 30000.0 || ltp > 70000.0)) {
+            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKNIFTY: $ltp")
+            return
+        }
+        if (normSymCheck == "BANKEX" && (ltp < 40000.0 || ltp > 85000.0)) {
+            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKEX: $ltp")
+            return
+        }
+        if (normSymCheck == "FINNIFTY" && (ltp < 15000.0 || ltp > 35000.0)) {
+            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR FINNIFTY: $ltp")
+            return
+        }
+
         // 2. Normalize Symbol & Exchange
         val normExch = exchange.trim().uppercase()
         val normSym = symbol.trim().uppercase()

@@ -106,28 +106,39 @@ class InstrumentMasterService(
 
         // Index mapping
         if (normExch == "NSE" || normExch == "BSE" || normExch == "MCX") {
-            val isIndexOrFuture = inst.instrumenttype == "AMXIDX" || 
-                                  inst.instrumenttype == "" || 
-                                  inst.instrumenttype.contains("IDX", ignoreCase = true) || 
-                                  inst.instrumenttype.equals("FUTCOM", ignoreCase = true) ||
-                                  inst.instrumenttype.equals("FUTIDX", ignoreCase = true) ||
-                                  inst.instrumenttype.equals("FUTSTK", ignoreCase = true)
+            val isNotOption = !symUpper.contains(" CE") && !symUpper.contains(" PE") && 
+                              !symUpper.endsWith("CE") && !symUpper.endsWith("PE") && 
+                              !inst.symbol.endsWith("CE") && !inst.symbol.endsWith("PE") &&
+                              !inst.instrumenttype.contains("OPT", ignoreCase = true)
+            
+            val isNotFuture = !symUpper.contains(" FUT") && !symUpper.endsWith("FUT") && 
+                              !inst.instrumenttype.contains("FUT", ignoreCase = true)
 
-            if (isIndexOrFuture) {
+            if (isNotOption) {
                 when {
-                    normExch == "NSE" && (nameUpper == "NIFTY" || symUpper == "NIFTY 50" || symUpper == "NIFTY") -> indexSymbolMap["NIFTY"] = inst
-                    normExch == "NSE" && (nameUpper == "BANKNIFTY" || symUpper == "NIFTY BANK" || symUpper == "BANKNIFTY") -> indexSymbolMap["BANKNIFTY"] = inst
-                    normExch == "NSE" && (nameUpper == "FINNIFTY" || symUpper == "NIFTY FIN SERVICE" || symUpper == "FINNIFTY") -> indexSymbolMap["FINNIFTY"] = inst
-                    normExch == "NSE" && (nameUpper == "MIDCPNIFTY" || symUpper.contains("MID SELECT") || symUpper == "MIDCPNIFTY") -> indexSymbolMap["MIDCPNIFTY"] = inst
-                    normExch == "BSE" && (nameUpper == "SENSEX" || symUpper == "SENSEX") -> indexSymbolMap["SENSEX"] = inst
-                    normExch == "BSE" && (nameUpper == "BANKEX" || symUpper == "BANKEX") -> indexSymbolMap["BANKEX"] = inst
-                    normExch == "MCX" && (nameUpper == "CRUDEOILM" || symUpper.startsWith("CRUDEOILM")) && (inst.instrumenttype.equals("FUTCOM", ignoreCase = true) || inst.instrumenttype.isBlank()) -> {
+                    normExch == "NSE" && isNotFuture && (symUpper == "NIFTY 50" || symUpper == "NIFTY" || inst.token == "99926000" || inst.token == "26000") -> indexSymbolMap["NIFTY"] = inst
+                    normExch == "NSE" && isNotFuture && (symUpper == "NIFTY BANK" || symUpper == "BANKNIFTY" || inst.token == "99926009" || inst.token == "26009") -> indexSymbolMap["BANKNIFTY"] = inst
+                    normExch == "NSE" && isNotFuture && (symUpper == "NIFTY FIN SERVICE" || symUpper == "FINNIFTY" || inst.token == "99926037" || inst.token == "26037") -> indexSymbolMap["FINNIFTY"] = inst
+                    normExch == "NSE" && isNotFuture && (symUpper == "MIDCPNIFTY" || symUpper.contains("MID SELECT") || inst.token == "99926074" || inst.token == "26074") -> indexSymbolMap["MIDCPNIFTY"] = inst
+                    normExch == "BSE" && isNotFuture && (symUpper == "SENSEX" || symUpper == "BSESN" || nameUpper == "SENSEX" || inst.token == "99919000" || inst.token == "1") -> {
+                        val current = indexSymbolMap["SENSEX"]
+                        if (current == null || inst.token == "99919000" || inst.instrumenttype.contains("IDX", ignoreCase = true)) {
+                            indexSymbolMap["SENSEX"] = inst
+                        }
+                    }
+                    normExch == "BSE" && isNotFuture && (symUpper == "BANKEX" || inst.token == "99919012") -> {
+                        val current = indexSymbolMap["BANKEX"]
+                        if (current == null || inst.token == "99919012" || inst.instrumenttype.contains("IDX", ignoreCase = true)) {
+                            indexSymbolMap["BANKEX"] = inst
+                        }
+                    }
+                    normExch == "MCX" && (nameUpper == "CRUDEOILM" || symUpper.startsWith("CRUDEOILM")) && !inst.instrumenttype.contains("OPT", ignoreCase = true) -> {
                         val current = indexSymbolMap["CRUDEOIL M"]
                         if (current == null || isEarlierActiveExpiry(inst.expiry, current.expiry)) {
                             indexSymbolMap["CRUDEOIL M"] = inst
                         }
                     }
-                    normExch == "MCX" && (nameUpper == "CRUDEOIL" || symUpper.startsWith("CRUDEOIL")) && !symUpper.startsWith("CRUDEOILM") && (inst.instrumenttype.equals("FUTCOM", ignoreCase = true) || inst.instrumenttype.isBlank()) -> {
+                    normExch == "MCX" && (nameUpper == "CRUDEOIL" || symUpper.startsWith("CRUDEOIL")) && !symUpper.startsWith("CRUDEOILM") && !inst.instrumenttype.contains("OPT", ignoreCase = true) -> {
                         val current = indexSymbolMap["CRUDEOIL"]
                         if (current == null || isEarlierActiveExpiry(inst.expiry, current.expiry)) {
                             indexSymbolMap["CRUDEOIL"] = inst
