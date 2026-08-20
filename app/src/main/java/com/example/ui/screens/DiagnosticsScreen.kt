@@ -72,11 +72,6 @@ fun DiagnosticsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.brokerManager.mStockMarketDataService.connect()
-        if (viewModel.sessionManager.isMStockConfigured()) {
-            scope.launch {
-                viewModel.brokerAuthManager.reconnectBroker("m.Stock")
-            }
-        }
     }
 
     com.example.ui.components.PullToRefreshLayout(

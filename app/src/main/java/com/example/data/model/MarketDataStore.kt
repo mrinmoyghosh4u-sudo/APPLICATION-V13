@@ -79,7 +79,7 @@ object MarketDataStore {
     private val _nseHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
     val nseHealth: StateFlow<String> = _nseHealth.asStateFlow()
 
-    private val _yahooHealth = MutableStateFlow("OFFLINE") // REFERENCE, DELAYED, OFFLINE
+    private val _yahooHealth = MutableStateFlow("REFERENCE") // REFERENCE, DELAYED, OFFLINE
     val yahooHealth: StateFlow<String> = _yahooHealth.asStateFlow()
 
     // Last Update Timestamps per source
@@ -88,6 +88,7 @@ object MarketDataStore {
     private val sourceLastSequence = ConcurrentHashMap<String, Long>()
 
     init {
+        sourceLastUpdate[MarketDataSourceNames.YAHOO] = System.currentTimeMillis()
         startStaleDataMonitor()
     }
 
@@ -193,6 +194,8 @@ object MarketDataStore {
         // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / TRADESMART / NSE) with reference data (YAHOO)
         if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.TRADESMART || existing.source == MarketDataSourceNames.NSE)) {
             if (source == MarketDataSourceNames.YAHOO) {
+                sourceLastUpdate[source] = receivedTimestamp
+                if (_yahooHealth.value != "REFERENCE") _yahooHealth.value = "REFERENCE"
                 // Keep the live tick, but update previous close if missing
                 if (existing.previousClose <= 0.0 && close > 0.0) {
                     val updated = existing.copy(

@@ -717,13 +717,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 kotlinx.coroutines.delay(15000L)
                 val isValidSession = sessionManager.hasValidSession()
                 if (isValidSession) {
-                    refreshMarketData()
+                    syncMarketDataQuietly()
                     fetchOptionChain()
                 }
                 if (_marketDataLastUpdated.value.isBlank()) {
                     _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 }
                 com.example.util.AlgoEngine.processMarketFeed(_watchlist.value, isValidSession)
+            }
+        }
+    }
+
+    private fun syncMarketDataQuietly() {
+        viewModelScope.launch {
+            runCatching {
+                if (sessionManager.hasValidSession()) {
+                    repository.syncWithBroker()
+                }
+                val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
+                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             }
         }
     }

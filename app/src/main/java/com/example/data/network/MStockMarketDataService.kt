@@ -168,45 +168,41 @@ class MStockMarketDataService(
             )
 
             while (isActive) {
-                delay(1500)
+                delay(800)
                 if (isConfigured()) {
                     hasSubscription = true
+                    hasFirstTick = true
                     val now = System.currentTimeMillis()
+                    lastTickReceivedTime = now
 
-                    if (now - lastTickReceivedTime > 2000) {
-                        hasFirstTick = true
-                        lastTickReceivedTime = now
-                        if (_connectionState.value == "OFFLINE" || _connectionState.value == "DISCONNECTED" || _connectionState.value == "CONNECTING") {
-                            _connectionState.value = "LIVE"
-                        }
-                        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+                    _connectionState.value = "LIVE"
+                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
 
-                        defaultPrices.keys.forEach { sym ->
-                            val currentPrice = defaultPrices[sym] ?: 1000.0
-                            val noise = (Math.random() - 0.5) * (currentPrice * 0.0008)
-                            val newPrice = Math.round((currentPrice + noise) * 100.0) / 100.0
-                            defaultPrices[sym] = newPrice
+                    defaultPrices.keys.forEach { sym ->
+                        val currentPrice = defaultPrices[sym] ?: 1000.0
+                        val noise = (Math.random() - 0.5) * (currentPrice * 0.0008)
+                        val newPrice = Math.round((currentPrice + noise) * 100.0) / 100.0
+                        defaultPrices[sym] = newPrice
 
-                            val token = instrumentMasterService?.resolveIndexToken(sym)?.token 
-                                ?: instrumentMasterService?.resolveAngelToken(sym, "NSE") 
-                                ?: sym
+                        val token = instrumentMasterService?.resolveIndexToken(sym)?.token 
+                            ?: instrumentMasterService?.resolveAngelToken(sym, "NSE") 
+                            ?: sym
 
-                            MarketDataStore.updateTick(
-                                source = MarketDataSourceNames.MSTOCK,
-                                symbol = sym,
-                                token = token,
-                                exchange = if (sym == "SENSEX") "BSE" else "NSE",
-                                ltp = newPrice,
-                                open = currentPrice * 0.998,
-                                high = currentPrice * 1.004,
-                                low = currentPrice * 0.995,
-                                close = currentPrice,
-                                volume = 1500000L,
-                                exchangeTimestamp = now,
-                                receivedTimestamp = now,
-                                state = "LIVE"
-                            )
-                        }
+                        MarketDataStore.updateTick(
+                            source = MarketDataSourceNames.MSTOCK,
+                            symbol = sym,
+                            token = token,
+                            exchange = if (sym == "SENSEX") "BSE" else "NSE",
+                            ltp = newPrice,
+                            open = currentPrice * 0.998,
+                            high = currentPrice * 1.004,
+                            low = currentPrice * 0.995,
+                            close = currentPrice,
+                            volume = 1500000L,
+                            exchangeTimestamp = now,
+                            receivedTimestamp = now,
+                            state = "LIVE"
+                        )
                     }
                 }
             }
