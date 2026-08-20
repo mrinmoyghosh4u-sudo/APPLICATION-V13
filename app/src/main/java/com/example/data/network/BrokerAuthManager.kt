@@ -664,11 +664,39 @@ class BrokerAuthManager(
         updateStatus(brokerName, role, status, msg)
     }
 
+    fun getBrokerRole(brokerName: String): String {
+        return when (brokerName) {
+            "Dhan" -> "Primary Order Execution"
+            "Angel One" -> if (sessionManager.primaryMarketDataProvider == "Angel One") "Primary Market Data" else "Secondary Market Data"
+            "m.Stock" -> if (sessionManager.primaryMarketDataProvider == "m.Stock") "Primary Market Data" else "Secondary Data Fallback"
+            "TradeSmart" -> "Tertiary Data Fallback"
+            "NSE" -> "Reference Only"
+            "Yahoo" -> "Reference Only"
+            else -> "Market Provider"
+        }
+    }
+
+    fun switchMarketDataProvider(providerName: String) {
+        val target = if (providerName.contains("m.Stock", ignoreCase = true)) "m.Stock" else "Angel One"
+        brokerManager.marketDataEngine.setPrimaryMarketDataProvider(target)
+        refreshStatuses()
+    }
+
+    private fun refreshStatuses() {
+        val current = _statuses.value.toMutableMap()
+        for ((key, value) in current) {
+            val newRole = getBrokerRole(key)
+            current[key] = value.copy(role = newRole)
+        }
+        _statuses.value = current
+    }
+
     private fun updateStatus(brokerName: String, role: String, status: BrokerAuthStatus, message: String) {
         val current = _statuses.value.toMutableMap()
+        val effectiveRole = getBrokerRole(brokerName)
         current[brokerName] = BrokerConnectionState(
             brokerName = brokerName,
-            role = role,
+            role = effectiveRole,
             status = status,
             message = message,
             lastSyncTimestamp = System.currentTimeMillis()

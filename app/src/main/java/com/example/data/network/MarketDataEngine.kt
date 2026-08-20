@@ -60,7 +60,18 @@ class MarketDataEngine(
     private val _internalActiveProvider = MutableStateFlow(ProviderHealthManager.PROVIDER_ANGEL_ONE)
     val internalActiveProvider: StateFlow<String> = _internalActiveProvider.asStateFlow()
 
-    // Unified user-facing status (Provider names are strictly omitted)
+    val primaryMarketDataProvider = MutableStateFlow(sessionManager.primaryMarketDataProvider)
+    val secondaryMarketDataProvider = MutableStateFlow(if (sessionManager.primaryMarketDataProvider == "Angel One") "m.Stock" else "Angel One")
+
+    fun setPrimaryMarketDataProvider(providerName: String) {
+        val target = if (providerName.contains("m.Stock", ignoreCase = true)) "m.Stock" else "Angel One"
+        sessionManager.primaryMarketDataProvider = target
+        primaryMarketDataProvider.value = target
+        secondaryMarketDataProvider.value = if (target == "Angel One") "m.Stock" else "Angel One"
+        evaluateLiveLtpFailover()
+    }
+
+    // Unified user-facing status
     private val _unifiedFeedStatus = MutableStateFlow("DATA UNAVAILABLE") // "LIVE", "REFERENCE DATA", "DATA UNAVAILABLE", "CONNECTING"
     val unifiedFeedStatus: StateFlow<String> = _unifiedFeedStatus.asStateFlow()
 
@@ -187,24 +198,50 @@ class MarketDataEngine(
 
     private fun evaluateLiveLtpFailover() {
         val prev = _internalActiveProvider.value
+        val primary = primaryMarketDataProvider.value
 
-        // Priority 1: Angel One
-        if (angelMarketDataService.isConnectionLive()) {
-            _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-            _unifiedFeedStatus.value = "LIVE"
-            updateLastTickTime()
-            return
-        }
-        
-        // Priority 2: m.Stock
-        if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
-            _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
-            _unifiedFeedStatus.value = "LIVE"
-            updateLastTickTime()
-            if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
-                healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
+        if (primary == "m.Stock") {
+            // Priority 1: m.Stock
+            if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
+                _unifiedFeedStatus.value = "LIVE"
+                updateLastTickTime()
+                if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
+                    healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
+                }
+                return
             }
-            return
+            // Priority 2: Angel One
+            if (angelMarketDataService.isConnectionLive()) {
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
+                _unifiedFeedStatus.value = "LIVE"
+                updateLastTickTime()
+                if (prev != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
+                    healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_ANGEL_ONE)
+                }
+                return
+            }
+        } else {
+            // Priority 1: Angel One
+            if (angelMarketDataService.isConnectionLive()) {
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
+                _unifiedFeedStatus.value = "LIVE"
+                updateLastTickTime()
+                if (prev != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
+                    healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_ANGEL_ONE)
+                }
+                return
+            }
+            // Priority 2: m.Stock
+            if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
+                _unifiedFeedStatus.value = "LIVE"
+                updateLastTickTime()
+                if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
+                    healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
+                }
+                return
+            }
         }
 
         // Priority 3: NSE Authorized Feed

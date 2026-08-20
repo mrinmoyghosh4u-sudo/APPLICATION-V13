@@ -67,10 +67,8 @@ fun ProfileScreen(
 
     var isTelegramEnabled by remember { mutableStateOf(appPreferences.isTelegramEnabled()) }
 
-    // Stat calculations from real broker data
-    val isBrokerConnected = (userProfile.connectedBroker == "Dhan" && userProfile.isDhanConnected) ||
-                            (userProfile.connectedBroker == "Angel One" && userProfile.isAngelConnected) ||
-                            (userProfile.connectedBroker == "m.Stock")
+    // Stat calculations strictly from Dhan (Active Order Broker)
+    val isDhanConnected = userProfile.isDhanConnected || brokerStatuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
 
     val completedOrders = remember(orders) {
         orders.filter { order ->
@@ -82,10 +80,10 @@ fun ProfileScreen(
     }
 
     val totalOrdersCount = orders.size
-    val totalOrdersStr = if (isBrokerConnected) "$totalOrdersCount" else "--"
+    val totalOrdersStr = if (isDhanConnected) "$totalOrdersCount" else "--"
 
     val totalTradesCount = completedOrders.size
-    val totalTradesStr = if (isBrokerConnected) "$totalTradesCount" else "--"
+    val totalTradesStr = if (isDhanConnected) "$totalTradesCount" else "--"
 
     val realizedPnlVal: Double = if (orders.isNotEmpty()) {
         orders.sumOf { it.realizedPnl }
@@ -103,7 +101,7 @@ fun ProfileScreen(
     val losingTradesCount = completedOrders.count { it.realizedPnl < 0 || (it.exitPrice < it.price && it.side == "BUY" && it.exitPrice > 0) }
     val totalEvaluatedTrades = winningTradesCount + losingTradesCount
 
-    val winRateStr = if (isBrokerConnected && totalEvaluatedTrades > 0) {
+    val winRateStr = if (isDhanConnected && totalEvaluatedTrades > 0) {
         val rate = (winningTradesCount.toDouble() / totalEvaluatedTrades) * 100
         String.format(Locale.getDefault(), "%.2f%%", rate)
     } else {
@@ -111,33 +109,35 @@ fun ProfileScreen(
     }
 
     val todaysPnlVal = realizedPnlVal + unrealizedPnlVal
-    val todaysPnlStr = if (isBrokerConnected) String.format(Locale.getDefault(), "₹%,.2f", todaysPnlVal) else "Account data unavailable"
-    val todaysPnlColor = if (!isBrokerConnected) TextWhite else if (todaysPnlVal >= 0) ProfitGreen else LossRed
+    val todaysPnlStr = if (isDhanConnected) String.format(Locale.getDefault(), "₹%,.2f", todaysPnlVal) else "Data unavailable"
+    val todaysPnlColor = if (!isDhanConnected) TextWhite else if (todaysPnlVal >= 0) ProfitGreen else LossRed
 
     val positionsCount = holdings.filter { !it.type.equals("EQUITY", ignoreCase = true) && !it.type.equals("CNC", ignoreCase = true) }.size
     val holdingsCount = holdings.filter { it.type.equals("EQUITY", ignoreCase = true) || it.type.equals("CNC", ignoreCase = true) }.size
 
-    val positionsStr = if (isBrokerConnected) "$positionsCount Active" else "--"
-    val holdingsStr = if (isBrokerConnected) "$holdingsCount Assets" else "--"
+    val positionsStr = if (isDhanConnected) "$positionsCount Active" else "--"
+    val holdingsStr = if (isDhanConnected) "$holdingsCount Assets" else "--"
 
-    val availableBalanceStr = if (isBrokerConnected) String.format(Locale.getDefault(), "₹%,.2f", userProfile.availableMargin) else "Account data unavailable"
-    val realizedPnlStr = if (isBrokerConnected) String.format(Locale.getDefault(), "₹%,.2f", realizedPnlVal) else "Account data unavailable"
-    val unrealizedPnlStr = if (isBrokerConnected) String.format(Locale.getDefault(), "₹%,.2f", unrealizedPnlVal) else "Account data unavailable"
+    val availableBalanceStr = if (isDhanConnected) String.format(Locale.getDefault(), "₹%,.2f", userProfile.availableMargin) else "Data unavailable"
+    val realizedPnlStr = if (isDhanConnected) String.format(Locale.getDefault(), "₹%,.2f", realizedPnlVal) else "Data unavailable"
+    val unrealizedPnlStr = if (isDhanConnected) String.format(Locale.getDefault(), "₹%,.2f", unrealizedPnlVal) else "Data unavailable"
 
-    val realizedPnlColor = if (!isBrokerConnected) TextWhite else if (realizedPnlVal >= 0) ProfitGreen else LossRed
-    val unrealizedPnlColor = if (!isBrokerConnected) TextWhite else if (unrealizedPnlVal >= 0) ProfitGreen else LossRed
+    val realizedPnlColor = if (!isDhanConnected) TextWhite else if (realizedPnlVal >= 0) ProfitGreen else LossRed
+    val unrealizedPnlColor = if (!isDhanConnected) TextWhite else if (unrealizedPnlVal >= 0) ProfitGreen else LossRed
 
-    val accountHolderName = remember(userProfile.name, userProfile.dhanClientId, userProfile.angelClientId, userProfile.connectedBroker, isBrokerConnected) {
-        if (!isBrokerConnected) {
-            "Not Connected"
+    val accountHolderName = remember(userProfile.name, userProfile.dhanClientId, isDhanConnected) {
+        if (!isDhanConnected) {
+            "Dhan Not Connected"
         } else if (userProfile.name.isNotBlank()) {
             userProfile.name
+        } else if (userProfile.dhanClientId.isNotBlank()) {
+            "Trader (${userProfile.dhanClientId.take(6)})"
         } else {
-            "Trader"
+            "Dhan Trader"
         }
     }
 
-    val activeBrokerName = if (isBrokerConnected) userProfile.connectedBroker else "--"
+    val activeBrokerName = if (isDhanConnected) "Dhan" else "Dhan (Not Connected)"
 
     val currentTimeStr = remember {
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
@@ -233,7 +233,7 @@ fun ProfileScreen(
                             Text("Active Broker", fontSize = 10.sp, color = TextGray)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(8.dp).background(if (isBrokerConnected) ProfitGreen else TextGray, CircleShape))
+                                Box(modifier = Modifier.size(8.dp).background(if (isDhanConnected) ProfitGreen else TextGray, CircleShape))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(activeBrokerName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                             }
@@ -249,7 +249,7 @@ fun ProfileScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Available Balance", fontSize = 10.sp, color = TextGray)
-                            Text(availableBalanceStr, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (isBrokerConnected) ProfitGreen else TextWhite)
+                            Text(availableBalanceStr, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (isDhanConnected) ProfitGreen else TextWhite)
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Realized P&L", fontSize = 10.sp, color = TextGray)
@@ -303,17 +303,17 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (isBrokerConnected) {
+                    if (isDhanConnected) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(6.dp).background(ProfitGreen, CircleShape))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Live data • Last updated: $currentTimeStr", fontSize = 10.sp, color = TextGray)
+                            Text("Dhan Live • Last synced: $currentTimeStr", fontSize = 10.sp, color = TextGray)
                         }
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(6.dp).background(TextGray, CircleShape))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Disconnected • Connect a broker to sync real data", fontSize = 10.sp, color = TextGray)
+                            Text("Dhan Not Connected • Order execution & account overview requires Dhan", fontSize = 10.sp, color = TextGray)
                         }
                     }
                 }
@@ -890,6 +890,18 @@ private fun BrokerStatusRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             when (status) {
                 com.example.data.network.BrokerAuthStatus.CONNECTED -> {
+                    if (name == "Angel One" || name == "m.Stock") {
+                        OutlinedButton(
+                            onClick = onConnect,
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
+                            modifier = Modifier.height(30.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     OutlinedButton(
                         onClick = onDisconnect,
                         shape = RoundedCornerShape(6.dp),
@@ -909,6 +921,16 @@ private fun BrokerStatusRow(
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    OutlinedButton(
+                        onClick = onDisconnect,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LossRed),
+                        modifier = Modifier.height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
                     }
                 }
                 com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,

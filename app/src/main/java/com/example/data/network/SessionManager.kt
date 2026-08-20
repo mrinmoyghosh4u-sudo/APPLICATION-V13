@@ -169,9 +169,15 @@ class SessionManager(context: Context) {
     }
 
     var activeBroker: String
-        get() = prefs.getString(KEY_ACTIVE_BROKER, "") ?: ""
+        get() = prefs.getString(KEY_ACTIVE_BROKER, "Dhan") ?: "Dhan"
         set(value) {
             prefs.edit().putString(KEY_ACTIVE_BROKER, value).commit()
+        }
+
+    var primaryMarketDataProvider: String
+        get() = prefs.getString("primary_market_data_provider", "Angel One") ?: "Angel One"
+        set(value) {
+            prefs.edit().putString("primary_market_data_provider", value).commit()
         }
 
     var connectedBroker: String

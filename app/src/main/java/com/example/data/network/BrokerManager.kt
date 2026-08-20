@@ -69,43 +69,22 @@ class BrokerManager(
         get() = marketDataEngine.unifiedFeedStatus.value
 
     val activeService: IBrokerService
-        get() = if (sessionManager.activeBroker == "Dhan") dhanService else angelOneService
+        get() = dhanService
 
     fun setActiveBroker(broker: String) {
-        sessionManager.activeBroker = broker
+        sessionManager.activeBroker = "Dhan"
     }
 
     suspend fun getProfile(): Result<UserProfileEntity> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.getProfile()
-        } else if (sessionManager.activeBroker == "Angel One") {
-            angelOneService.getProfile()
-        } else if (sessionManager.activeBroker == "m.Stock") {
-            Result.success(UserProfileEntity(
-                name = "",
-                connectedBroker = "m.Stock",
-                isAngelConnected = false,
-                isDhanConnected = false
-            ))
-        } else {
-            Result.failure(Exception("No active broker selected"))
-        }
+        return dhanTradingService.getProfile()
     }
 
     suspend fun getFunds(): Result<Double> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.getFunds()
-        } else {
-            angelOneService.getFunds()
-        }
+        return dhanTradingService.getFunds()
     }
 
     suspend fun getOrders(): Result<List<OrderEntity>> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.getOrders()
-        } else {
-            angelOneService.getOrders()
-        }
+        return dhanTradingService.getOrders()
     }
 
     /**
@@ -135,19 +114,11 @@ class BrokerManager(
     }
 
     suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.getHoldings()
-        } else {
-            angelOneService.getHoldings()
-        }
+        return dhanTradingService.getHoldings()
     }
 
     suspend fun getPositions(): Result<List<PortfolioHoldingEntity>> {
-        return if (sessionManager.activeBroker == "Dhan") {
-            dhanTradingService.getPositions()
-        } else {
-            angelOneService.getPositions()
-        }
+        return dhanTradingService.getPositions()
     }
 
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
