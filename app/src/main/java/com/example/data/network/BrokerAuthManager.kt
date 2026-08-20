@@ -234,7 +234,7 @@ class BrokerAuthManager(
         totpSecret: String? = null,
         apiKey: String? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
+        val result = runCatching {
             val code = clientCode?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelClientId
             val pass = mpin?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelMpin
             val secret = totpSecret?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelTotpSecret
@@ -259,7 +259,7 @@ class BrokerAuthManager(
             } else if (secret.isNotBlank()) {
                 secret
             } else {
-                throw Exception("Either TOTP code or TOTP Secret must be provided.")
+                throw Exception("Either 6-digit TOTP code or Base32 TOTP Secret must be provided.")
             }
 
             Log.d(TAG, "Authenticating with Angel One SmartAPI for client: $code")
@@ -278,14 +278,27 @@ class BrokerAuthManager(
             sessionManager.angelJwtToken = tokens.jwtToken
             sessionManager.angelRefreshToken = tokens.refreshToken
             sessionManager.angelFeedToken = tokens.feedToken
+            sessionManager.angelTokenTimestamp = System.currentTimeMillis()
             sessionManager.isAngelConnected = true
 
-            updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Authenticated successfully")
+            // Verify session with Get Profile API call
+            val profileRes = angelOneService.getProfile()
+            if (profileRes.isFailure) {
+                Log.w(TAG, "Angel One profile warning: ${profileRes.exceptionOrNull()?.message}")
+            }
 
-            // Auto connect WebSocket after session creation
+            updateStatus("Angel One", getBrokerRole("Angel One"), BrokerAuthStatus.CONNECTED, "Authenticated successfully")
+
+            // Auto connect SmartAPI WebSocket after session creation
             angelMarketDataService.connect()
             true
         }
+
+        if (result.isFailure) {
+            val err = result.exceptionOrNull()?.message ?: "Angel One authentication failed"
+            updateStatus("Angel One", getBrokerRole("Angel One"), BrokerAuthStatus.ERROR, err)
+        }
+        result
     }
 
     suspend fun refreshAngelOne(): Result<Boolean> = withContext(Dispatchers.IO) {
@@ -372,7 +385,7 @@ class BrokerAuthManager(
         totpSecret: String? = null,
         directTotp: String? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
+        val result = runCatching {
             val code = clientCode?.takeIf { it.isNotBlank() } ?: sessionManager.mstockClientId
             val key = apiKey?.takeIf { it.isNotBlank() } ?: sessionManager.mstockApiKey
             val secret = totpSecret?.takeIf { it.isNotBlank() } ?: sessionManager.mstockTotpSecret
@@ -421,11 +434,17 @@ class BrokerAuthManager(
             val hasAngelLive = getConnectionStatus("Angel One") == BrokerAuthStatus.CONNECTED
             val status = if (hasAngelLive) BrokerAuthStatus.STANDBY else BrokerAuthStatus.CONNECTED
             val msg = if (hasAngelLive) "Configured • Standby Fallback" else "Active Fallback Market Data"
-            updateStatus("m.Stock", "Secondary Data Fallback", status, msg)
+            updateStatus("m.Stock", getBrokerRole("m.Stock"), status, msg)
 
             mStockMarketDataService.connect()
             true
         }
+
+        if (result.isFailure) {
+            val err = result.exceptionOrNull()?.message ?: "m.Stock authentication failed"
+            updateStatus("m.Stock", getBrokerRole("m.Stock"), BrokerAuthStatus.ERROR, err)
+        }
+        result
     }
 
     suspend fun refreshMStock(): Result<Boolean> = withContext(Dispatchers.IO) {

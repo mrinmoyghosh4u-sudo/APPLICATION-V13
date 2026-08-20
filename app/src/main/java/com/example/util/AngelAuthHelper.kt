@@ -74,14 +74,19 @@ object AngelAuthHelper {
                 val refreshToken = data.optString("refreshToken")
                 val feedToken = data.optString("feedToken")
                 
-                if (jwtToken.isBlank()) {
-                    throw Exception("JWT Token missing in response")
+                if (jwtToken.isBlank() || refreshToken.isBlank() || feedToken.isBlank()) {
+                    val missing = mutableListOf<String>()
+                    if (jwtToken.isBlank()) missing.add("jwtToken")
+                    if (refreshToken.isBlank()) missing.add("refreshToken")
+                    if (feedToken.isBlank()) missing.add("feedToken")
+                    throw Exception("Angel One Login Failed\nError Code: DATA_INCOMPLETE\nMessage: Missing token data: ${missing.joinToString(", ")}")
                 }
                 Log.d(TAG, "Angel One authentication successful")
                 AngelTokens(jwtToken, refreshToken, feedToken)
             } else {
-                val msg = json?.optString("message") ?: "Unknown error"
-                throw Exception("Angel Login failed: $msg (Code: ${response.code})")
+                val errCode = json?.optString("errorcode")?.ifBlank { json?.optString("errorCode") }?.ifBlank { "HTTP_${response.code}" } ?: "HTTP_${response.code}"
+                val msg = json?.optString("message")?.ifBlank { json?.optString("error") }?.ifBlank { "Authentication failed" } ?: "Authentication failed (HTTP ${response.code})"
+                throw Exception("Angel One Login Failed\nError Code: $errCode\nMessage: $msg")
             }
         }
     }
@@ -128,13 +133,14 @@ object AngelAuthHelper {
                 val feedToken = data.optString("feedToken")
 
                 if (jwtToken.isBlank()) {
-                    throw Exception("JWT Token missing in refresh response")
+                    throw Exception("Angel One Token Refresh Failed\nError Code: JWT_MISSING\nMessage: JWT Token missing in refresh response")
                 }
                 Log.d(TAG, "Angel One token refresh successful")
                 AngelTokens(jwtToken, newRefreshToken, feedToken)
             } else {
-                val msg = json?.optString("message") ?: "Unknown error"
-                throw Exception("Angel token refresh failed: $msg (Code: ${response.code})")
+                val errCode = json?.optString("errorcode")?.ifBlank { json?.optString("errorCode") }?.ifBlank { "HTTP_${response.code}" } ?: "HTTP_${response.code}"
+                val msg = json?.optString("message")?.ifBlank { json?.optString("error") }?.ifBlank { "Token refresh failed" } ?: "Token refresh failed (HTTP ${response.code})"
+                throw Exception("Angel One Token Refresh Failed\nError Code: $errCode\nMessage: $msg")
             }
         }
     }

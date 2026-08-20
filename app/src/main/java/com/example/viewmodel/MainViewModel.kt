@@ -374,41 +374,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun switchActiveBroker(brokerName: String) {
         viewModelScope.launch {
             _isSessionRestoring.value = true
-            _brokerSwitchStatus.value = "Switching broker to $brokerName..."
+            _brokerSwitchStatus.value = "Setting primary market data provider to $brokerName..."
 
-            repository.clearBrokerSnapshot(brokerName)
-
-            val hasSavedSession = when (brokerName) {
-                "Angel One" -> sessionManager.isAngelConfigured() || !sessionManager.angelJwtToken.isNullOrBlank()
-                "Dhan" -> !sessionManager.dhanAccessToken.isNullOrBlank()
-                "m.Stock" -> sessionManager.isMStockConfigured()
-                else -> false
-            }
-
-            if (hasSavedSession) {
-                sessionManager.activeBroker = brokerName
-                brokerManager.setActiveBroker(brokerName)
-                val currentProf = _userProfile.value
-                _userProfile.value = currentProf.copy(connectedBroker = brokerName, name = "")
-
+            if (brokerName == "Angel One" || brokerName == "m.Stock") {
+                brokerManager.setPrimaryMarketDataProvider(brokerName)
+                _brokerSwitchStatus.value = "Primary Market Data • $brokerName"
+                _isSessionRestoring.value = false
+                repository.addNotification(
+                    title = "Market Data Provider Switched",
+                    message = "Primary market data feed switched to $brokerName",
+                    type = "SUCCESS"
+                )
+            } else {
+                sessionManager.activeBroker = "Dhan"
+                brokerManager.setActiveBroker("Dhan")
                 val valid = validateAndRestoreSession()
                 if (valid) {
-                    _brokerSwitchStatus.value = "Broker Connected • $brokerName"
+                    _brokerSwitchStatus.value = "Broker Connected • Dhan"
                     _authSuccessEvent.value = true
                     repository.addNotification(
-                        title = "Broker Switched",
-                        message = "Active broker switched to $brokerName successfully",
+                        title = "Order Broker Selected",
+                        message = "Active order execution broker set to Dhan",
                         type = "SUCCESS"
                     )
                 } else {
                     _brokerSwitchStatus.value = null
-                    _authErrorMessage.value = "Session for $brokerName expired. Please re-authenticate."
-                    openConnectDialog(brokerName)
+                    _authErrorMessage.value = "Dhan session expired. Please re-authenticate."
+                    openConnectDialog("Dhan")
                 }
-            } else {
                 _isSessionRestoring.value = false
-                _brokerSwitchStatus.value = null
-                openConnectDialog(brokerName)
             }
         }
     }
@@ -464,28 +458,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 totpSecret = totpSecret,
                 apiKey = apiKey
             )
-            if (res.isSuccess && res.getOrThrow()) {
-                sessionManager.activeBroker = "Angel One"
-                sessionManager.angelTokenTimestamp = System.currentTimeMillis()
-                brokerManager.setActiveBroker("Angel One")
-
-                val valid = validateAndRestoreSession()
-                if (valid) {
-                    _brokerSwitchStatus.value = "Broker Connected • Angel One"
-                    _authSuccessEvent.value = true
-                    _showConnectDialog.value = false
-                    repository.addNotification("Broker Connected", "Connected to Angel One successfully", "SUCCESS")
-                    telegramService.sendFormattedEvent(
-                        "ANGEL_CONN_${sessionManager.angelClientId}",
-                        com.example.data.network.TelegramMessageFormatter.formatAngelConnected()
-                    )
-                } else {
-                    _authErrorMessage.value = "Failed to validate Angel One session."
-                }
-            } else {
-                _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Angel One login failed"
-            }
             _isAuthInProgress.value = false
+            if (res.isSuccess && res.getOrThrow()) {
+                sessionManager.angelTokenTimestamp = System.currentTimeMillis()
+                _brokerSwitchStatus.value = "Angel One Feed Connected"
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                repository.addNotification("Broker Connected", "Connected to Angel One successfully", "SUCCESS")
+                telegramService.sendFormattedEvent(
+                    "ANGEL_CONN_${sessionManager.angelClientId}",
+                    com.example.data.network.TelegramMessageFormatter.formatAngelConnected()
+                )
+            } else {
+                val err = res.exceptionOrNull()?.message ?: "Angel One login failed"
+                _authErrorMessage.value = err
+            }
         }
     }
 
@@ -517,23 +504,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _isAuthInProgress.value = false
             if (res.isSuccess && res.getOrThrow()) {
-                sessionManager.activeBroker = "m.Stock"
-                brokerManager.setActiveBroker("m.Stock")
-                val valid = validateAndRestoreSession()
-                if (valid) {
-                    _brokerSwitchStatus.value = "Broker Connected • m.Stock"
-                    _authSuccessEvent.value = true
-                    _showConnectDialog.value = false
-                    repository.addNotification("Broker Connected", "Connected to m.Stock (Mirae Asset) successfully", "SUCCESS")
-                    telegramService.sendFormattedEvent(
-                        "MSTOCK_CONN_${clientCode}",
-                        "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient Code: <code>${clientCode}</code>\nStatus: <b>Active Real Trading Session</b>"
-                    )
-                } else {
-                    _authErrorMessage.value = "Failed to validate m.Stock session."
-                }
+                _brokerSwitchStatus.value = "m.Stock Feed Connected"
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                repository.addNotification("Broker Connected", "Connected to m.Stock (Mirae Asset) successfully", "SUCCESS")
+                telegramService.sendFormattedEvent(
+                    "MSTOCK_CONN_${clientCode}",
+                    "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient Code: <code>${clientCode}</code>\nStatus: <b>Active Secondary Market Feed Session</b>"
+                )
             } else {
-                _authErrorMessage.value = res.exceptionOrNull()?.message ?: "m.Stock login failed. Please verify credentials."
+                val err = res.exceptionOrNull()?.message ?: "m.Stock login failed. Please verify credentials."
+                _authErrorMessage.value = err
             }
         }
     }

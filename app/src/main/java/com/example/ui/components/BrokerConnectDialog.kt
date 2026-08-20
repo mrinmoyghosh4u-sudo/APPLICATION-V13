@@ -581,12 +581,30 @@ fun BrokerConnectDialog(
 
                 localErrorMsg?.let { msg ->
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = msg,
-                        color = Color.Red.copy(alpha = 0.9f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF381B1B)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "⚠️ ",
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = msg,
+                                color = Color(0xFFFF8A80),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
                 }
 
                 if (isAuthInProgress) {

@@ -75,6 +75,10 @@ class BrokerManager(
         sessionManager.activeBroker = "Dhan"
     }
 
+    fun setPrimaryMarketDataProvider(providerName: String) {
+        marketDataEngine.setPrimaryMarketDataProvider(providerName)
+    }
+
     suspend fun getProfile(): Result<UserProfileEntity> {
         return dhanTradingService.getProfile()
     }

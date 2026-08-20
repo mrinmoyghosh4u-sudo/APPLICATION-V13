@@ -131,6 +131,14 @@ object MStockAuthHelper {
         }
     }
 
+    private val CANDIDATE_TYPE_A_URLS = listOf(
+        "https://api.mstock.trade/openapi/typea/session/verifytotp",
+        "https://api.mstock.trade/openapi/session/verifytotp",
+        "https://api.mstock.trade/v1/user/verifytotp",
+        "https://api.mstock.trade/openapi/v1/session/verifytotp",
+        "https://openapi.mstock.trade/session/verifytotp"
+    )
+
     private fun executeTypeAAuth(
         apiKey: String,
         totp: String,
@@ -143,17 +151,36 @@ object MStockAuthHelper {
             formBodyBuilder.append("&clientCode=").append(URLEncoder.encode(clientCode, "UTF-8"))
         }
 
-        val body = formBodyBuilder.toString().toRequestBody("application/x-www-form-urlencoded".toMediaType())
+        val bodyString = formBodyBuilder.toString()
+        var lastError: Exception? = null
 
-        val request = Request.Builder()
-            .url(TYPE_A_VERIFY_TOTP_URL)
-            .post(body)
-            .addHeader("X-Mirae-Version", "1")
-            .addHeader("Content-Type", "application/x-www-form-urlencoded")
-            .addHeader("Accept", "application/json")
-            .build()
+        for (endpoint in CANDIDATE_TYPE_A_URLS) {
+            try {
+                _lastEndpoint.value = endpoint
+                val body = bodyString.toRequestBody("application/x-www-form-urlencoded".toMediaType())
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .addHeader("X-Mirae-Version", "1")
+                    .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                    .addHeader("Accept", "application/json")
+                    .build()
 
-        return parseResponseAndExtractTokens(request, "Type A")
+                return parseResponseAndExtractTokens(request, "Type A")
+            } catch (e: Exception) {
+                lastError = e
+                // If it's a 404, continue to next candidate endpoint
+                val msg = e.message ?: ""
+                if (msg.contains("404") || msg.contains("Not Found", ignoreCase = true)) {
+                    Log.w(TAG, "Endpoint $endpoint returned 404. Trying next candidate...")
+                    continue
+                } else {
+                    // Non-404 error (e.g. invalid credentials or 401/400) should be raised immediately
+                    throw e
+                }
+            }
+        }
+        throw lastError ?: Exception("m.Stock authentication failed across all endpoints.")
     }
 
     private fun executeTypeBAuth(
@@ -234,13 +261,14 @@ object MStockAuthHelper {
             }
         } else {
             val errorJson = runCatching { JSONObject(respString) }.getOrNull()
+            val apiErrCode = errorJson?.optString("errorcode")?.ifBlank { errorJson?.optString("errorCode") } ?: "HTTP_$respCode"
             val errorMsg = errorJson?.optString("message")
                 ?.ifBlank { errorJson?.optString("error") }
                 ?.ifBlank { errorJson?.optString("description") }
-                ?: "HTTP $respCode ${response.message.ifBlank { "Authentication failed" }}"
+                ?: if (respCode == 404) "Endpoint Not Found (404)" else "HTTP $respCode ${response.message.ifBlank { "Authentication failed" }}"
             _authStage.value = "FAILED"
-            _lastAuthMessage.value = errorMsg
-            throw Exception("m.Stock $typeName verifytotp failed: $errorMsg")
+            _lastAuthMessage.value = "$apiErrCode: $errorMsg"
+            throw Exception("m.Stock Login Failed\nHTTP Status: $respCode\nError Code: $apiErrCode\nMessage: $errorMsg")
         }
     }
 
