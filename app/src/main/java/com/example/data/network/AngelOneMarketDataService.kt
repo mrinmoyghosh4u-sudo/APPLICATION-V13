@@ -66,9 +66,19 @@ class AngelOneMarketDataService(
         }
     }
 
+    fun isConnectingOrLive(): Boolean {
+        val state = _connectionState.value
+        return state == "CONNECTING" || state == "CONNECTED" || state == "SUBSCRIBING" || state == "SUBSCRIBED" || state == "LIVE"
+    }
+
     private var pingJob: Job? = null
 
-    private fun connectWebSocket() {
+    private fun connectWebSocket(force: Boolean = false) {
+        if (!force && webSocket != null && isConnectingOrLive()) {
+            Log.d("SmartStream", "WebSocket connection already active in state ${_connectionState.value}. Skipping duplicate connect request.")
+            return
+        }
+
         webSocket?.cancel()
         webSocket = null
         pingJob?.cancel()
@@ -83,8 +93,10 @@ class AngelOneMarketDataService(
         }
 
         _connectionState.value = "CONNECTING"
-        hasFirstTick = false
-        isSubscribed = false
+        if (force) {
+            hasFirstTick = false
+            isSubscribed = false
+        }
         
         val request = Request.Builder()
             .url("wss://smartapisocket.angelone.in/smart-stream")
@@ -162,7 +174,7 @@ class AngelOneMarketDataService(
         
         scope.launch {
             delay(delayTime)
-            connectWebSocket()
+            connectWebSocket(force = true)
         }
     }
 
@@ -214,6 +226,7 @@ class AngelOneMarketDataService(
                 }
                 ws.send(req.toString())
                 _connectionState.value = "SUBSCRIBING"
+                isSubscribed = true
                 Log.d("SmartStream", "[SUBSCRIPTION_SENT] count=$totalTokens")
             }
         }
@@ -475,10 +488,11 @@ class AngelOneMarketDataService(
     }
 
     fun isConnectionLive(): Boolean {
-        return _connectionState.value == "LIVE"
+        val age = getTickAgeMs()
+        return (_connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "CONNECTED") && age >= 0L && age <= 15000L
     }
 
-    fun hasFirstTickReceived(): Boolean = hasFirstTick
+    fun hasFirstTickReceived(): Boolean = hasFirstTick || lastTickTimestamp > 0L
 
     fun hasActiveSubscription(): Boolean = isSubscribed
 
@@ -505,7 +519,7 @@ class AngelOneMarketDataService(
     }
 
     fun reconnect() {
-        connectWebSocket()
+        connectWebSocket(force = true)
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.ui.components.CandleData>> {

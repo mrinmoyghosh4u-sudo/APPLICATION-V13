@@ -95,11 +95,12 @@ class MarketDataEngine(
             // Monitor Angel One connection state
             launch {
                 angelMarketDataService.connectionState.collectLatest { state ->
-                    val isConnected = state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED"
+                    val isConnected = state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED" || state == "SUBSCRIBING" || state == "CONNECTING"
                     healthManager.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, isConnected)
                     
-                    if (state == "LIVE" || state == "SUBSCRIBED") {
+                    if (state == "LIVE" || state == "SUBSCRIBED" || state == "CONNECTED") {
                         healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_ANGEL_ONE, true)
+                        evaluateLiveLtpFailover()
                     } else if (state == "DISCONNECTED" || state == "ERROR" || state == "STALE") {
                         evaluateLiveLtpFailover()
                     }
@@ -187,7 +188,7 @@ class MarketDataEngine(
                     }
                 } else if (currentProvider == ProviderHealthManager.PROVIDER_MSTOCK) {
                     // Monitor Angel One background recovery
-                    if (!angelMarketDataService.isConnectionLive()) {
+                    if (!angelMarketDataService.isConnectingOrLive()) {
                         Log.i(TAG, "Monitoring Angel One recovery in background...")
                         angelMarketDataService.reconnect()
                     }
