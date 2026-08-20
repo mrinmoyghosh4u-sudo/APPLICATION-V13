@@ -40,9 +40,9 @@ class SessionManager(context: Context) {
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
-            }.getOrElse {
-                Log.e("SessionManager", "Fallback to standard SharedPreferences")
-                context.getSharedPreferences("kingkhan_trade_prefs_std", Context.MODE_PRIVATE)
+            }.getOrElse { err ->
+                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}")
+                throw SecurityException("Failed to initialize secure encrypted storage: ${err.message}")
             }
         }
     }

@@ -376,7 +376,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearBrokerSnapshot(brokerName)
 
             val hasSavedSession = when (brokerName) {
-                "Angel One" -> !sessionManager.angelJwtToken.isNullOrBlank()
+                "Angel One" -> sessionManager.isAngelConfigured() || !sessionManager.angelJwtToken.isNullOrBlank()
                 "Dhan" -> !sessionManager.dhanAccessToken.isNullOrBlank()
                 "m.Stock" -> sessionManager.isMStockConfigured()
                 else -> false

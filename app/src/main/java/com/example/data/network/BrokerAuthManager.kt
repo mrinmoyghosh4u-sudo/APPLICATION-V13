@@ -235,11 +235,11 @@ class BrokerAuthManager(
         apiKey: String? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
-            val code = clientCode?.trim() ?: sessionManager.angelClientId
-            val pass = mpin?.trim() ?: sessionManager.angelMpin
-            val secret = totpSecret?.trim() ?: sessionManager.angelTotpSecret
+            val code = clientCode?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelClientId
+            val pass = mpin?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelMpin
+            val secret = totpSecret?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelTotpSecret
             val explicitTotp = totp?.trim() ?: ""
-            val key = apiKey?.trim() ?: sessionManager.angelApiKey
+            val key = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: sessionManager.angelApiKey
 
             if (code.isBlank() || pass.isBlank()) {
                 throw Exception("Client ID and MPIN are required for Angel One login.")
@@ -592,10 +592,52 @@ class BrokerAuthManager(
         return when (brokerName) {
             "Dhan" -> refreshDhan()
             "Angel One" -> {
-                angelMarketDataService.reconnect()
-                refreshAngelOne()
+                // 1. Try refresh token first if present
+                if (!sessionManager.angelRefreshToken.isNullOrBlank()) {
+                    val refreshRes = refreshAngelOne()
+                    if (refreshRes.isSuccess && refreshRes.getOrThrow()) {
+                        angelMarketDataService.connect()
+                        return refreshRes
+                    }
+                }
+                // 2. Fallback to saved credentials + auto-generated TOTP
+                if (sessionManager.angelClientId.isNotBlank() && sessionManager.angelMpin.isNotBlank() && sessionManager.angelTotpSecret.isNotBlank()) {
+                    Log.d(TAG, "Reconnecting Angel One using saved credentials & auto-generated TOTP...")
+                    val autoRes = connectAngelOne(
+                        clientCode = sessionManager.angelClientId,
+                        mpin = sessionManager.angelMpin,
+                        totpSecret = sessionManager.angelTotpSecret,
+                        apiKey = sessionManager.angelApiKey
+                    )
+                    if (autoRes.isSuccess) {
+                        return autoRes
+                    }
+                }
+                Result.failure(Exception("Angel One reconnect failed. Credentials or session missing."))
             }
-            "m.Stock" -> refreshMStock()
+            "m.Stock" -> {
+                // 1. Try refresh token first if present
+                if (!sessionManager.mstockRefreshToken.isNullOrBlank()) {
+                    val refreshRes = refreshMStock()
+                    if (refreshRes.isSuccess && refreshRes.getOrThrow()) {
+                        mStockMarketDataService.connect()
+                        return refreshRes
+                    }
+                }
+                // 2. Fallback to saved credentials + auto-generated TOTP
+                if (sessionManager.mstockClientId.isNotBlank() && sessionManager.mstockApiKey.isNotBlank() && sessionManager.mstockTotpSecret.isNotBlank()) {
+                    Log.d(TAG, "Reconnecting m.Stock using saved credentials & auto-generated TOTP...")
+                    val autoRes = connectMStock(
+                        clientCode = sessionManager.mstockClientId,
+                        apiKey = sessionManager.mstockApiKey,
+                        totpSecret = sessionManager.mstockTotpSecret
+                    )
+                    if (autoRes.isSuccess) {
+                        return autoRes
+                    }
+                }
+                Result.failure(Exception("m.Stock reconnect failed. Credentials or session missing."))
+            }
             "TradeSmart" -> refreshTradeSmart()
             else -> Result.failure(Exception("Unknown broker: $brokerName"))
         }
