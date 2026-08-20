@@ -377,6 +377,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _brokerSwitchStatus.value = "Setting primary market data provider to $brokerName..."
 
             if (brokerName == "Angel One" || brokerName == "m.Stock") {
+                val isReady = if (brokerName == "Angel One") {
+                    brokerManager.angelMarketDataService.isConnectionLive() ||
+                    brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                } else {
+                    brokerManager.mStockMarketDataService.isConnectionLive() ||
+                    brokerManager.brokerAuthManager.statuses.value["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                }
+
+                if (!isReady) {
+                    _isSessionRestoring.value = false
+                    _brokerSwitchStatus.value = null
+                    _authErrorMessage.value = "Provider is not ready. Please connect first."
+                    openConnectDialog(brokerName)
+                    return@launch
+                }
+
                 brokerManager.setPrimaryMarketDataProvider(brokerName)
                 _brokerSwitchStatus.value = "Primary Market Data • $brokerName"
                 _isSessionRestoring.value = false
