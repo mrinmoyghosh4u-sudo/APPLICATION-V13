@@ -39,6 +39,8 @@ fun DiagnosticsScreen(
     val mStockConnectionState by viewModel.brokerManager.mStockMarketDataService.connectionState.collectAsStateWithLifecycle()
     val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
     val mStockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
+    val nseHealth by MarketDataStore.nseHealth.collectAsStateWithLifecycle()
+    val nseState by viewModel.brokerManager.nseFeedService.connectionState.collectAsStateWithLifecycle()
     val yahooHealth by MarketDataStore.yahooHealth.collectAsStateWithLifecycle()
     val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
     val internalActiveProvider by viewModel.brokerManager.marketDataEngine.internalActiveProvider.collectAsStateWithLifecycle()
@@ -196,8 +198,15 @@ fun DiagnosticsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        SectionHeader("REFERENCE / BACKUP: YAHOO FINANCE")
-        DiagnosticItem("Yahoo Data Role", "REFERENCE ONLY (Never Live Feed)")
+        SectionHeader("REFERENCE / BACKUP: NSE INDIA & YAHOO FINANCE")
+        DiagnosticItem("NSE Reference Role", "REFERENCE / BACKUP DATA (Official Index Stream)")
+        DiagnosticItem("NSE Connection State", nseState)
+        DiagnosticItem("NSE Health Status", if (nseHealth == "LIVE") "PASS (Active)" else nseHealth)
+        DiagnosticItem("NSE Reference Feeds", "NIFTY 50, BANKNIFTY, FINNIFTY, MIDCPNIFTY")
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        DiagnosticItem("Yahoo Data Role", "SECONDARY REFERENCE ONLY")
         DiagnosticItem("Yahoo Health", yahooHealth)
 
         Spacer(modifier = Modifier.height(16.dp))

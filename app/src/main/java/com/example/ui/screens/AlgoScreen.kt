@@ -118,7 +118,7 @@ fun AlgoScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
                 .statusBarsPadding(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -144,27 +144,55 @@ fun AlgoScreen(
                         color = TextWhite
                     )
                     Text(
-                        "Algo Trading",
+                        "Trade Like a King 👑",
                         fontSize = 11.sp,
                         color = SecondaryGold,
                         fontWeight = FontWeight.Medium
                     )
                 }
             }
-            IconButton(onClick = onOpenNotificationCenter) {
-                Box {
-                    Icon(
-                        Icons.Outlined.Notifications,
-                        contentDescription = "Alerts",
-                        tint = SecondaryGold
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(ProfitGreen, CircleShape)
-                            .align(Alignment.TopEnd)
-                    )
+
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = ProfitGreen.copy(alpha = 0.15f),
+                        shape = CircleShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.size(6.dp).background(ProfitGreen, CircleShape))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "LIVE – ANGEL ONE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ProfitGreen
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(onClick = onOpenNotificationCenter, modifier = Modifier.size(28.dp)) {
+                        Box {
+                            Icon(
+                                Icons.Outlined.Notifications,
+                                contentDescription = "Alerts",
+                                tint = SecondaryGold,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(ProfitGreen, CircleShape)
+                                    .align(Alignment.TopEnd)
+                            )
+                        }
+                    }
                 }
+                val updateTime = remember { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()) }
+                Text("Updated: $updateTime", fontSize = 9.sp, color = TextGray)
             }
         }
 
@@ -216,202 +244,209 @@ fun AlgoDashboard(
         contentPadding = PaddingValues(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. ALGO ENGINE CARD
+        // 1. ALGO ENGINE & ALGO PERFORMANCE ROW
         item {
-            Surface(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                color = DarkCard,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isAlgoActive) ProfitGreen.copy(alpha = 0.6f) else SecondaryGold.copy(alpha = 0.3f)
-                )
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Header Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                // LEFT CARD: ALGO ENGINE
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    color = DarkCard,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isAlgoActive) ProfitGreen.copy(alpha = 0.6f) else SecondaryGold.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "ALGO ENGINE",
+                                color = SecondaryGold,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                color = if (isAlgoActive) ProfitGreen.copy(alpha = 0.2f) else LossRed.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isAlgoActive) ProfitGreen else LossRed
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(5.dp)
+                                            .background(if (isAlgoActive) ProfitGreen else LossRed, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        if (isAlgoActive) "ON" else "OFF",
+                                        color = if (isAlgoActive) ProfitGreen else LossRed,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Status", color = TextGray, fontSize = 9.sp)
                         Text(
-                            "ALGO ENGINE",
-                            color = TextWhite,
-                            fontSize = 14.sp,
+                            currentStrategy.name,
+                            color = PrimaryGold,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Surface(
-                            color = if (isAlgoActive) ProfitGreen.copy(alpha = 0.2f) else LossRed.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isAlgoActive) ProfitGreen else LossRed
-                            )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Index", color = TextGray, fontSize = 9.sp)
+                        Text(
+                            selectedIndex,
+                            color = TextWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(if (isAlgoActive) ProfitGreen else LossRed, CircleShape)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
+                            Column {
+                                Text("Option Mode", color = TextGray, fontSize = 9.sp)
                                 Text(
-                                    if (isAlgoActive) "ON" else "OFF",
-                                    color = if (isAlgoActive) ProfitGreen else LossRed,
-                                    fontSize = 11.sp,
+                                    selectedOptionMode,
+                                    color = SecondaryGold,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Trading Mode", color = TextGray, fontSize = 9.sp)
+                                Text(
+                                    "LIVE SIGNALS",
+                                    color = ProfitGreen,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                // RIGHT CARD: ALGO PERFORMANCE
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    color = DarkCard,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "ALGO PERFORMANCE",
+                            color = SecondaryGold,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
 
-                    // Strategy, Index, Option Mode, Trading Mode Grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Strategy", color = TextGray, fontSize = 11.sp)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                currentStrategy.name,
-                                color = PrimaryGold,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text("Index", color = TextGray, fontSize = 11.sp)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                selectedIndex,
-                                color = TextWhite,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Option Mode", color = TextGray, fontSize = 11.sp)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                selectedOptionMode,
-                                color = SecondaryGold,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text("Trading Mode", color = TextGray, fontSize = 11.sp)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                "LIVE SIGNALS",
-                                color = TextWhite,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // START / STOP ALGO BUTTON
-                    if (isAlgoActive) {
-                        Button(
-                            onClick = { AlgoEngine.emergencyStop() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = LossRed),
-                            shape = RoundedCornerShape(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                "STOP ALGO",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    } else {
-                        Button(
-                            onClick = { AlgoEngine.toggleAlgo(true) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                "START ALGO",
-                                color = Color.Black,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Divider(color = DarkCardBorder, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Bottom Stats Row inside Card
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Today's P&L", color = TextGray, fontSize = 10.sp)
-                            val formattedPnl = if (todayPnl >= 0) "+ ₹${String.format("%.2f", todayPnl)}" else "- ₹${String.format("%.2f", kotlin.math.abs(todayPnl))}"
-                            Text(
-                                formattedPnl,
-                                color = if (todayPnl >= 0) ProfitGreen else LossRed,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Trades", color = TextGray, fontSize = 10.sp)
-                            Text(
-                                "$todayTradesCount",
-                                color = TextWhite,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Win Rate", color = TextGray, fontSize = 10.sp)
-                            val liveHistoryVal = liveTradeHistory
-                            val wins = liveHistoryVal.count { it.pnl > 0 }
-                            val winRateStr = if (liveHistoryVal.isEmpty()) "--" else String.format("%.2f%%", (wins.toDouble() / liveHistoryVal.size) * 100)
-                            Text(
-                                winRateStr,
-                                color = if (winRateStr == "--") TextGray else ProfitGreen,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Active", color = TextGray, fontSize = 10.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text("Today's P&L", color = TextGray, fontSize = 9.sp)
+                                val formattedPnl = if (todayPnl >= 0) "+ ₹${String.format("%.2f", todayPnl)}" else "- ₹${String.format("%.2f", kotlin.math.abs(todayPnl))}"
                                 Text(
-                                    "${activePositions.size}",
-                                    color = TextWhite,
-                                    fontSize = 13.sp,
+                                    formattedPnl,
+                                    color = if (todayPnl >= 0) ProfitGreen else LossRed,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .background(ProfitGreen, CircleShape)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Trades", color = TextGray, fontSize = 9.sp)
+                                Text(
+                                    "$todayTradesCount",
+                                    color = TextWhite,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Win Rate", color = TextGray, fontSize = 9.sp)
+                                val liveHistoryVal = liveTradeHistory
+                                val wins = liveHistoryVal.count { it.pnl > 0 }
+                                val winRateStr = if (liveHistoryVal.isEmpty()) "--" else String.format("%.0f%%", (wins.toDouble() / liveHistoryVal.size) * 100)
+                                Text(
+                                    winRateStr,
+                                    color = TextGray,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Active", color = TextGray, fontSize = 9.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "${activePositions.size}",
+                                        color = TextWhite,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Box(
+                                        modifier = Modifier.size(6.dp).background(ProfitGreen, CircleShape)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // START / STOP ALGO BUTTON
+                        if (isAlgoActive) {
+                            Button(
+                                onClick = { AlgoEngine.emergencyStop() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = LossRed),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    "STOP ALGO",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = { AlgoEngine.toggleAlgo(true) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    "START ALGO",
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
                                 )
                             }
                         }
@@ -431,73 +466,82 @@ fun AlgoDashboard(
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryGold.copy(alpha = 0.4f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
                         "CURRENT SIGNAL",
                         color = SecondaryGold,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     if (sig != null) {
-                        Text(
-                            sig.actionType,
-                            color = ProfitGreen,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            sig.symbol,
-                            color = TextWhite,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Entry", color = TextGray, fontSize = 10.sp)
-                                Text("₹${sig.entryZone}", color = TextWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    sig.actionType,
+                                    color = if (sig.actionType.contains("BUY", ignoreCase = true)) ProfitGreen else LossRed,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                                Text(
+                                    sig.symbol,
+                                    color = TextWhite,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
-                            Column {
-                                Text("SL", color = TextGray, fontSize = 10.sp)
-                                Text("₹${sig.stopLoss}", color = LossRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Column {
-                                Text("T1", color = TextGray, fontSize = 10.sp)
-                                Text("₹${sig.target1}", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Column {
-                                Text("T2", color = TextGray, fontSize = 10.sp)
-                                Text("₹${sig.target2}", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Column {
-                                Text("T3", color = TextGray, fontSize = 10.sp)
-                                Text("₹${sig.target3}", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column {
+                                    Text("Entry", color = TextGray, fontSize = 9.sp)
+                                    Text("₹${sig.entryZone}", color = TextWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column {
+                                    Text("SL", color = TextGray, fontSize = 9.sp)
+                                    Text("₹${sig.stopLoss}", color = LossRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column {
+                                    Text("T1", color = TextGray, fontSize = 9.sp)
+                                    Text("₹${sig.target1}", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Trailing SL: ₹5.00 (1.5%)",
-                            color = TextGray,
-                            fontSize = 10.sp
-                        )
                     } else {
-                        // Default empty state if no signal active
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Text(
-                                "NO ACTIVE SIGNAL",
-                                color = TextGray,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Canvas(modifier = Modifier.size(36.dp)) {
+                                val center = Offset(size.width / 2, size.height / 2)
+                                val radius = size.width / 2
+                                drawCircle(color = TextGray.copy(alpha = 0.3f), radius = radius, style = Stroke(width = 1.dp.toPx()))
+                                drawCircle(color = TextGray.copy(alpha = 0.3f), radius = radius * 0.6f, style = Stroke(width = 1.dp.toPx()))
+                                drawLine(color = TextGray.copy(alpha = 0.3f), start = Offset(center.x, 0f), end = Offset(center.x, size.height), strokeWidth = 1.dp.toPx())
+                                drawLine(color = TextGray.copy(alpha = 0.3f), start = Offset(0f, center.y), end = Offset(size.width, center.y), strokeWidth = 1.dp.toPx())
+                                drawLine(color = PrimaryGold, start = center, end = Offset(center.x + radius * 0.7f, center.y + radius * 0.7f), strokeWidth = 2.dp.toPx())
+                                drawCircle(color = PrimaryGold, radius = 3.dp.toPx(), center = Offset(center.x + radius * 0.7f, center.y + radius * 0.7f))
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    "NO ACTIVE SIGNAL",
+                                    color = TextWhite,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Algo will generate signals when started",
+                                    color = TextGray,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }

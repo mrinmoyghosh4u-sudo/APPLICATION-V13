@@ -536,32 +536,7 @@ fun OptionChainTabContent(
         }
 
         // Table Content
-        val isBrokerConnected = viewModel.isSessionActive() || userProfile.isAngelConnected || userProfile.isDhanConnected || userProfile.connectedBroker.isNotBlank()
-        if (!isBrokerConnected) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "Unable to load Option Chain",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = LossRed
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "Connect your active broker account to load live option chain feeds.",
-                        fontSize = 12.sp,
-                        color = TextGray,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        } else if (strikes.isEmpty()) {
+        if (strikes.isEmpty()) {
             Box(
                 modifier = Modifier
                     .weight(1f)

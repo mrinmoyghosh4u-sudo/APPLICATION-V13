@@ -364,6 +364,10 @@ class MainActivity : FragmentActivity() {
                                                     snackbarHostState.showSnackbar("Added $symbol ($exchange) to Watchlist")
                                                 }
                                             },
+                                            onNavigateToIndexDetails = { exchange, indexName ->
+                                                val encodedIndexName = android.net.Uri.encode(indexName)
+                                                navController.navigate("index_details/$exchange/$encodedIndexName")
+                                            },
                                             isRefreshing = isRefreshing,
                                             onRefresh = {
                                                 viewModel.refreshMarketData()

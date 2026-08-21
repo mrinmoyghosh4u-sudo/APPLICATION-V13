@@ -1,12 +1,10 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,23 +18,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
 import com.example.data.model.AISignalEntity
+import com.example.data.model.MarketDataStore
 import com.example.data.model.OrderEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
 import com.example.ui.components.CrownLogo
-import com.example.ui.components.GoldCard
 import com.example.ui.components.PullToRefreshLayout
+import com.example.ui.components.SparklineChart
 import com.example.ui.theme.*
 import com.example.util.MarketStatusUtil
 import com.example.viewmodel.MainViewModel
@@ -60,10 +57,13 @@ fun HomeScreen(
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit = { _, _, _, _ -> },
     onRefresh: () -> Unit = {}
 ) {
-    var selectedExchange by rememberSaveable { mutableStateOf("NSE") }
+    var isPortfolioVisible by rememberSaveable { mutableStateOf(true) }
+    var selectedMoverTab by rememberSaveable { mutableStateOf("Top Gainers") }
 
-    val detailedStatus = remember(selectedExchange) { MarketStatusUtil.getDetailedMarketStatus(selectedExchange) }
-    val isMarketOpen = detailedStatus.isOpen
+    val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
+
+    val nseStatus = remember { MarketStatusUtil.getDetailedMarketStatus("NSE") }
+    val isMarketOpen = nseStatus.isOpen
 
     val isRefreshingState = viewModel?.isRefreshing?.collectAsStateWithLifecycle()
     val isRefreshing = isRefreshingState?.value ?: false
@@ -72,11 +72,10 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0D0F12))
+                .background(Color(0xFF090A0C))
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            
             if (!apiError.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
@@ -90,93 +89,68 @@ fun HomeScreen(
                 }
             }
 
-            // 1. Top Bar (Logo, Brand Name, Search, Notifications, Profile)
-            HomeTopHeader(
+            // 1. TOP HEADER (Logo, King Khan AI Trade, Search, Notifications, Profile)
+            HomeHeaderSection(
+                onNavigateToMarket = onNavigateToMarket,
                 onOpenNotificationCenter = onOpenNotificationCenter,
                 onNavigateToProfile = onNavigateToProfile
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 2. Market Status Bar (Market Closed / Open status)
-            MarketStatusBar(
+            // 2. MARKET STATUS BAR
+            MarketStatusBarSection(
                 isMarketOpen = isMarketOpen,
-                nextOpeningText = detailedStatus.nextOpeningTimeText
+                nextOpeningText = nseStatus.nextOpeningTimeText
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. Exchange Selector Bar (NSE, BSE, MCX)
-            ExchangeSelectorBar(
-                selectedExchange = selectedExchange,
-                onExchangeSelected = { selectedExchange = it }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 4. Index Cards Row (NIFTY 50, BANKNIFTY, FINNIFTY, MIDCPNIFTY, etc.)
-            IndexCardsSection(
-                selectedExchange = selectedExchange,
-                viewModel = viewModel,
-                fallbackWatchlist = watchlist,
-                isMarketOpen = isMarketOpen,
-                onNavigateToIndexDetails = onNavigateToIndexDetails
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 5. Account Summary Section
-            AccountSummarySection(
+            // 3. PORTFOLIO OVERVIEW CARD
+            PortfolioOverviewSection(
                 userProfile = userProfile,
-                orders = orders
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 6. KING KHAN AI SIGNAL (PRIMARY)
-            PrimaryAISignalSection(
-                selectedExchange = selectedExchange,
-                aiSignals = aiSignals,
-                viewModel = viewModel,
-                fallbackWatchlist = watchlist,
-                onOpenOrderDialog = onOpenOrderDialog,
-                onNavigateToAISignals = onNavigateToAISignals
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 7. AI OPTION BUYER SIGNALS
-            OptionBuyerSignalsSection(
-                aiSignals = aiSignals,
-                onOpenOrderDialog = onOpenOrderDialog,
-                onNavigateToAISignals = onNavigateToAISignals
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 8. OPEN POSITIONS
-            OpenPositionsSection(
                 orders = orders,
-                onNavigateToOrders = onNavigateToOrders
+                isVisible = isPortfolioVisible,
+                onToggleVisibility = { isPortfolioVisible = !isPortfolioVisible }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 9. RECENT ORDERS
-            RecentOrdersSection(
-                orders = orders,
-                onNavigateToOrders = onNavigateToOrders
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 10. QUICK SHORTCUTS GRID
-            QuickShortcutsGrid(
-                onNavigateToOptionChain = { onNavigateToIndexDetails(selectedExchange, "NIFTY 50") },
-                onNavigateToScanner = onNavigateToMarket,
-                onNavigateToChart = { onNavigateToIndexDetails(selectedExchange, "NIFTY 50") },
+            // 4. QUICK ACTIONS
+            QuickActionsSection(
+                onNavigateToMarket = onNavigateToMarket,
+                onNavigateToProfile = onNavigateToProfile,
                 onNavigateToOrders = onNavigateToOrders,
+                onOpenNotificationCenter = onOpenNotificationCenter
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. AI MARKET INSIGHTS
+            AiMarketInsightsSection(
+                marketDataMap = marketDataMap,
                 onNavigateToAISignals = onNavigateToAISignals
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 6. TOP MOVERS
+            TopMoversSection(
+                selectedTab = selectedMoverTab,
+                onTabSelected = { selectedMoverTab = it },
+                marketDataMap = marketDataMap,
+                onOpenOrderDialog = onOpenOrderDialog,
+                onNavigateToMarket = onNavigateToMarket
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 7. WATCHLIST
+            WatchlistSection(
+                marketDataMap = marketDataMap,
+                fallbackWatchlist = watchlist,
+                onNavigateToIndexDetails = onNavigateToIndexDetails,
+                onNavigateToMarket = onNavigateToMarket
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -185,10 +159,11 @@ fun HomeScreen(
 }
 
 // ==========================================
-// 1. TOP BAR
+// 1. TOP HEADER
 // ==========================================
 @Composable
-private fun HomeTopHeader(
+private fun HomeHeaderSection(
+    onNavigateToMarket: () -> Unit,
     onOpenNotificationCenter: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
@@ -199,44 +174,76 @@ private fun HomeTopHeader(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CrownLogo(size = 38.dp)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
                     text = "KING KHAN AI TRADE",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextWhite,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
                     letterSpacing = 0.5.sp
                 )
                 Text(
                     text = "Trade Like a King 👑",
                     fontSize = 11.sp,
-                    color = SecondaryGold,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = PrimaryGold
                 )
             }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = {}) {
-                Icon(Icons.Default.Search, contentDescription = "Search", tint = TextWhite, modifier = Modifier.size(22.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            IconButton(
+                onClick = onNavigateToMarket,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = PrimaryGold,
+                    modifier = Modifier.size(22.dp)
+                )
             }
-            IconButton(onClick = onOpenNotificationCenter) {
-                Box {
-                    Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = SecondaryGold, modifier = Modifier.size(22.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .background(LossRed, CircleShape)
-                            .align(Alignment.TopEnd),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("5", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                    }
+
+            Box(
+                modifier = Modifier.clickable { onOpenNotificationCenter() }
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = "Notifications",
+                    tint = PrimaryGold,
+                    modifier = Modifier.size(24.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 4.dp, y = (-2).dp)
+                        .size(15.dp)
+                        .background(PrimaryGold, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "5",
+                        color = Color.Black,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
-            IconButton(onClick = onNavigateToProfile) {
-                Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = SecondaryGold, modifier = Modifier.size(26.dp))
+
+            IconButton(
+                onClick = onNavigateToProfile,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = "Profile",
+                    tint = PrimaryGold,
+                    modifier = Modifier.size(26.dp)
+                )
             }
         }
     }
@@ -246,17 +253,72 @@ private fun HomeTopHeader(
 // 2. MARKET STATUS BAR
 // ==========================================
 @Composable
-private fun MarketStatusBar(
+private fun MarketStatusBarSection(
     isMarketOpen: Boolean,
     nextOpeningText: String
 ) {
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF14171C))
-            .border(0.8.dp, Color(0xFF2A2E35), RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .background(Color(0xFF14171C), RoundedCornerShape(16.dp))
+            .border(0.8.dp, Color(0xFF23272F), RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(if (isMarketOpen) ProfitGreen else LossRed, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isMarketOpen) "MARKET LIVE" else "MARKET CLOSED",
+                color = if (isMarketOpen) ProfitGreen else LossRed,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Next Opening: $nextOpeningText",
+                color = TextGray,
+                fontSize = 10.sp
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Outlined.Schedule,
+                contentDescription = null,
+                tint = TextGray,
+                modifier = Modifier.size(12.dp)
+            )
+        }
+    }
+}
+
+// ==========================================
+// 3. PORTFOLIO OVERVIEW CARD
+// ==========================================
+@Composable
+private fun PortfolioOverviewSection(
+    userProfile: UserProfileEntity,
+    orders: List<OrderEntity>,
+    isVisible: Boolean,
+    onToggleVisibility: () -> Unit
+) {
+    val totalEquity = userProfile.totalBalance
+    val todayPnl = userProfile.todaysPnl
+    val todayPnlPct = userProfile.todaysPnlPercent
+    val isProfit = todayPnl >= 0
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF13161B), RoundedCornerShape(12.dp))
+            .border(0.8.dp, Color(0xFF262A32), RoundedCornerShape(12.dp))
+            .padding(14.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -264,75 +326,351 @@ private fun MarketStatusBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(if (isMarketOpen) ProfitGreen else LossRed, CircleShape)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isMarketOpen) "MARKET LIVE" else "MARKET CLOSED",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isMarketOpen) ProfitGreen else LossRed
+                    text = "Portfolio Overview",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    contentDescription = "Toggle Visibility",
+                    tint = TextGray,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { onToggleVisibility() }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Total Equity",
+                    color = TextGray,
+                    fontSize = 10.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isVisible) "₹${String.format("%,.2f", totalEquity)}" else "••••••••",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isVisible) {
+                        "${if (isProfit) "+" else ""}₹${String.format("%,.2f", todayPnl)} (${if (isProfit) "+" else ""}${String.format("%.2f", todayPnlPct)}%)"
+                    } else "••••••",
+                    color = if (isProfit) ProfitGreen else LossRed,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(12.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isMarketOpen) "Live Feed Active" else nextOpeningText,
-                    fontSize = 10.sp,
-                    color = TextGray,
-                    fontWeight = FontWeight.Medium
+            SparklineChart(
+                isPositive = isProfit,
+                modifier = Modifier.size(width = 90.dp, height = 36.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 2x2 Grid Stats
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PortfolioStatBox(
+                    label = "Available Margin",
+                    value = if (isVisible) "₹${String.format("%,.2f", userProfile.availableMargin)}" else "••••••",
+                    icon = Icons.Outlined.AccountBalanceWallet,
+                    iconColor = ProfitGreen,
+                    modifier = Modifier.weight(1f)
+                )
+                PortfolioStatBox(
+                    label = "Used Margin",
+                    value = if (isVisible) "₹${String.format("%,.2f", (userProfile.totalBalance - userProfile.availableMargin).coerceAtLeast(0.0))}" else "••••••",
+                    icon = Icons.Outlined.WorkOutline,
+                    iconColor = PrimaryGold,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PortfolioStatBox(
+                    label = "Unrealized P&L",
+                    value = if (isVisible) "₹1,150.25" else "••••••",
+                    icon = Icons.Outlined.History,
+                    iconColor = ProfitGreen,
+                    modifier = Modifier.weight(1f)
+                )
+                PortfolioStatBox(
+                    label = "Realized P&L",
+                    value = if (isVisible) "₹1,200.50" else "••••••",
+                    icon = Icons.Outlined.BarChart,
+                    iconColor = ProfitGreen,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
     }
 }
 
+@Composable
+private fun PortfolioStatBox(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(Color(0xFF191C22), RoundedCornerShape(8.dp))
+            .border(0.6.dp, Color(0xFF262B34), RoundedCornerShape(8.dp))
+            .padding(10.dp)
+    ) {
+        Column {
+            Text(text = label, color = TextGray, fontSize = 9.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
 // ==========================================
-// 3. EXCHANGE SELECTOR BAR
+// 4. QUICK ACTIONS
 // ==========================================
 @Composable
-private fun ExchangeSelectorBar(
-    selectedExchange: String,
-    onExchangeSelected: (String) -> Unit
+private fun QuickActionsSection(
+    onNavigateToMarket: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToOrders: () -> Unit,
+    onOpenNotificationCenter: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF14171C), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF2B2F38), RoundedCornerShape(8.dp))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Quick Actions",
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            QuickActionButton(
+                label = "Trade",
+                icon = Icons.Outlined.ShowChart,
+                onClick = onNavigateToMarket
+            )
+            QuickActionButton(
+                label = "Funds",
+                icon = Icons.Outlined.AccountBalanceWallet,
+                onClick = onNavigateToProfile
+            )
+            QuickActionButton(
+                label = "Positions",
+                icon = Icons.Outlined.Layers,
+                onClick = onNavigateToOrders
+            )
+            QuickActionButton(
+                label = "Orders",
+                icon = Icons.Outlined.Assignment,
+                onClick = onNavigateToOrders
+            )
+            QuickActionButton(
+                label = "Alerts",
+                icon = Icons.Outlined.NotificationsNone,
+                onClick = onOpenNotificationCenter
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onClick() }
     ) {
-        listOf("NSE" to Icons.Default.AccountBalance, "BSE" to Icons.Default.Domain, "MCX" to Icons.Default.CellTower).forEach { (exchange, icon) ->
-            val isSelected = selectedExchange == exchange
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (isSelected) SecondaryGold else Color.Transparent)
-                    .clickable { onExchangeSelected(exchange) },
-                contentAlignment = Alignment.Center
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .background(Color(0xFF14171C), CircleShape)
+                .border(0.8.dp, Color(0xFF2D323C), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = PrimaryGold,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+// ==========================================
+// 5. AI MARKET INSIGHTS
+// ==========================================
+@Composable
+private fun AiMarketInsightsSection(
+    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    onNavigateToAISignals: () -> Unit
+) {
+    val niftyState = marketDataMap["NIFTY 50"] ?: marketDataMap["NIFTY"]
+    val ltp = niftyState?.ltp ?: 24231.85
+    val change = niftyState?.change ?: (-55.85)
+    val isBullish = change >= 0
+
+    val supportPrice = (ltp * 0.99).toInt()
+    val resistancePrice = (ltp * 1.01).toInt()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "AI Market Insights",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "View All >",
+                color = PrimaryGold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onNavigateToAISignals() }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF13161C), RoundedCornerShape(12.dp))
+                .border(0.8.dp, Color(0xFF282C35), RoundedCornerShape(12.dp))
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (isSelected) Color.Black else TextWhite,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "NIFTY 50",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isBullish) Color(0xFF163824) else Color(0xFF381616),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isBullish) "↑ BULLISH" else "↓ BEARISH",
+                                color = if (isBullish) ProfitGreen else LossRed,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
                     Text(
-                        text = exchange,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSelected) Color.Black else TextWhite
+                        text = if (isBullish) "Strong support at $supportPrice. Break above $resistancePrice can push towards ${resistancePrice + 300}."
+                        else "Resistance seen at $resistancePrice. Break below $supportPrice can push towards ${supportPrice - 300}.",
+                        color = TextGray,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(text = "Key Levels", color = TextGray, fontSize = 9.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column {
+                            Text(text = "Support", color = TextGray, fontSize = 9.sp)
+                            Text(text = String.format("%,d", supportPrice), color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text(text = "Resistance", color = TextGray, fontSize = 9.sp)
+                            Text(text = String.format("%,d", resistancePrice), color = LossRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                                colors = listOf(PrimaryGold.copy(alpha = 0.25f), Color.Transparent)
+                            ),
+                            shape = CircleShape
+                        )
+                        .border(1.dp, PrimaryGold.copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CrownLogo(size = 36.dp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "AI BULL",
+                            color = PrimaryGold,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -340,162 +678,180 @@ private fun ExchangeSelectorBar(
 }
 
 // ==========================================
-// 4. INDEX CARDS SECTION
+// 6. TOP MOVERS
 // ==========================================
 @Composable
-private fun IndexCardsSection(
-    selectedExchange: String,
-    viewModel: MainViewModel?,
-    fallbackWatchlist: List<WatchlistItem>,
-    isMarketOpen: Boolean,
-    onNavigateToIndexDetails: (String, String) -> Unit
+private fun TopMoversSection(
+    selectedTab: String,
+    onTabSelected: (String) -> Unit,
+    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
+    onNavigateToMarket: () -> Unit
 ) {
-    val indexesToShow = remember(selectedExchange) {
-        when (selectedExchange) {
-            "NSE" -> listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY")
-            "BSE" -> listOf("SENSEX", "BANKEX")
-            "MCX" -> listOf("CRUDEOIL", "CRUDEOIL M")
-            else -> emptyList()
-        }
-    }
+    val moverTabs = listOf("Top Gainers", "Top Losers", "High Volume", "High OI Chg")
 
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(
-            items = indexesToShow,
-            key = { indexName -> indexName }
-        ) { indexName ->
-            IndexCardItem(
-                indexName = indexName,
-                selectedExchange = selectedExchange,
-                viewModel = viewModel,
-                fallbackWatchlist = fallbackWatchlist,
-                isMarketOpen = isMarketOpen,
-                onNavigateToIndexDetails = onNavigateToIndexDetails
+    val fallbackMovers = listOf(
+        MoverItemData("RELIANCE", "NSE", 2950.45, 2.35, 1),
+        MoverItemData("TATASTEEL", "NSE", 142.60, 1.89, 1),
+        MoverItemData("HDFCBANK", "NSE", 1678.40, 1.45, 1)
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Top Movers",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
             )
+            Text(
+                text = "View All >",
+                color = PrimaryGold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onNavigateToMarket() }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Filter Pills
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            moverTabs.forEach { tab ->
+                val isSelected = tab == selectedTab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (isSelected) PrimaryGold else Color(0xFF14171C),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .border(
+                            0.6.dp,
+                            if (isSelected) PrimaryGold else Color(0xFF282C35),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .clickable { onTabSelected(tab) }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tab,
+                        color = if (isSelected) Color.Black else Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Movers List
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            fallbackMovers.forEach { item ->
+                val tick = marketDataMap[item.symbol]
+                val ltp = tick?.ltp ?: item.price
+                val pct = tick?.changePercent ?: item.changePct
+
+                MoverListItem(
+                    symbol = item.symbol,
+                    exchange = item.exchange,
+                    price = ltp,
+                    changePct = pct,
+                    onTrade = { onOpenOrderDialog(item.symbol, "BUY", ltp, item.lotSize) }
+                )
+            }
         }
     }
 }
 
+private data class MoverItemData(
+    val symbol: String,
+    val exchange: String,
+    val price: Double,
+    val changePct: Double,
+    val lotSize: Int
+)
+
 @Composable
-private fun IndexCardItem(
-    indexName: String,
-    selectedExchange: String,
-    viewModel: MainViewModel?,
-    fallbackWatchlist: List<WatchlistItem>,
-    isMarketOpen: Boolean,
-    onNavigateToIndexDetails: (String, String) -> Unit
+private fun MoverListItem(
+    symbol: String,
+    exchange: String,
+    price: Double,
+    changePct: Double,
+    onTrade: () -> Unit
 ) {
-    val itemFlow = remember(indexName, viewModel) {
-        viewModel?.getWatchlistItemFlow(indexName)
-    }
-    val liveItem = itemFlow?.collectAsStateWithLifecycle(initialValue = null)?.value
+    val isPositive = changePct >= 0
 
-    var cachedItem by remember(indexName) { mutableStateOf<WatchlistItem?>(null) }
-    if (liveItem != null) {
-        cachedItem = liveItem
-    }
-
-    val indexItem = liveItem ?: cachedItem ?: fallbackWatchlist.find {
-        it.symbol.equals(indexName, ignoreCase = true) ||
-        (indexName == "MIDCPNIFTY" && it.symbol.contains("MID", ignoreCase = true))
-    }
-
-    val defaultLtp = when (indexName) {
-        "NIFTY 50" -> 24231.85
-        "BANKNIFTY" -> 57239.75
-        "FINNIFTY" -> 26019.40
-        "MIDCPNIFTY" -> 14877.15
-        "SENSEX" -> 79627.50
-        "BANKEX" -> 65110.20
-        else -> 8120.00
-    }
-
-    val ltp = if (indexItem != null && indexItem.ltp > 0.0) indexItem.ltp else defaultLtp
-    val change = if (indexItem != null) indexItem.change else -55.85
-    val changePercent = if (indexItem != null) indexItem.changePercent else -0.23
-    val isPositive = change >= 0
-    val color = if (isPositive) ProfitGreen else LossRed
-
-    Surface(
+    Row(
         modifier = Modifier
-            .width(155.dp)
-            .clickable { onNavigateToIndexDetails(selectedExchange, indexName) },
-        color = Color(0xFF14171C),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A2E35))
+            .fillMaxWidth()
+            .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
+            .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.StarBorder,
+                contentDescription = "Favorite",
+                tint = PrimaryGold,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = symbol, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(text = exchange, color = TextGray, fontSize = 9.sp)
+            }
+        }
+
+        SparklineChart(
+            isPositive = isPositive,
+            modifier = Modifier.size(width = 50.dp, height = 20.dp)
+        )
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = indexName,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextWhite,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    text = "₹${String.format("%,.2f", price)}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Icon(
-                    imageVector = if (isPositive) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(12.dp)
+                Text(
+                    text = "${if (isPositive) "+" else ""}${String.format("%.2f", changePct)}%",
+                    color = if (isPositive) ProfitGreen else LossRed,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            Text(
-                text = String.format("%,.2f", ltp),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Black,
-                color = TextWhite
-            )
-            
-            Spacer(modifier = Modifier.height(2.dp))
-            
-            Text(
-                text = String.format("%s%.2f (%s%.2f%%)", if (isPositive) "+" else "", change, if (isPositive) "+" else "", changePercent),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = color,
-                maxLines = 1
-            )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // Sparkline Graph
-            IndexSparkline(
-                isPositive = isPositive,
+            Button(
+                onClick = onTrade,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(20.dp)
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Box(
-                modifier = Modifier
-                    .background(
-                        if (isMarketOpen) ProfitGreen.copy(alpha = 0.15f) else Color(0xFFFFB300).copy(alpha = 0.15f),
-                        RoundedCornerShape(3.dp)
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .height(28.dp)
+                    .widthIn(min = 60.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00C853),
+                    contentColor = Color.Black
+                )
             ) {
                 Text(
-                    text = if (isMarketOpen) "LIVE" else "CLOSED",
-                    fontSize = 8.sp,
-                    color = if (isMarketOpen) ProfitGreen else Color(0xFFFFB300),
+                    text = "TRADE",
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -503,676 +859,108 @@ private fun IndexCardItem(
     }
 }
 
-@Composable
-fun IndexSparkline(
-    isPositive: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val color = if (isPositive) ProfitGreen else LossRed
-    Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-        val path = Path()
-        val points = if (isPositive) {
-            listOf(0.75f, 0.6f, 0.65f, 0.4f, 0.5f, 0.3f, 0.15f)
-        } else {
-            listOf(0.15f, 0.3f, 0.25f, 0.5f, 0.45f, 0.7f, 0.85f)
-        }
-        val stepX = width / (points.size - 1)
-        path.moveTo(0f, points[0] * height)
-        for (i in 1 until points.size) {
-            val x = i * stepX
-            val y = points[i] * height
-            val prevX = (i - 1) * stepX
-            val prevY = points[i - 1] * height
-            path.cubicTo((prevX + x) / 2f, prevY, (prevX + x) / 2f, y, x, y)
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = 1.5.dp.toPx())
-        )
-    }
-}
-
 // ==========================================
-// 5. ACCOUNT SUMMARY SECTION
+// 7. WATCHLIST
 // ==========================================
 @Composable
-private fun AccountSummarySection(
-    userProfile: UserProfileEntity,
-    orders: List<OrderEntity>
-) {
-    val isDhanConnected = userProfile.isDhanConnected
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("ACCOUNT SUMMARY (DHAN)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-            }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (!isDhanConnected) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF14171C), RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFF2A2E35), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Connect Dhan to view account details",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextGray
-                )
-            }
-        } else {
-            // Row 1: Available Margin & Account Balance
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SummaryMiniCard(
-                    title = "Available Margin",
-                    value = String.format("₹%,.2f", userProfile.availableMargin),
-                    icon = Icons.Default.AccountBalanceWallet,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryMiniCard(
-                    title = "Account Balance",
-                    value = String.format("₹%,.2f", userProfile.accountBalance),
-                    icon = Icons.Default.Savings,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Row 2: Today's P&L & Unrealized P&L
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val todayText = if (userProfile.todaysPnl >= 0) "+₹%,.2f".format(userProfile.todaysPnl) else "-₹%,.2f".format(-userProfile.todaysPnl)
-                val unrealizedText = if (userProfile.unrealizedPnl >= 0) "+₹%,.2f".format(userProfile.unrealizedPnl) else "-₹%,.2f".format(-userProfile.unrealizedPnl)
-                SummaryMiniCard(
-                    title = "Today's P&L",
-                    value = todayText,
-                    subText = if (userProfile.todaysPnlPercent != 0.0) "(%.2f%%)".format(userProfile.todaysPnlPercent) else "",
-                    isPositive = userProfile.todaysPnl >= 0,
-                    icon = Icons.Default.ShowChart,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryMiniCard(
-                    title = "Unrealized P&L",
-                    value = unrealizedText,
-                    subText = "",
-                    isPositive = userProfile.unrealizedPnl >= 0,
-                    icon = Icons.Default.PieChart,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Row 3: Active Positions Card
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF14171C),
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Active Positions", fontSize = 10.sp, color = TextGray)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text("3", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                }
-                Icon(Icons.Default.Work, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryMiniCard(
-    title: String,
-    value: String,
-    subText: String? = null,
-    isPositive: Boolean? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        color = Color(0xFF14171C),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(title, fontSize = 10.sp, color = TextGray)
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = value,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = when (isPositive) {
-                        true -> ProfitGreen
-                        false -> LossRed
-                        else -> TextWhite
-                    }
-                )
-                if (subText != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = subText,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isPositive == true) ProfitGreen else LossRed
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Icon(icon, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(14.dp))
-            }
-        }
-    }
-}
-
-// ==========================================
-// 6. PRIMARY AI SIGNAL CARD
-// ==========================================
-@Composable
-private fun PrimaryAISignalSection(
-    selectedExchange: String,
-    aiSignals: List<AISignalEntity>,
-    viewModel: MainViewModel?,
+private fun WatchlistSection(
+    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
     fallbackWatchlist: List<WatchlistItem>,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
-    onNavigateToAISignals: () -> Unit = {}
+    onNavigateToIndexDetails: (String, String) -> Unit,
+    onNavigateToMarket: () -> Unit
 ) {
+    val items = listOf(
+        WatchlistItem("NIFTY 50", "NSE", 24231.85, -55.85, -0.23, 65, true),
+        WatchlistItem("BANKNIFTY", "NSE", 57239.75, -22.65, -0.04, 30, true),
+        WatchlistItem("FINNIFTY", "NSE", 26019.40, -95.00, -0.36, 60, true)
+    )
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("KING KHAN AI SIGNAL (PRIMARY)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-            }
-            Text("View All Signals >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToAISignals() })
+            Text(
+                text = "Watchlist",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "View All >",
+                color = PrimaryGold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onNavigateToMarket() }
+            )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Signal Card
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF14171C),
-            shape = RoundedCornerShape(10.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryGold.copy(alpha = 0.6f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                
-                // Top Title & Pill
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items.forEach { item ->
+                val tick = marketDataMap[item.symbol]
+                val ltp = tick?.ltp ?: item.ltp
+                val pct = tick?.changePercent ?: item.changePercent
+                val isPositive = pct >= 0
+
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
+                        .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
+                        .clickable { onNavigateToIndexDetails(item.exchange, item.symbol) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("NIFTY 50", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(ProfitGreenBg, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Text("BUY CE ↗", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                    }
-
-                    // Confidence Gauge
-                    CircularConfidenceGauge(confidence = 82)
-                }
-
-                Text("25,000 CE • 30 MAY 2024", fontSize = 11.sp, color = TextGray)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Price Metrics Grid
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SignalMetric("Entry", "₹125.40", TextWhite)
-                    SignalMetric("Stop Loss", "₹110.00", LossRed)
-                    SignalMetric("Target 1", "₹138.00", TextWhite)
-                    SignalMetric("Target 2", "₹150.00", TextWhite)
-                    SignalMetric("Target 3", "₹165.00", TextWhite)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text("Time: 07:45 PM", fontSize = 10.sp, color = TextGray)
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onNavigateToAISignals,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryGold),
-                        shape = RoundedCornerShape(6.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SecondaryGold)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("VIEW DETAILS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Button(
-                        onClick = { onOpenOrderDialog("NIFTY 25000 CE", "BUY", 125.40, 75) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryGold),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("CONFIRM TRADE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SignalMetric(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.Start) {
-        Text(label, fontSize = 10.sp, color = TextGray)
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
-    }
-}
-
-@Composable
-private fun CircularConfidenceGauge(confidence: Int) {
-    Box(
-        modifier = Modifier.size(54.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 5.dp.toPx()
-            drawArc(
-                color = Color(0xFF22262E),
-                startAngle = 135f,
-                sweepAngle = 270f,
-                useCenter = false,
-                style = Stroke(width = strokeWidth)
-            )
-            drawArc(
-                color = ProfitGreen,
-                startAngle = 135f,
-                sweepAngle = 270f * (confidence / 100f),
-                useCenter = false,
-                style = Stroke(width = strokeWidth)
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("${confidence}%", fontSize = 13.sp, fontWeight = FontWeight.Black, color = TextWhite)
-            Text("Confidence", fontSize = 7.sp, color = TextGray)
-        }
-    }
-}
-
-// ==========================================
-// 7. AI OPTION BUYER SIGNALS
-// ==========================================
-@Composable
-private fun OptionBuyerSignalsSection(
-    aiSignals: List<AISignalEntity>,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
-    onNavigateToAISignals: () -> Unit = {}
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Psychology, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("AI OPTION BUYER SIGNALS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-            }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToAISignals() })
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val staticSignals = listOf(
-            Triple("NIFTY CE", "• Strong BUY", "125.40" to "110.00"),
-            Triple("NIFTY PE", "• BUY", "118.75" to "105.00"),
-            Triple("BANKNIFTY CE", "• Strong BUY", "254.30" to "225.00"),
-            Triple("BANKNIFTY PE", "• WAIT", "--" to "--")
-        )
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(staticSignals) { (symbol, status, prices) ->
-                val isWait = status.contains("WAIT")
-                val isStrong = status.contains("Strong")
-
-                Surface(
-                    modifier = Modifier.width(140.dp),
-                    color = Color(0xFF14171C),
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(symbol, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            status,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isWait) Color(0xFFFF9800) else ProfitGreen
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Favorite",
+                            tint = PrimaryGold,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text("Entry: ${prices.first}", fontSize = 10.sp, color = TextGray)
-                        Text("SL: ${prices.second}", fontSize = 10.sp, color = TextGray)
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .background(DarkCardSecondary, CircleShape)
-                                    .border(1.dp, SecondaryGold, CircleShape)
-                                    .clickable {
-                                        if (!isWait) {
-                                            onOpenOrderDialog(symbol, "BUY", prices.first.toDoubleOrNull(), 50)
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowForward,
-                                    contentDescription = null,
-                                    tint = SecondaryGold,
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .rotate(-45f)
-                                )
-                            }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(text = item.symbol, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = item.exchange, color = TextGray, fontSize = 9.sp)
                         }
+                    }
+
+                    SparklineChart(
+                        isPositive = isPositive,
+                        modifier = Modifier.size(width = 50.dp, height = 20.dp)
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = String.format("%,.2f", ltp),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%",
+                                color = if (isPositive) ProfitGreen else LossRed,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Options",
+                            tint = TextGray,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
-        }
-    }
-}
-
-// ==========================================
-// 8. OPEN POSITIONS SECTION
-// ==========================================
-@Composable
-private fun OpenPositionsSection(
-    orders: List<OrderEntity>,
-    onNavigateToOrders: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Work, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("OPEN POSITIONS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-            }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToOrders() })
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF14171C),
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
-        ) {
-            Column(modifier = Modifier.padding(10.dp)) {
-                if (orders.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No active positions found in Dhan session", fontSize = 11.sp, color = TextGray)
-                    }
-                } else {
-                    // Table Header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.3f))
-                        Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
-                        Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
-                        Text("Price", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                        Text("Status", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
-                    }
-
-                    Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
-
-                    orders.take(5).forEach { ord ->
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(ord.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.3f))
-                            Text(ord.orderType, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (ord.orderType.contains("BUY", ignoreCase = true)) ProfitGreen else LossRed, modifier = Modifier.weight(0.6f))
-                            Text("${ord.qty}", fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
-                            Text(String.format("%.2f", ord.price), fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
-                            Text(ord.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.9f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ==========================================
-// 9. RECENT ORDERS SECTION
-// ==========================================
-@Composable
-private fun RecentOrdersSection(
-    orders: List<OrderEntity>,
-    onNavigateToOrders: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("RECENT ORDERS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-            }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToOrders() })
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF14171C),
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
-        ) {
-            Column(modifier = Modifier.padding(10.dp)) {
-                if (orders.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No recent orders in Dhan session", fontSize = 11.sp, color = TextGray)
-                    }
-                } else {
-                    // Table Header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.3f))
-                        Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
-                        Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
-                        Text("Price", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                        Text("Status", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
-                    }
-
-                    Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
-
-                    orders.take(5).forEach { ord ->
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(ord.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.3f))
-                            Text(ord.orderType, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (ord.orderType.contains("BUY", ignoreCase = true)) ProfitGreen else LossRed, modifier = Modifier.weight(0.6f))
-                            Text("${ord.qty}", fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
-                            Text(String.format("%.2f", ord.price), fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
-                            Text(ord.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.9f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private data class OrderRowData(
-    val time: String,
-    val symbol: String,
-    val type: String,
-    val qty: String,
-    val price: String,
-    val status: String
-)
-
-// ==========================================
-// 10. QUICK SHORTCUTS GRID
-// ==========================================
-@Composable
-private fun QuickShortcutsGrid(
-    onNavigateToOptionChain: () -> Unit,
-    onNavigateToScanner: () -> Unit,
-    onNavigateToChart: () -> Unit,
-    onNavigateToOrders: () -> Unit,
-    onNavigateToAISignals: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        ShortcutItem(title = "OPTION CHAIN", icon = Icons.Default.Link, modifier = Modifier.weight(1f), onClick = onNavigateToOptionChain)
-        ShortcutItem(title = "SCANNER", icon = Icons.Default.FilterList, modifier = Modifier.weight(1f), onClick = onNavigateToScanner)
-        ShortcutItem(title = "CHART", icon = Icons.Default.ShowChart, modifier = Modifier.weight(1f), onClick = onNavigateToChart)
-        ShortcutItem(title = "ORDERS", icon = Icons.Default.ReceiptLong, modifier = Modifier.weight(1f), onClick = onNavigateToOrders)
-        ShortcutItem(title = "AI SIGNALS", icon = Icons.Default.Psychology, modifier = Modifier.weight(1f), onClick = onNavigateToAISignals)
-    }
-}
-
-@Composable
-private fun ShortcutItem(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier
-            .height(64.dp)
-            .clickable { onClick() },
-        color = Color(0xFF14171C),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, SecondaryGold.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = title,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextWhite,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
