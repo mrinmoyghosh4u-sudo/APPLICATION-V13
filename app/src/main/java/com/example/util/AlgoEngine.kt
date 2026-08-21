@@ -288,6 +288,12 @@ object AlgoEngine {
         }
 
         _engineStatusMessage.value = "ANALYZING REAL MARKET DATA..."
+        if (indicators.isNullOrEmpty()) {
+            _engineStatusMessage.value = "WAITING FOR INDICATOR DATA"
+            _currentSignal.value = null
+            _marketBias.value = "NEUTRAL"
+            return
+        }
         
         // Basic Technical Analysis on Quote Data to simulate AI processing
         val isBullish = targetQuote.changePercent > 0.0

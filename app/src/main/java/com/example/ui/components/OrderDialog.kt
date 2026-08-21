@@ -25,6 +25,7 @@ fun OrderDialog(
     initialPrice: Double? = null,
     lotSize: Int? = null,
     appPreferences: com.example.util.AppPreferences? = null,
+    isSubmitting: Boolean = false,
     onDismiss: () -> Unit,
     onConfirmOrder: (side: String, orderType: String, qty: Int, price: Double) -> Unit
 ) {
@@ -45,8 +46,6 @@ fun OrderDialog(
     var triggerPriceText by remember { mutableStateOf(String.format("%.2f", defaultPrice * 0.98)) }
 
     val isMarketOpen = remember { com.example.util.MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen }
-
-    var isSubmitting by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -312,7 +311,6 @@ fun OrderDialog(
                 Button(
                     onClick = {
                         if (!isSubmitting) {
-                            isSubmitting = true
                             val qty = qtyText.toIntOrNull() ?: defaultLot
                             val price = if (orderType == "MARKET") defaultPrice else (priceText.toDoubleOrNull() ?: defaultPrice)
                             onConfirmOrder(side, orderType, qty, price)

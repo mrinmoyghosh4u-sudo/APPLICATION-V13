@@ -737,73 +737,18 @@ private fun AllContractsSection(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             filteredContracts.forEach { item ->
-                val tick = marketDataMap[item.name]
-                val ltp = tick?.ltp ?: item.price
-                val pct = tick?.changePercent ?: item.changePct
-                val isPositive = pct >= 0
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
-                        .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
-                        .clickable { onNavigateToIndexDetails(exchange, item.name) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(text = item.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "$exchange • Lot: ${item.lotSize}", color = TextGray, fontSize = 9.sp)
-                    }
-
-                    SparklineChart(
-                        isPositive = isPositive,
-                        modifier = Modifier.size(width = 50.dp, height = 20.dp)
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING FOR TICK",
-                                color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Button(
-                            onClick = { onOpenOrderDialog(item.name, "BUY", ltp, item.lotSize) },
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                            shape = RoundedCornerShape(4.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF00C853),
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text(
-                                text = "TRADE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+                LiveContractRow(
+                    item = item,
+                    exchange = exchange,
+                    onNavigateToIndexDetails = onNavigateToIndexDetails,
+                    onOpenOrderDialog = onOpenOrderDialog
+                )
             }
         }
     }
 }
 
-private data class ContractItemData(
+data class ContractItemData(
     val name: String,
     val exchange: String,
     val price: Double,
@@ -1023,4 +968,70 @@ private fun AddSymbolDialog(
         },
         containerColor = Color(0xFF13161C)
     )
+}
+
+@Composable
+private fun LiveContractRow(
+    item: ContractItemData,
+    exchange: String,
+    onNavigateToIndexDetails: (String, String) -> Unit,
+    onOpenOrderDialog: (String, String, Double, Int) -> Unit
+) {
+    val tick by com.example.data.model.MarketDataStore.getTickFlow(item.name).collectAsStateWithLifecycle(initialValue = com.example.data.model.MarketDataStore.getTick(item.name))
+    val ltp = tick?.ltp ?: item.price
+    val pct = tick?.changePercent ?: item.changePct
+    val isPositive = pct >= 0
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
+            .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
+            .clickable { onNavigateToIndexDetails(exchange, item.name) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(text = item.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = "$exchange • Lot: ${item.lotSize}", color = TextGray, fontSize = 9.sp)
+        }
+        com.example.ui.components.SparklineChart(
+            isPositive = isPositive,
+            modifier = Modifier.size(width = 50.dp, height = 20.dp)
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = if (ltp > 0.0) "₹${String.format("%,.2f", ltp)}" else "LTP: --",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "--",
+                    color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Button(
+                onClick = { onOpenOrderDialog(item.name, "BUY", ltp, item.lotSize) },
+                modifier = Modifier.height(28.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00C853),
+                    contentColor = Color.Black
+                )
+            ) {
+                Text(
+                    text = "TRADE",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
 }

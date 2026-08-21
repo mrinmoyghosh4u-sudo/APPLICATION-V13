@@ -735,7 +735,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     repository.syncWithBroker()
                 }
                 val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
-                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                val res = brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                if (res.isFailure) { _apiError.value = "Market Data Sync Failed: ${res.exceptionOrNull()?.message}" }
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             }
         }
@@ -766,7 +767,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
-                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                val res = brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                if (res.isFailure) { _apiError.value = "Market Data Sync Failed: ${res.exceptionOrNull()?.message}" }
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             } finally {
                 _isRefreshing.value = false
@@ -832,6 +834,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 // Strict Real Data Rule: Set empty list if no real option chain feed
                 _optionStrikes.value = emptyList()
+                if (res.isFailure) {
+                    _apiError.value = "Option Chain API Error: ${res.exceptionOrNull()?.message ?: "Unknown error"}"
+                }
             }
         }
     }
@@ -848,6 +853,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun placeNewOrder(
+        onSuccess: () -> Unit = {},
+
         symbol: String,
         exchange: String,
         side: String,
@@ -932,6 +939,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     repository.addNotification("Order Submitted", "$side $qty shares/lots of $symbol @ ₹$price", type = "SUCCESS")
                 }
                 refreshBrokerData()
+                onSuccess()
             } catch (e: Exception) {
                 _apiError.value = "Order Placement Failed: ${e.message}"
             } finally {

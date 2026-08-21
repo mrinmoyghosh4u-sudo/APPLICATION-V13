@@ -87,7 +87,7 @@ object MStockAuthHelper {
                 throw Exception("m.Stock TOTP Secret or 6-digit TOTP code is required.")
             }
 
-            Log.d(TAG, "Initiating m.Stock TOTP authentication for client: ${sanitizedClientCode.ifBlank { "N/A" }}")
+            Log.d(TAG, "Initiating m.Stock TOTP authentication for client: ${sanitizedClientCode.take(2)}***")
 
             // 1. Generate standard 6-digit RFC 6238 TOTP locally if TOTP secret key is provided
             _authStage.value = "GENERATING_TOTP"
