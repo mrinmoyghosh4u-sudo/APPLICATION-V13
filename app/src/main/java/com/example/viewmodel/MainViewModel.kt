@@ -742,6 +742,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshBrokerData() {
+        _apiError.value = null
         viewModelScope.launch {
             if (sessionManager.hasValidSession()) {
                 runCatching {

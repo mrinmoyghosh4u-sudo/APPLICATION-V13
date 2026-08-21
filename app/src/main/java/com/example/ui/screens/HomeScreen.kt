@@ -406,14 +406,14 @@ private fun PortfolioOverviewSection(
             ) {
                 PortfolioStatBox(
                     label = "Unrealized P&L",
-                    value = if (isVisible) "₹1,150.25" else "••••••",
+                    value = if (isVisible) "₹${String.format("%,.2f", userProfile.unrealizedPnl)}" else "••••••",
                     icon = Icons.Outlined.History,
                     iconColor = ProfitGreen,
                     modifier = Modifier.weight(1f)
                 )
                 PortfolioStatBox(
                     label = "Realized P&L",
-                    value = if (isVisible) "₹1,200.50" else "••••••",
+                    value = if (isVisible) "₹${String.format("%,.2f", userProfile.realizedPnl)}" else "••••••",
                     icon = Icons.Outlined.BarChart,
                     iconColor = ProfitGreen,
                     modifier = Modifier.weight(1f)
