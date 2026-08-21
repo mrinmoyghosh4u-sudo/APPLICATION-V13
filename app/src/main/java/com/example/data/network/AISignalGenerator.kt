@@ -54,19 +54,6 @@ object AISignalGenerator {
         }
         val atmStrike = (kotlin.math.round(underlyingLtp / step) * step).toInt()
         val optionType = if (isBullish) "CE" else "PE"
-
-        val master = InstrumentMasterService.instance
-        if (master != null && master.isLoaded) {
-            val expiries = master.getOptionExpiries(cleanIndex)
-            if (expiries.isNotEmpty()) {
-                val activeExpiry = expiries.first()
-                val optInst = master.resolveOptionInstrument(cleanIndex, activeExpiry, atmStrike.toDouble(), optionType)
-                if (optInst != null) {
-                    return optInst.symbol
-                }
-            }
-        }
-        
         return "$cleanIndex $atmStrike $optionType"
     }
 

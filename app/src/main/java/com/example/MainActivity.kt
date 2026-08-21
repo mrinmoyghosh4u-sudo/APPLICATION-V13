@@ -80,7 +80,6 @@ class MainActivity : FragmentActivity() {
                 val isAuthInProgress by viewModel.isAuthInProgress.collectAsStateWithLifecycle()
                 val authErrorMessage by viewModel.authErrorMessage.collectAsStateWithLifecycle()
                 val authSuccessEvent by viewModel.authSuccessEvent.collectAsStateWithLifecycle()
-                val isPlacingOrder by viewModel.isPlacingOrder.collectAsStateWithLifecycle()
 
                 var autoUpdateBannerInfo by remember { mutableStateOf<com.example.util.update.UpdateInfo?>(null) }
 
@@ -625,23 +624,13 @@ class MainActivity : FragmentActivity() {
                                 initialPrice = extra?.first,
                                 lotSize = extra?.second,
                                 appPreferences = appPreferences,
-                                isSubmitting = isPlacingOrder,
                                 onDismiss = { orderDialogState = null },
                                 onConfirmOrder = { newSide, orderType, qty, price ->
-                                    viewModel.placeNewOrder(
-                                        onSuccess = {
-                                            orderDialogState = null
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar("Order Placed: $newSide $qty x $symbol @ ₹$price")
-                                            }
-                                        },
-                                        symbol = symbol, 
-                                        exchange = "NSE", 
-                                        side = newSide, 
-                                        orderType = orderType, 
-                                        qty = qty, 
-                                        price = price
-                                    )
+                                    viewModel.placeNewOrder(symbol, "NSE", newSide, orderType, qty, price)
+                                    orderDialogState = null
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Order Placed: $newSide $qty x $symbol @ ₹$price")
+                                    }
                                 }
                             )
                         }

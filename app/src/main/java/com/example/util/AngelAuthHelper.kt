@@ -23,7 +23,7 @@ object AngelAuthHelper {
         runCatching {
             val apiKey = customApiKey.ifBlank { BrokerConfig.angelApiKey }
             
-            Log.d(TAG, "Attempting Angel One login for client: ${clientCode.take(2)}***${clientCode.takeLast(2)}")
+            Log.d(TAG, "Attempting Angel One login for client: $clientCode")
             
             if (apiKey.isBlank()) {
                 throw Exception("Angel One API Key is missing. Please configure your API Key.")

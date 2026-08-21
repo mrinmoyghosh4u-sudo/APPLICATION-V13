@@ -421,26 +421,22 @@ private fun ExchangeIndicesSection(
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
 ) {
-    fun getLotSize(symbol: String, default: Int): Int {
-        return com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol(symbol)?.takeIf { it > 0 } ?: default
-    }
-
     val indexList = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            IndexCardData("SENSEX", 0.0, 0.0, 0.0, getLotSize("SENSEX", 10)),
-            IndexCardData("BANKEX", 0.0, 0.0, 0.0, getLotSize("BANKEX", 15))
+            IndexCardData("SENSEX", 0.0, 0.0, 0.0, 10),
+            IndexCardData("BANKEX", 0.0, 0.0, 0.0, 15)
         )
         "MCX" -> listOf(
-            IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, getLotSize("CRUDEOIL", 100)),
-            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, getLotSize("NATURALGAS", 1250)),
-            IndexCardData("GOLD", 0.0, 0.0, 0.0, getLotSize("GOLD", 100)),
-            IndexCardData("SILVER", 0.0, 0.0, 0.0, getLotSize("SILVER", 30))
+            IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, 100),
+            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, 1250),
+            IndexCardData("GOLD", 0.0, 0.0, 0.0, 100),
+            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30)
         )
         else -> listOf(
-            IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, getLotSize("NIFTY 50", 50)),
-            IndexCardData("BANKNIFTY", 0.0, 0.0, 0.0, getLotSize("BANKNIFTY", 15)),
-            IndexCardData("FINNIFTY", 0.0, 0.0, 0.0, getLotSize("FINNIFTY", 25)),
-            IndexCardData("MIDCPNIFTY", 0.0, 0.0, 0.0, getLotSize("MIDCPNIFTY", 50))
+            IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, 50),
+            IndexCardData("BANKNIFTY", 0.0, 0.0, 0.0, 15),
+            IndexCardData("FINNIFTY", 0.0, 0.0, 0.0, 25),
+            IndexCardData("MIDCPNIFTY", 0.0, 0.0, 0.0, 50)
         )
     }
 
@@ -450,9 +446,8 @@ private fun ExchangeIndicesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val headerText = if (exchange.uppercase() == "MCX") "⭐ MCX CONTRACTS" else "⭐ $exchange INDICES"
             Text(
-                text = headerText,
+                text = "⭐ $exchange INDICES",
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -629,45 +624,32 @@ private fun AllContractsSection(
 ) {
     val filters = listOf("All", "Indices", "Equity", "Futures", "Options")
 
-    val baseContracts = when (exchange.uppercase()) {
+    val contracts = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            ContractItemData("SENSEX", "BSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("SENSEX") ?: 10, "Indices"),
-            ContractItemData("BANKEX", "BSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("BANKEX") ?: 15, "Indices"),
+            ContractItemData("SENSEX", "BSE", 0.0, 0.0, 10, "Indices"),
+            ContractItemData("BANKEX", "BSE", 0.0, 0.0, 15, "Indices"),
             ContractItemData("RELIANCE", "BSE", 0.0, 0.0, 1, "Equity"),
-            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity")
+            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity"),
+            ContractItemData("SENSEX 81500 CE", "BSE", 0.0, 0.0, 10, "Options")
         )
         "MCX" -> listOf(
-            ContractItemData("CRUDEOIL", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("CRUDEOIL") ?: 100, "Futures"),
-            ContractItemData("NATURALGAS", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("NATURALGAS") ?: 1250, "Futures"),
-            ContractItemData("GOLD", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("GOLD") ?: 100, "Futures"),
-            ContractItemData("SILVER", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("SILVER") ?: 30, "Futures")
+            ContractItemData("CRUDEOIL FUT", "MCX", 0.0, 0.0, 100, "Futures"),
+            ContractItemData("NATURALGAS FUT", "MCX", 0.0, 0.0, 1250, "Futures"),
+            ContractItemData("GOLD FUT", "MCX", 0.0, 0.0, 100, "Futures"),
+            ContractItemData("SILVER FUT", "MCX", 0.0, 0.0, 30, "Futures"),
+            ContractItemData("CRUDEOIL 6500 CE", "MCX", 0.0, 0.0, 100, "Options")
         )
         else -> listOf(
-            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("NIFTY 50") ?: 50, "Indices"),
-            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("BANKNIFTY") ?: 15, "Indices"),
-            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("FINNIFTY") ?: 25, "Indices"),
-            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("MIDCPNIFTY") ?: 50, "Indices")
+            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, 50, "Indices"),
+            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, 15, "Indices"),
+            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, 25, "Indices"),
+            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, 50, "Indices"),
+            ContractItemData("NIFTY 24850 CE", "NSE", 0.0, 0.0, 50, "Options"),
+            ContractItemData("BANKNIFTY 52400 PE", "NSE", 0.0, 0.0, 15, "Options")
         )
     }
 
-    val displayContracts = remember(searchQuery, exchange, selectedFilter) {
-        if (searchQuery.isNotBlank() && searchQuery.length >= 2) {
-            val results = com.example.data.network.InstrumentMasterService.instance?.searchInstruments(searchQuery, exchange, limit = 15) ?: emptyList()
-            results.map { inst ->
-                val category = when {
-                    inst.instrumenttype.contains("OPT", true) -> "Options"
-                    inst.instrumenttype.contains("FUT", true) -> "Futures"
-                    inst.instrumenttype.contains("IDX", true) -> "Indices"
-                    else -> "Equity"
-                }
-                ContractItemData(inst.symbol, inst.exch_seg, 0.0, 0.0, inst.lotsize.toIntOrNull() ?: 1, category)
-            }
-        } else {
-            baseContracts
-        }
-    }
-
-    val filteredContracts = displayContracts.filter { item ->
+    val filteredContracts = contracts.filter { item ->
         val matchesFilter = when (selectedFilter) {
             "Indices" -> item.category == "Indices"
             "Equity" -> item.category == "Equity"
@@ -675,7 +657,8 @@ private fun AllContractsSection(
             "Options" -> item.category == "Options"
             else -> true
         }
-        matchesFilter
+        val matchesSearch = searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true)
+        matchesFilter && matchesSearch
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -737,18 +720,73 @@ private fun AllContractsSection(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             filteredContracts.forEach { item ->
-                LiveContractRow(
-                    item = item,
-                    exchange = exchange,
-                    onNavigateToIndexDetails = onNavigateToIndexDetails,
-                    onOpenOrderDialog = onOpenOrderDialog
-                )
+                val tick = marketDataMap[item.name]
+                val ltp = tick?.ltp ?: item.price
+                val pct = tick?.changePercent ?: item.changePct
+                val isPositive = pct >= 0
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
+                        .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
+                        .clickable { onNavigateToIndexDetails(exchange, item.name) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(text = item.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "$exchange • Lot: ${item.lotSize}", color = TextGray, fontSize = 9.sp)
+                    }
+
+                    SparklineChart(
+                        isPositive = isPositive,
+                        modifier = Modifier.size(width = 50.dp, height = 20.dp)
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING FOR TICK",
+                                color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Button(
+                            onClick = { onOpenOrderDialog(item.name, "BUY", ltp, item.lotSize) },
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF00C853),
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text(
+                                text = "TRADE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-data class ContractItemData(
+private data class ContractItemData(
     val name: String,
     val exchange: String,
     val price: Double,
@@ -872,13 +910,13 @@ private fun MarketMoversSection(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = if (ltp > 0.0) "₹${String.format("%,.2f", ltp)}" else "LTP: --",
+                                text = "₹${String.format("%,.2f", ltp)}",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "--",
+                                text = "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%",
                                 color = if (isPositive) ProfitGreen else LossRed,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -968,70 +1006,4 @@ private fun AddSymbolDialog(
         },
         containerColor = Color(0xFF13161C)
     )
-}
-
-@Composable
-private fun LiveContractRow(
-    item: ContractItemData,
-    exchange: String,
-    onNavigateToIndexDetails: (String, String) -> Unit,
-    onOpenOrderDialog: (String, String, Double, Int) -> Unit
-) {
-    val tick by com.example.data.model.MarketDataStore.getTickFlow(item.name).collectAsStateWithLifecycle(initialValue = com.example.data.model.MarketDataStore.getTick(item.name))
-    val ltp = tick?.ltp ?: item.price
-    val pct = tick?.changePercent ?: item.changePct
-    val isPositive = pct >= 0
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
-            .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
-            .clickable { onNavigateToIndexDetails(exchange, item.name) }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(text = item.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(text = "$exchange • Lot: ${item.lotSize}", color = TextGray, fontSize = 9.sp)
-        }
-        com.example.ui.components.SparklineChart(
-            isPositive = isPositive,
-            modifier = Modifier.size(width = 50.dp, height = 20.dp)
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = if (ltp > 0.0) "₹${String.format("%,.2f", ltp)}" else "LTP: --",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "--",
-                    color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Button(
-                onClick = { onOpenOrderDialog(item.name, "BUY", ltp, item.lotSize) },
-                modifier = Modifier.height(28.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                shape = RoundedCornerShape(4.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00C853),
-                    contentColor = Color.Black
-                )
-            ) {
-                Text(
-                    text = "TRADE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
 }

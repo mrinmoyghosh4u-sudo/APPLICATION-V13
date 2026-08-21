@@ -443,18 +443,6 @@ class InstrumentMasterService(
         }
     }
 
-    fun searchInstruments(query: String, exchange: String? = null, limit: Int = 20): List<Instrument> {
-        val q = query.uppercase().trim()
-        if (q.length < 2) return emptyList()
-        val normExch = exchange?.let { normalizeExchange(it) }
-        
-        return instrumentMap.values.asSequence()
-            .filter { normExch == null || normalizeExchange(it.exch_seg) == normExch }
-            .filter { it.symbol.contains(q, ignoreCase = true) || it.name.contains(q, ignoreCase = true) }
-            .take(limit)
-            .toList()
-    }
-
     fun getOptionExpiries(name: String): List<String> {
         val uppercaseName = name.uppercase().trim()
         val nfoName = when (uppercaseName) {

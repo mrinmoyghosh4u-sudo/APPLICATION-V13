@@ -149,7 +149,6 @@ class AngelOneMarketDataService(
                 _connectionState.value = "DISCONNECTED"
                 isSubscribed = false
                 hasFirstTick = false
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "OFFLINE")
                 Log.d("SmartStream", "WebSocket Closed: $reason")
                 scheduleReconnect()
             }
@@ -158,7 +157,6 @@ class AngelOneMarketDataService(
                 _connectionState.value = "ERROR"
                 isSubscribed = false
                 hasFirstTick = false
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "OFFLINE")
                 Log.e("SmartStream", "WebSocket Failure: ${t.message}")
                 scheduleReconnect()
             }
