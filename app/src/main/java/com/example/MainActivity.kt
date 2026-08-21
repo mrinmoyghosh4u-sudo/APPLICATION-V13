@@ -376,6 +376,7 @@ class MainActivity : FragmentActivity() {
                                         "ai_signals" -> AISignalsScreen(
                                             userProfile = userProfile,
                                             signals = aiSignals,
+                                            appPreferences = appPreferences,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onExecuteSignal = { signal ->
                                                 orderDialogState = Triple(

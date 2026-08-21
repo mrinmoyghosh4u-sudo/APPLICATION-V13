@@ -116,21 +116,7 @@ fun MarketScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 6. ALL CONTRACTS SECTION (⭐ NSE ALL CONTRACTS / BSE ALL CONTRACTS / MCX ALL CONTRACTS)
-            AllContractsSection(
-                exchange = selectedExchange,
-                selectedFilter = selectedContractFilter,
-                onFilterSelected = { selectedContractFilter = it },
-                searchQuery = searchQuery,
-                marketDataMap = marketDataMap,
-                onAddSymbolClick = { showAddSymbolDialog = true },
-                onNavigateToIndexDetails = onNavigateToIndexDetails,
-                onOpenOrderDialog = onOpenOrderDialog
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // 7. MARKET MOVERS SECTION (🔥 MARKET MOVERS)
+            // 6. MARKET MOVERS SECTION (🔥 MARKET MOVERS)
             MarketMoversSection(
                 selectedCategory = selectedMoverCategory,
                 onCategorySelected = { selectedMoverCategory = it },
@@ -589,17 +575,19 @@ private fun IndexGridCard(
             )
 
             Button(
-                onClick = onTrade,
+                onClick = onClick,
                 modifier = Modifier.height(24.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 shape = RoundedCornerShape(4.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00C853),
+                    containerColor = PrimaryGold,
                     contentColor = Color.Black
                 )
             ) {
+                Icon(imageVector = Icons.Outlined.List, contentDescription = null, modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "TRADE",
+                    text = "OPTIONS",
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -608,196 +596,6 @@ private fun IndexGridCard(
     }
 }
 
-// ==========================================
-// 6. ALL CONTRACTS SECTION
-// ==========================================
-@Composable
-private fun AllContractsSection(
-    exchange: String,
-    selectedFilter: String,
-    onFilterSelected: (String) -> Unit,
-    searchQuery: String,
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
-    onAddSymbolClick: () -> Unit,
-    onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
-) {
-    val filters = listOf("All", "Indices", "Equity", "Futures", "Options")
-
-    val contracts = when (exchange.uppercase()) {
-        "BSE" -> listOf(
-            ContractItemData("SENSEX", "BSE", 0.0, 0.0, 10, "Indices"),
-            ContractItemData("BANKEX", "BSE", 0.0, 0.0, 15, "Indices"),
-            ContractItemData("RELIANCE", "BSE", 0.0, 0.0, 1, "Equity"),
-            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity"),
-            ContractItemData("SENSEX 81500 CE", "BSE", 0.0, 0.0, 10, "Options")
-        )
-        "MCX" -> listOf(
-            ContractItemData("CRUDEOIL FUT", "MCX", 0.0, 0.0, 100, "Futures"),
-            ContractItemData("NATURALGAS FUT", "MCX", 0.0, 0.0, 1250, "Futures"),
-            ContractItemData("GOLD FUT", "MCX", 0.0, 0.0, 100, "Futures"),
-            ContractItemData("SILVER FUT", "MCX", 0.0, 0.0, 30, "Futures"),
-            ContractItemData("CRUDEOIL 6500 CE", "MCX", 0.0, 0.0, 100, "Options")
-        )
-        else -> listOf(
-            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, 50, "Indices"),
-            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, 15, "Indices"),
-            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, 25, "Indices"),
-            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, 50, "Indices"),
-            ContractItemData("NIFTY 24850 CE", "NSE", 0.0, 0.0, 50, "Options"),
-            ContractItemData("BANKNIFTY 52400 PE", "NSE", 0.0, 0.0, 15, "Options")
-        )
-    }
-
-    val filteredContracts = contracts.filter { item ->
-        val matchesFilter = when (selectedFilter) {
-            "Indices" -> item.category == "Indices"
-            "Equity" -> item.category == "Equity"
-            "Futures" -> item.category == "Futures"
-            "Options" -> item.category == "Options"
-            else -> true
-        }
-        val matchesSearch = searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true)
-        matchesFilter && matchesSearch
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "⭐ $exchange ALL CONTRACTS",
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "+ Add Symbol",
-                color = PrimaryGold,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onAddSymbolClick() }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Filter Chips Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            filters.forEach { filter ->
-                val isSelected = filter == selectedFilter
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (isSelected) PrimaryGold else Color(0xFF14171C),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .border(
-                            0.6.dp,
-                            if (isSelected) PrimaryGold else Color(0xFF282C35),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .clickable { onFilterSelected(filter) }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = filter,
-                        color = if (isSelected) Color.Black else Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            filteredContracts.forEach { item ->
-                val tick = marketDataMap[item.name]
-                val ltp = tick?.ltp ?: item.price
-                val pct = tick?.changePercent ?: item.changePct
-                val isPositive = pct >= 0
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
-                        .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
-                        .clickable { onNavigateToIndexDetails(exchange, item.name) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(text = item.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "$exchange • Lot: ${item.lotSize}", color = TextGray, fontSize = 9.sp)
-                    }
-
-                    SparklineChart(
-                        isPositive = isPositive,
-                        modifier = Modifier.size(width = 50.dp, height = 20.dp)
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING FOR TICK",
-                                color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Button(
-                            onClick = { onOpenOrderDialog(item.name, "BUY", ltp, item.lotSize) },
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                            shape = RoundedCornerShape(4.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF00C853),
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text(
-                                text = "TRADE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private data class ContractItemData(
-    val name: String,
-    val exchange: String,
-    val price: Double,
-    val changePct: Double,
-    val lotSize: Int,
-    val category: String
-)
-
-// ==========================================
-// 7. MARKET MOVERS SECTION
-// ==========================================
 @Composable
 private fun MarketMoversSection(
     selectedCategory: String,

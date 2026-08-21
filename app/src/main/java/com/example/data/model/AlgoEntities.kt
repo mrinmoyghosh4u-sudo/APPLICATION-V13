@@ -41,3 +41,30 @@ data class AlgoTradeHistory(
     val qty: Int,
     val status: String
 )
+
+data class AlgoSystemLog(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val timestamp: String = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()),
+    val level: String = "INFO", // "INFO", "SIGNAL", "EXECUTION", "RISK", "TELEGRAM", "WARN"
+    val tag: String,
+    val message: String
+)
+
+data class BacktestResult(
+    val strategyName: String,
+    val index: String,
+    val timeframe: String,
+    val days: Int,
+    val totalTrades: Int,
+    val winningTrades: Int,
+    val losingTrades: Int,
+    val winRate: Double,
+    val totalProfit: Double,
+    val totalLoss: Double,
+    val netPnl: Double,
+    val profitFactor: Double,
+    val maxDrawdownPct: Double,
+    val avgTradePnl: Double,
+    val sharpeRatio: Double,
+    val equityCurve: List<Double>
+)

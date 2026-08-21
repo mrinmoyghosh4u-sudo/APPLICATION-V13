@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -106,7 +107,16 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. PORTFOLIO OVERVIEW CARD
+            // 3. MARKET OVERVIEW (NIFTY 50, BANKNIFTY, SENSEX, BANKEX)
+            MarketOverviewSection(
+                marketDataMap = marketDataMap,
+                onNavigateToIndexDetails = onNavigateToIndexDetails,
+                onNavigateToMarket = onNavigateToMarket
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. PORTFOLIO OVERVIEW CARD
             PortfolioOverviewSection(
                 userProfile = userProfile,
                 orders = orders,
@@ -116,7 +126,15 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 4. QUICK ACTIONS
+            // 5. RECENT ORDERS / POSITIONS SUMMARY
+            RecentOrdersPositionsSection(
+                orders = orders,
+                onNavigateToOrders = onNavigateToOrders
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 6. QUICK ACTIONS
             QuickActionsSection(
                 onNavigateToMarket = onNavigateToMarket,
                 onNavigateToProfile = onNavigateToProfile,
@@ -126,27 +144,10 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 5. AI MARKET INSIGHTS
+            // 7. AI MARKET INSIGHTS
             AiMarketInsightsSection(
                 marketDataMap = marketDataMap,
                 onNavigateToAISignals = onNavigateToAISignals
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 6. MARKET OVERVIEW (NIFTY 50, BANKNIFTY, SENSEX, BANKEX)
-            MarketOverviewSection(
-                marketDataMap = marketDataMap,
-                onNavigateToIndexDetails = onNavigateToIndexDetails,
-                onNavigateToMarket = onNavigateToMarket
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 7. RECENT ORDERS / POSITIONS SUMMARY
-            RecentOrdersPositionsSection(
-                orders = orders,
-                onNavigateToOrders = onNavigateToOrders
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -479,7 +480,7 @@ private fun QuickActionsSection(
         ) {
             QuickActionButton(
                 label = "Trade",
-                icon = Icons.Outlined.ShowChart,
+                icon = Icons.Outlined.TrendingUp,
                 onClick = onNavigateToMarket
             )
             QuickActionButton(
@@ -494,13 +495,13 @@ private fun QuickActionsSection(
             )
             QuickActionButton(
                 label = "Orders",
-                icon = Icons.Outlined.Assignment,
+                icon = Icons.Outlined.Article,
                 onClick = onNavigateToOrders
             )
             QuickActionButton(
-                label = "Alerts",
-                icon = Icons.Outlined.NotificationsNone,
-                onClick = onOpenNotificationCenter
+                label = "Options",
+                icon = Icons.Outlined.List,
+                onClick = { /* Could open index details for Nifty 50 Option Chain tab */ }
             )
         }
     }
@@ -712,47 +713,43 @@ private fun MarketOverviewSection(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             indices.forEach { (exch, symbol) ->
                 val tick = marketDataMap[symbol] ?: marketDataMap.values.find { it.symbol.contains(symbol, ignoreCase = true) }
                 val ltp = tick?.ltp ?: 0.0
                 val pct = tick?.changePercent ?: 0.0
                 val isPositive = pct >= 0
 
-                Row(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .width(135.dp)
                         .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
                         .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
                         .clickable { onNavigateToIndexDetails(exch, symbol) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(12.dp)
                 ) {
-                    Column {
-                        Text(text = symbol, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "$exch Index", color = TextGray, fontSize = 9.sp)
-                    }
-
-                    SparklineChart(
-                        isPositive = isPositive,
-                        modifier = Modifier.size(width = 50.dp, height = 20.dp)
+                    Text(text = symbol, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = exch, color = TextGray, fontSize = 9.sp)
+                    
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    Text(
+                        text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
                     )
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING FOR TICK",
-                            color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text(
+                        text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING",
+                        color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
