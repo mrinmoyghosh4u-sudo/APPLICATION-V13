@@ -137,14 +137,14 @@ class TradingRepository(
     suspend fun checkAndSeedInitialData() {
         val currentList = dao.getWatchlist("ALL").firstOrNull() ?: emptyList()
         val indices = listOf(
-            com.example.data.model.WatchlistItem(symbol = "NIFTY 50", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=50, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "BANKNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=15, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "FINNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=25, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "MIDCPNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=50, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "SENSEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=10, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "BANKEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=15, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "CRUDEOIL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=100, isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "CRUDEOIL M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=10, isPositive=true)
+            com.example.data.model.WatchlistItem(symbol = "NIFTY 50", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NIFTY 50"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "BANKNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("BANKNIFTY"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "FINNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("FINNIFTY"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "MIDCPNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("MIDCPNIFTY"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "SENSEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("SENSEX"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "BANKEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("BANKEX"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "CRUDEOIL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "CRUDEOIL M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL M"), isPositive=true)
         )
         indices.forEach { idx ->
             if (currentList.none { it.symbol == idx.symbol }) {
@@ -153,21 +153,21 @@ class TradingRepository(
         }
         if (dao.getUserProfile().firstOrNull() == null) {
             dao.insertOrUpdateProfile(UserProfileEntity())
-            val indices = listOf(
-                com.example.data.model.WatchlistItem(symbol = "NIFTY 50", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=50, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "BANKNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=15, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "FINNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=25, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "MIDCPNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=50, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "SENSEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=10, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "BANKEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=15, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "CRUDEOIL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=100, isPositive=true),
-                com.example.data.model.WatchlistItem(symbol = "CRUDEOIL M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=10, isPositive=true)
+            val seedIndices = listOf(
+                com.example.data.model.WatchlistItem(symbol = "NIFTY 50", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NIFTY 50"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "BANKNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("BANKNIFTY"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "FINNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("FINNIFTY"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "MIDCPNIFTY", exchange = "NSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("MIDCPNIFTY"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "SENSEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("SENSEX"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "BANKEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("BANKEX"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "CRUDEOIL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL"), isPositive=true),
+                com.example.data.model.WatchlistItem(symbol = "CRUDEOIL M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL M"), isPositive=true)
             )
-            indices.forEach { dao.addWatchlistItem(it) }
+            seedIndices.forEach { dao.addWatchlistItem(it) }
         }
     }
 
-    suspend fun placeOrder(order: OrderEntity) {
+    suspend fun placeOrder(order: OrderEntity): String {
         val manager = brokerManager
         val realOrderId = if (manager != null) {
             val res = manager.placeOrder(order)
@@ -181,6 +181,7 @@ class TradingRepository(
             status = "PENDING"
         )
         dao.insertOrder(finalOrder)
+        return realOrderId
     }
 
     suspend fun cancelOrder(orderId: String) {

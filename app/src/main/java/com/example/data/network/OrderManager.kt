@@ -78,6 +78,18 @@ class OrderManager(
                 else -> "NSE"
             }
 
+            // 4.5. Market Status Validation
+            val marketStatus = com.example.util.MarketStatusUtil.getDetailedMarketStatus(normExch)
+            if (!marketStatus.isOpen) {
+                return@withContext Result.failure(Exception("Market Closed: Cannot place order on $normExch while market is closed."))
+            }
+
+            // 4.6. Stale Data Protection
+            val storeTick = com.example.data.model.MarketDataStore.getTick(symbol)
+            if (storeTick != null && (storeTick.state == "STALE" || storeTick.state == "OFFLINE" || storeTick.source == com.example.data.model.MarketDataSourceNames.YAHOO)) {
+                return@withContext Result.failure(Exception("Stale Data Protection: Cannot place order using stale or unverified market data."))
+            }
+
             // 5. Dhan Security ID Validation
             var secId = order.securityId.trim()
             if (secId.isBlank()) {

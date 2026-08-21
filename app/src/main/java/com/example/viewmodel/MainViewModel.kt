@@ -927,11 +927,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     securityId = secId,
                     symbolToken = token
                 )
-                repository.placeOrder(order)
+                val realOrderId = repository.placeOrder(order)
                 val notif = appPrefs.getNotificationSettings()
                 if (notif.notifyOrderUpdates) {
-                    repository.addNotification("Order Submitted", "$side $qty shares/lots of $symbol @ ₹$price", type = "SUCCESS")
+                    repository.addNotification("Order Submitted", "Order ID: $realOrderId\n$side $qty of $symbol @ ₹$price", type = "SUCCESS")
                 }
+                telegramService.sendFormattedEvent(
+                    "ORDER_${realOrderId}",
+                    "<b>🟢 REAL DHAN ORDER PLACED</b>\n\nOrder ID: <code>$realOrderId</code>\nSymbol: <b>$symbol</b>\nSide: <b>$side</b>\nQty: $qty\nType: $orderType\nPrice: ₹$price\nStatus: <b>PENDING</b>\n\n#DhanExecution"
+                )
                 refreshBrokerData()
             } catch (e: Exception) {
                 _apiError.value = "Order Placement Failed: ${e.message}"

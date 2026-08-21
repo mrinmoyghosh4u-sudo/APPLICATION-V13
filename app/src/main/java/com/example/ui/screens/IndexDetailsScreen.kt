@@ -419,9 +419,17 @@ fun MarketTabContent(
                         modifier = Modifier.fillMaxWidth().height(200.dp)
                     )
                 } else {
-                    val low52 = if (hasData) ltp * 0.82 else 0.0
-                    val high52 = if (hasData) ltp * 1.18 else 0.0
-                    HistoricalRow(label = "52-Week", low = low52, high = high52)
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "CHART DATA UNAVAILABLE",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF5252)
+                        )
+                    }
                 }
             }
         }
@@ -546,14 +554,14 @@ fun OptionChainTabContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Option Chain Data Loading...",
+                        "OPTION CHAIN UNAVAILABLE",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextWhite
+                        color = Color(0xFFFF5252) // Red color for unavailable
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Fetching verified option strikes from primary broker feed...",
+                        "No verified strikes available from real data providers.",
                         fontSize = 12.sp,
                         color = TextGray,
                         textAlign = TextAlign.Center
@@ -710,7 +718,12 @@ fun HistoricalDataTabContent(
                         modifier = Modifier.fillMaxWidth().height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(if (isLoading) "Loading historical candles..." else "No historical candle data available for $indexName", fontSize = 12.sp, color = TextGray)
+                        Text(
+                            if (isLoading) "Loading historical candles..." else "CHART DATA UNAVAILABLE",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isLoading) TextGray else Color(0xFFFF5252)
+                        )
                     }
                 }
             }

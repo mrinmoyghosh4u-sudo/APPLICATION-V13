@@ -308,7 +308,7 @@ class MarketDataEngine(
 
     // =========================================================================
     // 2. OPTION CHAIN FAILOVER
-    // Priority: 1. Angel One -> 2. m.Stock -> 3. NSE -> 4. Yahoo
+    // Priority: 1. Angel One -> 2. m.Stock (VERIFIED REAL PROVIDERS ONLY)
     // =========================================================================
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> {
@@ -337,37 +337,9 @@ class MarketDataEngine(
                 }
             }
             healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
-            healthManager.logFailover(ProviderHealthManager.PROVIDER_MSTOCK, ProviderHealthManager.PROVIDER_NSE)
         }
 
-        // Priority 3: NSE
-        if (nseFeedService.isConfigured()) {
-            val startNse = System.currentTimeMillis()
-            val nseRes = nseFeedService.getOptionChain(symbol, expiry)
-            if (nseRes.isSuccess && nseRes.getOrDefault(emptyList()).isNotEmpty()) {
-                val validStrikes = nseRes.getOrDefault(emptyList()).filter { DataValidator.validateOptionStrikeItem(it) }
-                if (validStrikes.isNotEmpty()) {
-                    healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_NSE, System.currentTimeMillis() - startNse)
-                    return Result.success(validStrikes)
-                }
-            }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_NSE)
-            healthManager.logFailover(ProviderHealthManager.PROVIDER_NSE, ProviderHealthManager.PROVIDER_YAHOO)
-        }
-
-        // Priority 4: Yahoo Reference Options
-        val startYahoo = System.currentTimeMillis()
-        val yahooRes = YahooFinanceService.getOptionChain(symbol, expiry)
-        if (yahooRes.isSuccess && yahooRes.getOrDefault(emptyList()).isNotEmpty()) {
-            val validStrikes = yahooRes.getOrDefault(emptyList()).filter { DataValidator.validateOptionStrikeItem(it) }
-            if (validStrikes.isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_YAHOO, System.currentTimeMillis() - startYahoo)
-                return Result.success(validStrikes)
-            }
-        }
-        healthManager.reportError(ProviderHealthManager.PROVIDER_YAHOO)
-
-        return Result.failure(Exception("Option chain unavailable from all configured providers."))
+        return Result.failure(Exception("Option chain unavailable from all configured REAL providers."))
     }
 
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {

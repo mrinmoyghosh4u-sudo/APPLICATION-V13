@@ -388,11 +388,7 @@ class InstrumentMasterService(
 
         if (exactMatches.isNotEmpty()) return exactMatches
 
-        // Fallback: return option instruments for this index regardless of exact expiry string formatting
-        return instrumentMap.values.filter {
-            normalizeExchange(it.exch_seg) == exchSeg &&
-            (it.name.equals(nfoName, ignoreCase = true) || it.symbol.startsWith(nfoName, ignoreCase = true))
-        }
+        return emptyList()
     }
 
     fun resolveOptionInstrument(

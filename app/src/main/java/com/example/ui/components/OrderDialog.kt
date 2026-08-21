@@ -44,7 +44,15 @@ fun OrderDialog(
     var priceText by remember { mutableStateOf(String.format("%.2f", defaultPrice)) }
     var triggerPriceText by remember { mutableStateOf(String.format("%.2f", defaultPrice * 0.98)) }
 
-    val isMarketOpen = remember { com.example.util.MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen }
+    val exchange = remember(symbol) {
+        when {
+            symbol.contains("CRUDE") -> "MCX"
+            symbol.contains("SENSEX") || symbol.contains("BANKEX") -> "BSE"
+            else -> "NSE"
+        }
+    }
+
+    val isMarketOpen = remember(exchange) { com.example.util.MarketStatusUtil.getDetailedMarketStatus(exchange).isOpen }
 
     var isSubmitting by remember { mutableStateOf(false) }
 
@@ -60,7 +68,7 @@ fun OrderDialog(
             ) {
                 Column {
                     Text(symbol, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                    Text("NSE • Lot Size: $defaultLot", fontSize = 11.sp, color = TextGray)
+                    Text("$exchange • Lot Size: $defaultLot", fontSize = 11.sp, color = TextGray)
                 }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = TextGray)
@@ -311,14 +319,14 @@ fun OrderDialog(
 
                 Button(
                     onClick = {
-                        if (!isSubmitting) {
+                        if (!isSubmitting && isMarketOpen) {
                             isSubmitting = true
                             val qty = qtyText.toIntOrNull() ?: defaultLot
                             val price = if (orderType == "MARKET") defaultPrice else (priceText.toDoubleOrNull() ?: defaultPrice)
                             onConfirmOrder(side, orderType, qty, price)
                         }
                     },
-                    enabled = !isSubmitting && (orderType != "MARKET" || defaultPrice > 0.0),
+                    enabled = !isSubmitting && isMarketOpen && (orderType != "MARKET" || defaultPrice > 0.0),
                     modifier = Modifier
                         .weight(1.5f)
                         .height(44.dp),
