@@ -789,18 +789,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val expiriesRes = brokerManager.getOptionExpiries(index)
             val apiExpiries = expiriesRes.getOrNull() ?: emptyList()
-            if (apiExpiries.isNotEmpty()) {
-                _availableOptionExpiries.value = apiExpiries
-                if (!_availableOptionExpiries.value.contains(_selectedOptionExpiry.value)) {
-                    _selectedOptionExpiry.value = apiExpiries.first()
-                }
+            
+            val sourceExpiries = if (apiExpiries.isNotEmpty()) {
+                apiExpiries
             } else {
-                // Fallback to local if API fails or not supported (e.g., Angel)
-                val expiries = OptionExpiryUtil.getUpcomingExpiriesForSymbol(index)
-                _availableOptionExpiries.value = expiries
-                if (expiries.isNotEmpty() && !expiries.contains(_selectedOptionExpiry.value)) {
-                    _selectedOptionExpiry.value = expiries.first()
-                }
+                instrumentMasterService.getOptionExpiries(index)
+            }
+            
+            val parsedExpiries = OptionExpiryUtil.getUpcomingExpiriesForSymbol(index, sourceExpiries)
+            _availableOptionExpiries.value = parsedExpiries
+            if (parsedExpiries.isNotEmpty() && !parsedExpiries.contains(_selectedOptionExpiry.value)) {
+                _selectedOptionExpiry.value = parsedExpiries.first()
             }
             fetchOptionChain()
         }

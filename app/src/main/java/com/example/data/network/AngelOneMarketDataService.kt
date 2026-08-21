@@ -572,8 +572,8 @@ class AngelOneMarketDataService(
                         val peLive = if (peOpt != null) MarketDataStore.getTick(peOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peOpt.token) else null
                         
                         item.copy(
-                            callLtp = ceLive?.ltp ?: item.callLtp,
-                            putLtp = peLive?.ltp ?: item.putLtp,
+                            callLtp = ceLive?.ltp ?: 0.0,
+                            putLtp = peLive?.ltp ?: 0.0,
                             callToken = ceOpt?.token ?: "",
                             putToken = peOpt?.token ?: "",
                             callSymbol = ceOpt?.symbol ?: "",
