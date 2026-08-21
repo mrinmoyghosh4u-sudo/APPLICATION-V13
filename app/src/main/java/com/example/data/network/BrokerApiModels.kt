@@ -251,22 +251,6 @@ data class DhanPositionItem(
 )
 
 @JsonClass(generateAdapter = true)
-data class DhanOptionChainRequest(
-    @Json(name = "underlyingScrip") val underlyingScrip: Int = 13,
-    @Json(name = "underlyingSeg") val underlyingSeg: String = "IDX_I",
-    @Json(name = "expiry") val expiry: String = ""
-)
-
-@JsonClass(generateAdapter = true)
-data class DhanOptionChainItem(
-    @Json(name = "strikePrice") val strikePrice: Double,
-    @Json(name = "callOi") val callOi: Double = 0.0,
-    @Json(name = "callLtp") val callLtp: Double = 0.0,
-    @Json(name = "putOi") val putOi: Double = 0.0,
-    @Json(name = "putLtp") val putLtp: Double = 0.0
-)
-
-@JsonClass(generateAdapter = true)
 data class DhanTradeItem(
     @Json(name = "dhanClientId") val dhanClientId: String = "",
     @Json(name = "orderId") val orderId: String = "",

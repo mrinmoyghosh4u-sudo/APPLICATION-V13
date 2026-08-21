@@ -33,16 +33,6 @@ interface DhanApi {
     @GET("v2/positions")
     suspend fun getPositions(): Response<List<DhanPositionItem>>
 
-    @GET("v2/optionchain/expirylist")
-    suspend fun getOptionExpiries(
-        @Query("underlying") underlying: String
-    ): Response<List<String>>
-
-    @POST("v2/optionchain")
-    suspend fun getOptionChain(
-        @Body request: DhanOptionChainRequest
-    ): Response<List<DhanOptionChainItem>>
-
     @GET("v2/trades")
     suspend fun getTrades(): Response<List<DhanTradeItem>>
 }
