@@ -28,24 +28,33 @@ object AISignalGenerator {
         return emptyList()
     }
 
-    private fun formatOptionSymbol(rawSymbol: String, isBullish: Boolean): String {
+    fun formatOptionSymbol(rawSymbol: String, isBullish: Boolean, underlyingLtp: Double = 0.0): String {
         val upper = rawSymbol.uppercase().trim()
         if (upper.contains("CE") || upper.contains("PE")) return upper
 
-        return when {
-            upper.contains("NIFTY 50") || upper == "NIFTY" -> if (isBullish) "NIFTY 24850 CE" else "NIFTY 24800 PE"
-            upper.contains("BANKNIFTY") -> if (isBullish) "BANKNIFTY 52500 CE" else "BANKNIFTY 52400 PE"
-            upper.contains("FINNIFTY") -> if (isBullish) "FINNIFTY 23400 CE" else "FINNIFTY 23350 PE"
-            upper.contains("MIDCPNIFTY") -> if (isBullish) "MIDCPNIFTY 13200 CE" else "MIDCPNIFTY 13150 PE"
-            upper.contains("SENSEX") -> if (isBullish) "SENSEX 81500 CE" else "SENSEX 81000 PE"
-            upper.contains("BANKEX") -> if (isBullish) "BANKEX 59200 CE" else "BANKEX 59000 PE"
-            upper.contains("CRUDE OIL M") || upper.contains("CRUDEOILM") -> if (isBullish) "CRUDEOILM 6450 CE" else "CRUDEOILM 6400 PE"
-            upper.contains("CRUDE") -> if (isBullish) "CRUDEOIL 6800 CE" else "CRUDEOIL 6700 PE"
-            upper.contains("GAS") -> if (isBullish) "NATURALGAS 180 CE" else "NATURALGAS 175 PE"
-            upper.contains("GOLD") -> if (isBullish) "GOLD 72000 CE" else "GOLD 71500 PE"
-            upper.contains("SILVER") -> if (isBullish) "SILVER 85000 CE" else "SILVER 84500 PE"
-            else -> if (isBullish) "$upper 24850 CE" else "$upper 24800 PE"
+        val cleanIndex = when {
+            upper.contains("NIFTY 50") || upper == "NIFTY" -> "NIFTY"
+            upper.contains("BANKNIFTY") -> "BANKNIFTY"
+            upper.contains("FINNIFTY") -> "FINNIFTY"
+            upper.contains("MIDCPNIFTY") -> "MIDCPNIFTY"
+            upper.contains("SENSEX") -> "SENSEX"
+            upper.contains("BANKEX") -> "BANKEX"
+            upper.contains("CRUDE") -> "CRUDEOIL"
+            else -> upper
         }
+
+        if (underlyingLtp <= 0.0) {
+            return "$cleanIndex ${if (isBullish) "CE" else "PE"}"
+        }
+
+        val step = when (cleanIndex) {
+            "MIDCPNIFTY" -> 25.0
+            "NIFTY", "FINNIFTY", "CRUDEOIL" -> 50.0
+            else -> 100.0
+        }
+        val atmStrike = (kotlin.math.round(underlyingLtp / step) * step).toInt()
+        val optionType = if (isBullish) "CE" else "PE"
+        return "$cleanIndex $atmStrike $optionType"
     }
 
     private fun calculateOptionLotSize(symbol: String, exchange: String, defaultLot: Int): Int {

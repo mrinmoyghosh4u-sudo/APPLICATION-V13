@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.AlgoTradeHistory
 
 
@@ -108,6 +109,11 @@ fun AlgoScreen(
 ) {
     var currentState by remember { mutableStateOf(AlgoScreenState.DASHBOARD) }
 
+    val marketSourceState = viewModel.marketDataSource.collectAsStateWithLifecycle()
+    val marketSource = marketSourceState.value
+    val marketLastUpdatedState = viewModel.marketDataLastUpdated.collectAsStateWithLifecycle()
+    val marketLastUpdated = marketLastUpdatedState.value
+
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
             modifier = Modifier
@@ -144,7 +150,7 @@ fun AlgoScreen(
                         color = TextWhite
                     )
                     Text(
-                        "Trade Like a King 👑",
+                        "Trade like a King 👑",
                         fontSize = 11.sp,
                         color = SecondaryGold,
                         fontWeight = FontWeight.Medium
@@ -154,22 +160,24 @@ fun AlgoScreen(
 
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isLive = marketSource.contains("LIVE")
+                    val statusColor = if (isLive) ProfitGreen else SecondaryGold
                     Surface(
-                        color = ProfitGreen.copy(alpha = 0.15f),
+                        color = statusColor.copy(alpha = 0.15f),
                         shape = CircleShape,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen.copy(alpha = 0.5f))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(modifier = Modifier.size(6.dp).background(ProfitGreen, CircleShape))
+                            Box(modifier = Modifier.size(6.dp).background(statusColor, CircleShape))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                "LIVE – ANGEL ONE",
+                                marketSource.ifBlank { "REAL MARKET DATA UNAVAILABLE" },
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = ProfitGreen
+                                color = statusColor
                             )
                         }
                     }
@@ -191,8 +199,7 @@ fun AlgoScreen(
                         }
                     }
                 }
-                val updateTime = remember { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()) }
-                Text("Updated: $updateTime", fontSize = 9.sp, color = TextGray)
+                Text("Updated: ${if (marketLastUpdated.isNotBlank()) marketLastUpdated else "Not Updated"}", fontSize = 9.sp, color = TextGray)
             }
         }
 

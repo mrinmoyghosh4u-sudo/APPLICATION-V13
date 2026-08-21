@@ -531,10 +531,14 @@ class AppPreferences(private val context: Context) {
         }
 
         fun getGlobalLotSize(symbol: String): Int {
+            val instMasterLot = com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol(symbol) ?: 0
+            if (instMasterLot > 0) return instMasterLot
             return INSTANCE?.getLotSizeForSymbol(symbol) ?: getFallbackLotSize(symbol)
         }
 
         fun getFallbackLotSize(symbol: String): Int {
+            val instMasterLot = com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol(symbol) ?: 0
+            if (instMasterLot > 0) return instMasterLot
             val upper = symbol.uppercase()
             return when {
                 upper.contains("BANKNIFTY") -> 30

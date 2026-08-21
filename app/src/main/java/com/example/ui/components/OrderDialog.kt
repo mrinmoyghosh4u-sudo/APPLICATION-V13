@@ -85,6 +85,22 @@ fun OrderDialog(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
+                } else if (defaultPrice <= 0.0 && orderType == "MARKET") {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        color = SecondaryGold.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryGold)
+                    ) {
+                        Text(
+                            text = "Real Price Unavailable • Cannot execute MARKET order without verified market feed.",
+                            fontSize = 11.sp,
+                            color = SecondaryGold,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(8.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
 
                 // Side Selector (BUY / SELL)
@@ -302,7 +318,7 @@ fun OrderDialog(
                             onConfirmOrder(side, orderType, qty, price)
                         }
                     },
-                    enabled = !isSubmitting,
+                    enabled = !isSubmitting && (orderType != "MARKET" || defaultPrice > 0.0),
                     modifier = Modifier
                         .weight(1.5f)
                         .height(44.dp),

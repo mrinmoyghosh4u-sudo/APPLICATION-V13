@@ -138,7 +138,7 @@ class MarketDataEngine(
                                     healthManager.logRestored(_internalActiveProvider.value, ProviderHealthManager.PROVIDER_ANGEL_ONE)
                                     _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
                                 }
-                                _unifiedFeedStatus.value = "LIVE"
+                                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
                                 updateLastTickTime()
                                 return@collect
                             }
@@ -160,7 +160,7 @@ class MarketDataEngine(
                                     _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
                                 }
                                 if (_internalActiveProvider.value == ProviderHealthManager.PROVIDER_MSTOCK) {
-                                    _unifiedFeedStatus.value = "LIVE"
+                                    _unifiedFeedStatus.value = "LIVE — M.STOCK"
                                     updateLastTickTime()
                                 }
                             }
@@ -205,7 +205,7 @@ class MarketDataEngine(
             // Priority 1: m.Stock
             if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
                 _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "LIVE — M.STOCK"
                 updateLastTickTime()
                 if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
                     healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
@@ -215,7 +215,7 @@ class MarketDataEngine(
             // Priority 2: Angel One
             if (angelMarketDataService.isConnectionLive()) {
                 _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
                 updateLastTickTime()
                 if (prev != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
                     healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_ANGEL_ONE)
@@ -226,7 +226,7 @@ class MarketDataEngine(
             // Priority 1: Angel One
             if (angelMarketDataService.isConnectionLive()) {
                 _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
                 updateLastTickTime()
                 if (prev != ProviderHealthManager.PROVIDER_ANGEL_ONE) {
                     healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_ANGEL_ONE)
@@ -236,7 +236,7 @@ class MarketDataEngine(
             // Priority 2: m.Stock
             if (mStockMarketDataService.isConfigured() && mStockMarketDataService.isConnectionLive()) {
                 _internalActiveProvider.value = ProviderHealthManager.PROVIDER_MSTOCK
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "LIVE — M.STOCK"
                 updateLastTickTime()
                 if (prev != ProviderHealthManager.PROVIDER_MSTOCK) {
                     healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_MSTOCK)
@@ -248,7 +248,7 @@ class MarketDataEngine(
         // Priority 3: NSE Authorized Feed
         if (nseFeedService.isConfigured() && nseFeedService.isConnected) {
             _internalActiveProvider.value = ProviderHealthManager.PROVIDER_NSE
-            _unifiedFeedStatus.value = "LIVE"
+            _unifiedFeedStatus.value = "REFERENCE — NSE"
             updateLastTickTime()
             if (prev != ProviderHealthManager.PROVIDER_NSE) {
                 healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_NSE)
@@ -260,7 +260,7 @@ class MarketDataEngine(
         val lastYahoo = MarketDataStore.getSourceLastUpdate(MarketDataSourceNames.YAHOO)
         if (lastYahoo > 0 && System.currentTimeMillis() - lastYahoo < 120000) {
             _internalActiveProvider.value = ProviderHealthManager.PROVIDER_YAHOO
-            _unifiedFeedStatus.value = "REFERENCE DATA"
+            _unifiedFeedStatus.value = "REFERENCE — YAHOO"
             if (prev != ProviderHealthManager.PROVIDER_YAHOO) {
                 healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_YAHOO)
             }
@@ -269,7 +269,7 @@ class MarketDataEngine(
 
         // No live provider available
         _internalActiveProvider.value = ProviderHealthManager.PROVIDER_NONE
-        _unifiedFeedStatus.value = "DATA UNAVAILABLE"
+        _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
     }
 
     private fun updateLastTickTime() {
@@ -528,7 +528,7 @@ class MarketDataEngine(
             val valid = angelRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
                 updateLastTickTime()
                 return Result.success(valid)
             }
@@ -544,7 +544,7 @@ class MarketDataEngine(
                 val valid = mStockRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
-                    _unifiedFeedStatus.value = "LIVE"
+                    _unifiedFeedStatus.value = "LIVE — M.STOCK"
                     updateLastTickTime()
                     return Result.success(valid)
                 }
@@ -561,7 +561,7 @@ class MarketDataEngine(
                 val valid = nseRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_NSE, System.currentTimeMillis() - startNse)
-                    _unifiedFeedStatus.value = "LIVE"
+                    _unifiedFeedStatus.value = "REFERENCE — NSE"
                     updateLastTickTime()
                     return Result.success(valid)
                 }
@@ -577,15 +577,15 @@ class MarketDataEngine(
             val valid = yahooQuotes.filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_YAHOO, System.currentTimeMillis() - startYahoo)
-                _unifiedFeedStatus.value = "LIVE"
+                _unifiedFeedStatus.value = "REFERENCE — YAHOO"
                 updateLastTickTime()
                 return Result.success(valid)
             }
         }
         healthManager.reportError(ProviderHealthManager.PROVIDER_YAHOO)
 
-        _unifiedFeedStatus.value = "DATA UNAVAILABLE"
-        return Result.failure(Exception("DATA UNAVAILABLE"))
+        _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
+        return Result.failure(Exception("REAL MARKET DATA UNAVAILABLE"))
     }
 
     suspend fun getIndexQuote(symbol: String, exchange: String = "NSE"): Result<IndexQuote> {

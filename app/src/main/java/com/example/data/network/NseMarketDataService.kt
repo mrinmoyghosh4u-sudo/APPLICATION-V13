@@ -120,8 +120,8 @@ class NseAuthorizedFeedService(
                                     )
                                 }
                             }
-                            _connectionState.value = "REFERENCE (LIVE)"
-                            MarketDataStore.setSourceHealth(MarketDataSourceNames.NSE, "LIVE")
+                            _connectionState.value = "REFERENCE"
+                            MarketDataStore.setSourceHealth(MarketDataSourceNames.NSE, "REFERENCE")
                             return
                         }
                     }

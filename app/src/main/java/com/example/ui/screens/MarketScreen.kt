@@ -423,20 +423,20 @@ private fun ExchangeIndicesSection(
 ) {
     val indexList = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            IndexCardData("SENSEX", 80500.00, -180.50, -0.22, 10),
-            IndexCardData("BANKEX", 58200.00, -110.20, -0.19, 15)
+            IndexCardData("SENSEX", 0.0, 0.0, 0.0, 10),
+            IndexCardData("BANKEX", 0.0, 0.0, 0.0, 15)
         )
         "MCX" -> listOf(
-            IndexCardData("CRUDEOIL", 6450.00, +25.00, +0.39, 100),
-            IndexCardData("NATURALGAS", 185.20, +1.80, +0.98, 1250),
-            IndexCardData("GOLD", 72100.00, -150.00, -0.21, 100),
-            IndexCardData("SILVER", 85400.00, +320.00, +0.38, 30)
+            IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, 100),
+            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, 1250),
+            IndexCardData("GOLD", 0.0, 0.0, 0.0, 100),
+            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30)
         )
         else -> listOf(
-            IndexCardData("NIFTY 50", 24231.85, -55.85, -0.23, 65),
-            IndexCardData("BANKNIFTY", 57239.75, -22.65, -0.04, 30),
-            IndexCardData("FINNIFTY", 26019.40, -95.00, -0.36, 60),
-            IndexCardData("MIDCPNIFTY", 14877.15, -12.45, -0.08, 120)
+            IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, 50),
+            IndexCardData("BANKNIFTY", 0.0, 0.0, 0.0, 15),
+            IndexCardData("FINNIFTY", 0.0, 0.0, 0.0, 25),
+            IndexCardData("MIDCPNIFTY", 0.0, 0.0, 0.0, 50)
         )
     }
 
@@ -553,15 +553,15 @@ private fun IndexGridCard(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = String.format("%,.2f", ltp),
+            text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
             color = Color.White,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            text = "${if (isPositive) "+" else ""}${String.format("%.2f", change)} (${if (isPositive) "+" else ""}${String.format("%.2f", changePct)}%)",
-            color = if (isPositive) ProfitGreen else LossRed,
+            text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", change)} (${if (isPositive) "+" else ""}${String.format("%.2f", changePct)}%)" else "WAITING FOR TICK",
+            color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold
         )
@@ -626,26 +626,26 @@ private fun AllContractsSection(
 
     val contracts = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            ContractItemData("SENSEX", "BSE", 80500.00, -0.22, 10, "Indices"),
-            ContractItemData("BANKEX", "BSE", 58200.00, -0.19, 15, "Indices"),
-            ContractItemData("RELIANCE", "BSE", 2950.45, +2.35, 1, "Equity"),
-            ContractItemData("TCS", "BSE", 4210.00, +1.10, 1, "Equity"),
-            ContractItemData("SENSEX 81500 CE", "BSE", 320.00, +12.5, 10, "Options")
+            ContractItemData("SENSEX", "BSE", 0.0, 0.0, 10, "Indices"),
+            ContractItemData("BANKEX", "BSE", 0.0, 0.0, 15, "Indices"),
+            ContractItemData("RELIANCE", "BSE", 0.0, 0.0, 1, "Equity"),
+            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity"),
+            ContractItemData("SENSEX 81500 CE", "BSE", 0.0, 0.0, 10, "Options")
         )
         "MCX" -> listOf(
-            ContractItemData("CRUDEOIL FUT", "MCX", 6450.00, +0.39, 100, "Futures"),
-            ContractItemData("NATURALGAS FUT", "MCX", 185.20, +0.98, 1250, "Futures"),
-            ContractItemData("GOLD FUT", "MCX", 72100.00, -0.21, 100, "Futures"),
-            ContractItemData("SILVER FUT", "MCX", 85400.00, +0.38, 30, "Futures"),
-            ContractItemData("CRUDEOIL 6500 CE", "MCX", 145.00, +8.40, 100, "Options")
+            ContractItemData("CRUDEOIL FUT", "MCX", 0.0, 0.0, 100, "Futures"),
+            ContractItemData("NATURALGAS FUT", "MCX", 0.0, 0.0, 1250, "Futures"),
+            ContractItemData("GOLD FUT", "MCX", 0.0, 0.0, 100, "Futures"),
+            ContractItemData("SILVER FUT", "MCX", 0.0, 0.0, 30, "Futures"),
+            ContractItemData("CRUDEOIL 6500 CE", "MCX", 0.0, 0.0, 100, "Options")
         )
         else -> listOf(
-            ContractItemData("NIFTY 50", "NSE", 24231.85, -0.23, 65, "Indices"),
-            ContractItemData("NIFTY BANK", "NSE", 57239.75, -0.04, 30, "Indices"),
-            ContractItemData("FINNIFTY", "NSE", 26019.40, -0.36, 60, "Indices"),
-            ContractItemData("MIDCPNIFTY", "NSE", 14877.15, -0.08, 120, "Indices"),
-            ContractItemData("NIFTY 24850 CE", "NSE", 185.50, +14.20, 65, "Options"),
-            ContractItemData("BANKNIFTY 52400 PE", "NSE", 240.10, -8.30, 30, "Options")
+            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, 50, "Indices"),
+            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, 15, "Indices"),
+            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, 25, "Indices"),
+            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, 50, "Indices"),
+            ContractItemData("NIFTY 24850 CE", "NSE", 0.0, 0.0, 50, "Options"),
+            ContractItemData("BANKNIFTY 52400 PE", "NSE", 0.0, 0.0, 15, "Options")
         )
     }
 
@@ -748,14 +748,14 @@ private fun AllContractsSection(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = String.format("%,.2f", ltp),
+                                text = if (ltp > 0.0) String.format("%,.2f", ltp) else "--",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%",
-                                color = if (isPositive) ProfitGreen else LossRed,
+                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "WAITING FOR TICK",
+                                color = if (ltp > 0.0) (if (isPositive) ProfitGreen else LossRed) else TextGray,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )

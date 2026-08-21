@@ -33,7 +33,20 @@ class InstrumentMasterService(
     private val client: OkHttpClient = OkHttpClient(),
     private val context: Context? = null
 ) {
+    init {
+        instance = this
+    }
+
+    fun getLotSizeForSymbol(symbol: String): Int {
+        val upper = symbol.uppercase().trim()
+        val inst = instrumentMap.values.find { it.symbol.equals(upper, ignoreCase = true) || it.name.equals(upper, ignoreCase = true) }
+        return inst?.lotsize?.toIntOrNull() ?: 0
+    }
+
     companion object {
+        @Volatile
+        var instance: InstrumentMasterService? = null
+            private set
         fun normalizeExchange(exchSeg: String): String {
             return when (exchSeg.trim().lowercase()) {
                 "nse", "nse_cm", "nse-cm", "nse_eq" -> "NSE"
