@@ -89,19 +89,19 @@ class MarketDataManager(
                     }
                     "DISCONNECTED", "ERROR" -> {
                         // Angel One failed or disconnected -> Failover to m.Stock or TradeSmart
-                        if (mStockMarketDataService.isConfigured()) {
+                        if (mStockMarketDataService.isConnectionLive()) {
                             Log.w("MarketDataManager", "Angel One link down. Failing over to m.Stock...")
                             _activeProvider.value = "m.Stock"
                             _connectionStatus.value = "LIVE"
                             _error.value = "Angel One connection lost. Switched to m.Stock fallback."
-                        } else if (tradeSmartMarketDataService.isConfigured()) {
+                        } else if (tradeSmartMarketDataService.isConnectionLive()) {
                             Log.w("MarketDataManager", "Angel One link down. Failing over to TradeSmart...")
                             _activeProvider.value = "TradeSmart"
                             _connectionStatus.value = "LIVE"
                             _error.value = "Angel One connection lost. Switched to TradeSmart fallback."
                         } else {
                             _activeProvider.value = "Angel One"
-                            _connectionStatus.value = "DISCONNECTED"
+                            _connectionStatus.value = "DATA UNAVAILABLE"
                             _error.value = "Primary market data provider disconnected."
                         }
                     }

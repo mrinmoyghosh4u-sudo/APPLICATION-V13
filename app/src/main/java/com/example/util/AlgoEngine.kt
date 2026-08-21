@@ -345,7 +345,19 @@ object AlgoEngine {
             val strikeOffset = if (isCe) strikeInterval else -strikeInterval
             val roundedStrike = ((targetQuote.ltp / strikeInterval).roundToInt() * strikeInterval) + strikeOffset
             val optType = if (isCe) "CE" else "PE"
-            val optionSymbol = "${targetQuote.symbol} $roundedStrike $optType"
+            
+            // Resolve exact option symbol using Instrument Master
+            val expiries = com.example.data.network.InstrumentMasterService.instance?.getOptionExpiries(targetQuote.symbol)
+            val nearestExpiry = expiries?.firstOrNull() ?: ""
+            val instrument = com.example.data.network.InstrumentMasterService.instance?.resolveOptionInstrument(
+                underlying = targetQuote.symbol,
+                expiry = nearestExpiry,
+                strike = roundedStrike.toDouble(),
+                optionType = optType
+            )
+            
+            val optionSymbol = instrument?.symbol ?: "${targetQuote.symbol} $roundedStrike $optType"
+            val optionExchange = instrument?.exch_seg ?: targetQuote.exchange
 
             // Get REAL tick from MarketDataStore for the option contract
             val optionTick = com.example.data.model.MarketDataStore.getTick(optionSymbol)
@@ -353,8 +365,8 @@ object AlgoEngine {
                     com.example.data.model.MarketDataState(
                         source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
                         symbol = it.symbol,
-                        token = "",
-                        exchange = it.exchange,
+                        token = instrument?.token ?: "",
+                        exchange = optionExchange,
                         ltp = it.ltp
                     )
                 }
@@ -368,7 +380,7 @@ object AlgoEngine {
 
                 _currentSignal.value = com.example.data.model.AISignalEntity(
                     symbol = optionSymbol,
-                    exchange = targetQuote.exchange,
+                    exchange = com.example.data.network.InstrumentMasterService.normalizeExchange(optionExchange),
                     side = "BUY",
                     actionType = signalType,
                     trend = if (isCe) "BULLISH" else "BEARISH",

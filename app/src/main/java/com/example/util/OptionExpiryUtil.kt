@@ -42,12 +42,9 @@ object OptionExpiryUtil {
             }
         }
 
-        // 2. Generate dynamic upcoming expiries based on current exchange rules
-        return generateDynamicExpiriesIST(symbol)
-            .filter { it.rawDate.time >= activeCutoff.time }
-            .sortedBy { it.rawDate.time }
-            .map { it.dateString }
-            .distinct()
+        // 2. Do not generate dynamic expiries locally based on user rule
+        // Trading/API requests must only use real provider data.
+        return emptyList()
     }
 
     /**

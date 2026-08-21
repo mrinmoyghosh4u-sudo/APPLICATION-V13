@@ -68,6 +68,11 @@ class TradeSmartMarketDataService(
     fun isConfigured(): Boolean {
         return sessionManager.isTradeSmartConfigured()
     }
+    
+    fun isConnectionLive(): Boolean {
+        val age = System.currentTimeMillis() - lastTickReceivedTime
+        return isConfigured() && (_connectionState.value == "LIVE" || lastTickReceivedTime > 0L) && age >= 0L && age <= STALE_THRESHOLD_MS
+    }
 
     fun connect() {
         if (!isConfigured()) {

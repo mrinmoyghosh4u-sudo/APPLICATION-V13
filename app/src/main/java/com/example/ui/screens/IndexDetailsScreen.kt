@@ -462,10 +462,9 @@ fun OptionChainTabContent(
     val selectedExpiry by viewModel.selectedOptionExpiry.collectAsStateWithLifecycle()
     val strikes by viewModel.optionStrikes.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
-
     val expiries = remember(indexName, availableExpiries) {
         if (availableExpiries.isNotEmpty()) availableExpiries
-        else OptionExpiryUtil.getUpcomingExpiriesForSymbol(indexName)
+        else emptyList()
     }
 
     LaunchedEffect(expiries, selectedExpiry) {
@@ -475,7 +474,6 @@ fun OptionChainTabContent(
     }
 
     val lotSize = com.example.util.AppPreferences.getGlobalLotSize(indexName)
-
     val closestAtmStrikePrice = remember(strikes, underlyingLtp) {
         if (strikes.isEmpty()) 0.0
         else strikes.minByOrNull { kotlin.math.abs(it.strikePrice - underlyingLtp) }?.strikePrice ?: 0.0
@@ -483,29 +481,45 @@ fun OptionChainTabContent(
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Expiry Selector
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-        ) {
-            expiries.forEach { expiry ->
-                val isSelected = expiry == selectedExpiry
-                Surface(
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .clickable { viewModel.setSelectedOptionExpiry(expiry) },
-                    color = if (isSelected) PrimaryGold else DarkCard,
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) PrimaryGold else DarkCardBorder)
-                ) {
-                    Text(
-                        text = expiry,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSelected) Color.Black else TextWhite,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
+        if (expiries.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "EXPIRY DATA UNAVAILABLE",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF5252)
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                expiries.forEach { expiry ->
+                    val isSelected = expiry == selectedExpiry
+                    Surface(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable { viewModel.setSelectedOptionExpiry(expiry) },
+                        color = if (isSelected) PrimaryGold else DarkCard,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) PrimaryGold else DarkCardBorder)
+                    ) {
+                        Text(
+                            text = expiry,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.Black else TextWhite,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
         }
@@ -583,7 +597,7 @@ fun OptionChainTabContent(
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onOpenOrderDialog("$indexName ${strike.strikePrice.toInt()} CE", "BUY", strike.callLtp, lotSize) },
+                                .clickable { onOpenOrderDialog(strike.callSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} CE" }, "BUY", strike.callLtp, lotSize) },
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
@@ -592,7 +606,7 @@ fun OptionChainTabContent(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(if (strike.callLtp > 0.0) String.format("%,.2f", strike.callLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                                Text(if (strike.callIv > 0.0) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
+                                Text(if (strike.callIv != null) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                         }
 
@@ -617,12 +631,12 @@ fun OptionChainTabContent(
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onOpenOrderDialog("$indexName ${strike.strikePrice.toInt()} PE", "BUY", strike.putLtp, lotSize) },
+                                .clickable { onOpenOrderDialog(strike.putSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} PE" }, "BUY", strike.putLtp, lotSize) },
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
                                 Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                                Text(if (strike.putIv > 0.0) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
+                                Text(if (strike.putIv != null) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(strike.putOi, fontSize = 11.sp, color = TextWhite)

@@ -573,41 +573,16 @@ class AngelOneMarketDataService(
                         
                         item.copy(
                             callLtp = ceLive?.ltp ?: item.callLtp,
-                            putLtp = peLive?.ltp ?: item.putLtp
+                            putLtp = peLive?.ltp ?: item.putLtp,
+                            callToken = ceOpt?.token ?: "",
+                            putToken = peOpt?.token ?: "",
+                            callSymbol = ceOpt?.symbol ?: "",
+                            putSymbol = peOpt?.symbol ?: ""
                         )
                     }
                     return Result.success(strikes)
                 } else {
-                    // Assemble option strike items from official Instrument Master loaded instruments
-                    val groupedByStrike = options.groupBy { inst ->
-                        val rawStrike = inst.strike.toDoubleOrNull() ?: 0.0
-                        if (rawStrike > 100000) rawStrike / 100.0 else rawStrike
-                    }
-                    val strikes = groupedByStrike.map { (strike, instList) ->
-                        val ceInst = instList.find { it.symbol.endsWith("CE") || it.symbol.contains("CE") }
-                        val peInst = instList.find { it.symbol.endsWith("PE") || it.symbol.contains("PE") }
-                        val ceLive = if (ceInst != null) MarketDataStore.getTick(ceInst.symbol) ?: MarketDataStore.getTickByToken(exchSeg, ceInst.token) else null
-                        val peLive = if (peInst != null) MarketDataStore.getTick(peInst.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peInst.token) else null
-                        
-                        OptionStrikeItem(
-                            strikePrice = strike,
-                            callOi = "-",
-                            callChgOi = "-",
-                            callIv = 0.0,
-                            callLtp = ceLive?.ltp ?: 0.0,
-                            callDelta = 0.0,
-                            putDelta = 0.0,
-                            putLtp = peLive?.ltp ?: 0.0,
-                            putIv = 0.0,
-                            putChgOi = "-",
-                            putOi = "-",
-                            callVolume = "${ceLive?.volume ?: 0}",
-                            putVolume = "${peLive?.volume ?: 0}"
-                        )
-                    }.sortedBy { it.strikePrice }
-                    if (strikes.isNotEmpty()) {
-                        return Result.success(strikes)
-                    }
+                    return Result.success(emptyList()) // Do not generate fake/unavailable rows if real API fails
                 }
             }
         }

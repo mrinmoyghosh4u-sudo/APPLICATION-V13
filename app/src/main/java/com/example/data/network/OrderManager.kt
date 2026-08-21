@@ -121,6 +121,11 @@ class OrderManager(
                 if (!hasCe && !hasPe) {
                     return@withContext Result.failure(Exception("Invalid Option Type: Option must specify CE or PE."))
                 }
+                
+                val indexIds = listOf("13", "25", "27", "31")
+                if (indexIds.contains(secId)) {
+                    return@withContext Result.failure(Exception("Missing Exact Option Mapping: Cannot place option order using the underlying index Security ID ($secId). Exact Dhan contract mapping required."))
+                }
             }
 
             // 8. Duplicate Order Prevention
