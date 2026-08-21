@@ -345,7 +345,24 @@ object AlgoEngine {
             val strikeOffset = if (isCe) strikeInterval else -strikeInterval
             val roundedStrike = ((targetQuote.ltp / strikeInterval).roundToInt() * strikeInterval) + strikeOffset
             val optType = if (isCe) "CE" else "PE"
-            val optionSymbol = "${targetQuote.symbol} $roundedStrike $optType"
+            
+            var optionSymbol = ""
+            val master = com.example.data.network.InstrumentMasterService.instance
+            if (master != null && master.isLoaded) {
+                val expiries = master.getOptionExpiries(targetQuote.symbol)
+                if (expiries.isNotEmpty()) {
+                    val activeExpiry = expiries.first()
+                    val optInst = master.resolveOptionInstrument(targetQuote.symbol, activeExpiry, roundedStrike.toDouble(), optType)
+                    if (optInst != null) {
+                        optionSymbol = optInst.symbol
+                    }
+                }
+            }
+
+            if (optionSymbol.isBlank()) {
+                // Return if real option contract not found in Instrument Master
+                return
+            }
 
             // Get REAL tick from MarketDataStore for the option contract
             val optionTick = com.example.data.model.MarketDataStore.getTick(optionSymbol)

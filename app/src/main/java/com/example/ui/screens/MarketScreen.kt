@@ -421,22 +421,26 @@ private fun ExchangeIndicesSection(
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
 ) {
+    fun getLotSize(symbol: String, default: Int): Int {
+        return com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol(symbol)?.takeIf { it > 0 } ?: default
+    }
+
     val indexList = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            IndexCardData("SENSEX", 0.0, 0.0, 0.0, 10),
-            IndexCardData("BANKEX", 0.0, 0.0, 0.0, 15)
+            IndexCardData("SENSEX", 0.0, 0.0, 0.0, getLotSize("SENSEX", 10)),
+            IndexCardData("BANKEX", 0.0, 0.0, 0.0, getLotSize("BANKEX", 15))
         )
         "MCX" -> listOf(
-            IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, 100),
-            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, 1250),
-            IndexCardData("GOLD", 0.0, 0.0, 0.0, 100),
-            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30)
+            IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, getLotSize("CRUDEOIL", 100)),
+            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, getLotSize("NATURALGAS", 1250)),
+            IndexCardData("GOLD", 0.0, 0.0, 0.0, getLotSize("GOLD", 100)),
+            IndexCardData("SILVER", 0.0, 0.0, 0.0, getLotSize("SILVER", 30))
         )
         else -> listOf(
-            IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, 50),
-            IndexCardData("BANKNIFTY", 0.0, 0.0, 0.0, 15),
-            IndexCardData("FINNIFTY", 0.0, 0.0, 0.0, 25),
-            IndexCardData("MIDCPNIFTY", 0.0, 0.0, 0.0, 50)
+            IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, getLotSize("NIFTY 50", 50)),
+            IndexCardData("BANKNIFTY", 0.0, 0.0, 0.0, getLotSize("BANKNIFTY", 15)),
+            IndexCardData("FINNIFTY", 0.0, 0.0, 0.0, getLotSize("FINNIFTY", 25)),
+            IndexCardData("MIDCPNIFTY", 0.0, 0.0, 0.0, getLotSize("MIDCPNIFTY", 50))
         )
     }
 
@@ -446,8 +450,9 @@ private fun ExchangeIndicesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val headerText = if (exchange.uppercase() == "MCX") "⭐ MCX CONTRACTS" else "⭐ $exchange INDICES"
             Text(
-                text = "⭐ $exchange INDICES",
+                text = headerText,
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -624,32 +629,45 @@ private fun AllContractsSection(
 ) {
     val filters = listOf("All", "Indices", "Equity", "Futures", "Options")
 
-    val contracts = when (exchange.uppercase()) {
+    val baseContracts = when (exchange.uppercase()) {
         "BSE" -> listOf(
-            ContractItemData("SENSEX", "BSE", 0.0, 0.0, 10, "Indices"),
-            ContractItemData("BANKEX", "BSE", 0.0, 0.0, 15, "Indices"),
+            ContractItemData("SENSEX", "BSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("SENSEX") ?: 10, "Indices"),
+            ContractItemData("BANKEX", "BSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("BANKEX") ?: 15, "Indices"),
             ContractItemData("RELIANCE", "BSE", 0.0, 0.0, 1, "Equity"),
-            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity"),
-            ContractItemData("SENSEX 81500 CE", "BSE", 0.0, 0.0, 10, "Options")
+            ContractItemData("TCS", "BSE", 0.0, 0.0, 1, "Equity")
         )
         "MCX" -> listOf(
-            ContractItemData("CRUDEOIL FUT", "MCX", 0.0, 0.0, 100, "Futures"),
-            ContractItemData("NATURALGAS FUT", "MCX", 0.0, 0.0, 1250, "Futures"),
-            ContractItemData("GOLD FUT", "MCX", 0.0, 0.0, 100, "Futures"),
-            ContractItemData("SILVER FUT", "MCX", 0.0, 0.0, 30, "Futures"),
-            ContractItemData("CRUDEOIL 6500 CE", "MCX", 0.0, 0.0, 100, "Options")
+            ContractItemData("CRUDEOIL", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("CRUDEOIL") ?: 100, "Futures"),
+            ContractItemData("NATURALGAS", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("NATURALGAS") ?: 1250, "Futures"),
+            ContractItemData("GOLD", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("GOLD") ?: 100, "Futures"),
+            ContractItemData("SILVER", "MCX", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("SILVER") ?: 30, "Futures")
         )
         else -> listOf(
-            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, 50, "Indices"),
-            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, 15, "Indices"),
-            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, 25, "Indices"),
-            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, 50, "Indices"),
-            ContractItemData("NIFTY 24850 CE", "NSE", 0.0, 0.0, 50, "Options"),
-            ContractItemData("BANKNIFTY 52400 PE", "NSE", 0.0, 0.0, 15, "Options")
+            ContractItemData("NIFTY 50", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("NIFTY 50") ?: 50, "Indices"),
+            ContractItemData("BANKNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("BANKNIFTY") ?: 15, "Indices"),
+            ContractItemData("FINNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("FINNIFTY") ?: 25, "Indices"),
+            ContractItemData("MIDCPNIFTY", "NSE", 0.0, 0.0, com.example.data.network.InstrumentMasterService.instance?.getLotSizeForSymbol("MIDCPNIFTY") ?: 50, "Indices")
         )
     }
 
-    val filteredContracts = contracts.filter { item ->
+    val displayContracts = remember(searchQuery, exchange, selectedFilter) {
+        if (searchQuery.isNotBlank() && searchQuery.length >= 2) {
+            val results = com.example.data.network.InstrumentMasterService.instance?.searchInstruments(searchQuery, exchange, limit = 15) ?: emptyList()
+            results.map { inst ->
+                val category = when {
+                    inst.instrumenttype.contains("OPT", true) -> "Options"
+                    inst.instrumenttype.contains("FUT", true) -> "Futures"
+                    inst.instrumenttype.contains("IDX", true) -> "Indices"
+                    else -> "Equity"
+                }
+                ContractItemData(inst.symbol, inst.exch_seg, 0.0, 0.0, inst.lotsize.toIntOrNull() ?: 1, category)
+            }
+        } else {
+            baseContracts
+        }
+    }
+
+    val filteredContracts = displayContracts.filter { item ->
         val matchesFilter = when (selectedFilter) {
             "Indices" -> item.category == "Indices"
             "Equity" -> item.category == "Equity"
@@ -657,8 +675,7 @@ private fun AllContractsSection(
             "Options" -> item.category == "Options"
             else -> true
         }
-        val matchesSearch = searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true)
-        matchesFilter && matchesSearch
+        matchesFilter
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -910,13 +927,13 @@ private fun MarketMoversSection(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "₹${String.format("%,.2f", ltp)}",
+                                text = if (ltp > 0.0) "₹${String.format("%,.2f", ltp)}" else "LTP: --",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%",
+                                text = if (ltp > 0.0) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "--",
                                 color = if (isPositive) ProfitGreen else LossRed,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold

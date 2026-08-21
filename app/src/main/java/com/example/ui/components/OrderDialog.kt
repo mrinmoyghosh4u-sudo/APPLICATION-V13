@@ -269,16 +269,16 @@ fun OrderDialog(
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Entry Price:", fontSize = 10.sp, color = TextGray)
-                            Text(String.format("₹%.2f", price), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                            Text(if (price > 0.0) String.format("₹%.2f", price) else "LTP: --", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Stop Loss:", fontSize = 10.sp, color = TextGray)
-                            Text(String.format("₹%.2f", slVal), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                            Text(if (slVal > 0.0) String.format("₹%.2f", slVal) else "--", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LossRed)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Target 1 | 2 | 3:", fontSize = 10.sp, color = TextGray)
                             Text(
-                                String.format("₹%.2f | ₹%.2f | ₹%.2f", t1Val, t2Val, t3Val),
+                                if (price > 0.0) String.format("₹%.2f | ₹%.2f | ₹%.2f", t1Val, t2Val, t3Val) else "-- | -- | --",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ProfitGreen
@@ -287,7 +287,7 @@ fun OrderDialog(
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Margin Required:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                            Text(String.format("₹%,.2f", totalVal), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                            Text(if (totalVal > 0.0) String.format("₹%,.2f", totalVal) else "--", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
                         }
                     }
                 }
