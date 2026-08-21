@@ -172,9 +172,7 @@ class DhanBrokerService(
                     }
 
                     // Expiry Date determination
-                    val formattedExpiry = item.expiryDate?.ifEmpty { null } ?: run {
-                        com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(item.tradingSymbol).firstOrNull() ?: ""
-                    }
+                    val formattedExpiry = item.expiryDate ?: ""
 
                     val avgPrice = if (isClosed) {
                         if (item.buyAvg > 0) item.buyAvg else item.sellAvg

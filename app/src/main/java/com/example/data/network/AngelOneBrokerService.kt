@@ -308,8 +308,11 @@ class AngelOneBrokerService(
             val response = api.getOptionChain(request)
             if (response.isSuccessful && response.body()?.status == true) {
                 response.body()?.data?.map { item ->
+                    val sp = item.strikePrice?.toDoubleOrNull() ?: 0.0
+                    val ceInst = instrumentMaster.resolveOptionInstrument(symbol, expiry, sp, "CE")
+                    val peInst = instrumentMaster.resolveOptionInstrument(symbol, expiry, sp, "PE")
                     OptionStrikeItem(
-                        strikePrice = item.strikePrice?.toDoubleOrNull() ?: 0.0,
+                        strikePrice = sp,
                         callOi = "${item.callOi ?: 0.0}",
                         callChgOi = "${item.callChgOi ?: 0.0}",
                         callLtp = item.callLtp ?: 0.0,
@@ -317,7 +320,11 @@ class AngelOneBrokerService(
                         putChgOi = "${item.putChgOi ?: 0.0}",
                         putOi = "${item.putOi ?: 0.0}",
                         callVolume = "${item.callVolume ?: 0.0}",
-                        putVolume = "${item.putVolume ?: 0.0}"
+                        putVolume = "${item.putVolume ?: 0.0}",
+                        callSymbol = ceInst?.symbol ?: "",
+                        callToken = ceInst?.token ?: "",
+                        putSymbol = peInst?.symbol ?: "",
+                        putToken = peInst?.token ?: ""
                     )
                 } ?: emptyList()
             } else {
