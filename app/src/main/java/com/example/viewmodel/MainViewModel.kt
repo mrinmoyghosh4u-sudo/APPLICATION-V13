@@ -742,19 +742,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshBrokerData() {
-        if (_isRefreshing.value) return
-        _isRefreshing.value = true
         viewModelScope.launch {
-            try {
-                if (sessionManager.hasValidSession()) {
-                    runCatching {
-                        repository.syncWithBroker()
-                    }.onFailure { e ->
-                        _apiError.value = e.message
-                    }
+            if (sessionManager.hasValidSession()) {
+                runCatching {
+                    repository.syncWithBroker()
+                }.onFailure { e ->
+                    _apiError.value = e.message
                 }
-            } finally {
-                _isRefreshing.value = false
             }
         }
     }

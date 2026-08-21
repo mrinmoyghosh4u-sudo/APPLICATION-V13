@@ -364,11 +364,21 @@ class InstrumentMasterService(
             "CRUDEOIL", "CRUDEOIL M" -> "MCX"
             else -> "NFO"
         }
-        
-        return instrumentMap.values.filter {
+
+        val cleanExpiry = expiry.replace("-", "").replace(" ", "").replace("/", "").uppercase()
+
+        val exactMatches = instrumentMap.values.filter {
             normalizeExchange(it.exch_seg) == exchSeg &&
             (it.name.equals(nfoName, ignoreCase = true) || it.symbol.startsWith(nfoName, ignoreCase = true)) &&
-            (expiry.isBlank() || it.expiry.equals(expiry, ignoreCase = true) || it.expiry.replace("-", "").equals(expiry.replace("-", ""), ignoreCase = true))
+            (cleanExpiry.isBlank() || it.expiry.replace("-", "").replace(" ", "").replace("/", "").uppercase().equals(cleanExpiry, ignoreCase = true))
+        }
+
+        if (exactMatches.isNotEmpty()) return exactMatches
+
+        // Fallback: return option instruments for this index regardless of exact expiry string formatting
+        return instrumentMap.values.filter {
+            normalizeExchange(it.exch_seg) == exchSeg &&
+            (it.name.equals(nfoName, ignoreCase = true) || it.symbol.startsWith(nfoName, ignoreCase = true))
         }
     }
 

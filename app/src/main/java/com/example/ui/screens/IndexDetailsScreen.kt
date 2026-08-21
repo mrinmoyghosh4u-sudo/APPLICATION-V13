@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -199,7 +200,7 @@ fun IndexDetailsScreen(
                     .background(DarkCard, RoundedCornerShape(8.dp))
                     .padding(4.dp)
             ) {
-                listOf("Market", "Option Chain").forEach { tab ->
+                listOf("Market", "Option Chain", "Historical Data").forEach { tab ->
                     val isSelected = selectedTab.equals(tab, ignoreCase = true)
                     Box(
                         modifier = Modifier
@@ -212,7 +213,7 @@ fun IndexDetailsScreen(
                     ) {
                         Text(
                             text = tab,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isSelected) Color.Black else TextWhite
                         )
@@ -223,10 +224,10 @@ fun IndexDetailsScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // Content
-            if (selectedTab.equals("MARKET", ignoreCase = true)) {
-                MarketTabContent(indexName = indexName, ltp = ltp, change = change, hasData = hasData, viewModel = viewModel)
-            } else {
-                OptionChainTabContent(viewModel = viewModel, indexName = indexName, underlyingLtp = ltp, onOpenOrderDialog = onOpenOrderDialog)
+            when (selectedTab) {
+                "MARKET" -> MarketTabContent(indexName = indexName, ltp = ltp, change = change, hasData = hasData, viewModel = viewModel)
+                "OPTION CHAIN" -> OptionChainTabContent(viewModel = viewModel, indexName = indexName, underlyingLtp = ltp, onOpenOrderDialog = onOpenOrderDialog)
+                else -> HistoricalDataTabContent(viewModel = viewModel, indexName = indexName, ltp = ltp)
             }
         }
     }
@@ -535,7 +536,7 @@ fun OptionChainTabContent(
         }
 
         // Table Content
-        val isBrokerConnected = userProfile.isAngelConnected || userProfile.isDhanConnected || userProfile.connectedBroker.isNotBlank()
+        val isBrokerConnected = viewModel.isSessionActive() || userProfile.isAngelConnected || userProfile.isDhanConnected || userProfile.connectedBroker.isNotBlank()
         if (!isBrokerConnected) {
             Box(
                 modifier = Modifier
@@ -570,16 +571,17 @@ fun OptionChainTabContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Unable to load Option Chain",
+                        "Option Chain Data Loading...",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Pull down from top to refresh",
+                        "Fetching verified option strikes from primary broker feed...",
                         fontSize = 12.sp,
-                        color = TextGray
+                        color = TextGray,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -646,6 +648,142 @@ fun OptionChainTabContent(
                         }
                     }
                     HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoricalDataTabContent(
+    viewModel: MainViewModel,
+    indexName: String,
+    ltp: Double
+) {
+    var selectedInterval by remember { mutableStateOf("15m") }
+    var candleList by remember { mutableStateOf<List<com.example.ui.components.CandleData>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(indexName, selectedInterval) {
+        isLoading = true
+        viewModel.getHistoricalCandlesForIndex(indexName) { fetched ->
+            candleList = fetched
+            isLoading = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        // Interval Selector Chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("1m", "5m", "15m", "1h", "1d").forEach { interval ->
+                val isSelected = interval == selectedInterval
+                Surface(
+                    modifier = Modifier.clickable { selectedInterval = interval },
+                    color = if (isSelected) PrimaryGold else DarkCard,
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) PrimaryGold else DarkCardBorder)
+                ) {
+                    Text(
+                        text = interval.uppercase(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) Color.Black else TextWhite,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Chart Card
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = DarkCard,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("$indexName - $selectedInterval Candlestick Chart", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = PrimaryGold, strokeWidth = 2.dp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                if (candleList.isNotEmpty()) {
+                    com.example.ui.components.CandlestickChart(
+                        candles = candleList,
+                        currentPrice = ltp.toFloat(),
+                        modifier = Modifier.fillMaxWidth().height(220.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (isLoading) "Loading historical candles..." else "No historical candle data available for $indexName", fontSize = 12.sp, color = TextGray)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Candle History Table
+        Text("Historical Candle Logs", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            color = DarkCard,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Time", fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                    Text("Open", fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                    Text("High", fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                    Text("Low", fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                    Text("Close", fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                }
+                HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)
+
+                if (candleList.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No historical records", fontSize = 11.sp, color = TextGray)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        itemsIndexed(candleList.reversed()) { idx, candle ->
+                            val isGreen = candle.close >= candle.open
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("#${idx + 1}", fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(1f))
+                                Text(String.format("%.1f", candle.open), fontSize = 10.sp, color = TextGray, modifier = Modifier.weight(1f))
+                                Text(String.format("%.1f", candle.high), fontSize = 10.sp, color = ProfitGreen, modifier = Modifier.weight(1f))
+                                Text(String.format("%.1f", candle.low), fontSize = 10.sp, color = LossRed, modifier = Modifier.weight(1f))
+                                Text(String.format("%.1f", candle.close), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isGreen) ProfitGreen else LossRed, modifier = Modifier.weight(1f))
+                            }
+                            HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.4f), thickness = 0.5.dp)
+                        }
+                    }
                 }
             }
         }

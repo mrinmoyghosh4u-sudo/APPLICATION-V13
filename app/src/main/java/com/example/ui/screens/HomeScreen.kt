@@ -53,6 +53,7 @@ fun HomeScreen(
     viewModel: MainViewModel? = null,
     onNavigateToOrders: () -> Unit = {},
     onNavigateToMarket: () -> Unit = {},
+    onNavigateToAISignals: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onNavigateToIndexDetails: (String, String) -> Unit = { _, _ -> },
     onOpenNotificationCenter: () -> Unit = {},
@@ -138,7 +139,8 @@ fun HomeScreen(
                 aiSignals = aiSignals,
                 viewModel = viewModel,
                 fallbackWatchlist = watchlist,
-                onOpenOrderDialog = onOpenOrderDialog
+                onOpenOrderDialog = onOpenOrderDialog,
+                onNavigateToAISignals = onNavigateToAISignals
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -146,7 +148,8 @@ fun HomeScreen(
             // 7. AI OPTION BUYER SIGNALS
             OptionBuyerSignalsSection(
                 aiSignals = aiSignals,
-                onOpenOrderDialog = onOpenOrderDialog
+                onOpenOrderDialog = onOpenOrderDialog,
+                onNavigateToAISignals = onNavigateToAISignals
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -169,11 +172,11 @@ fun HomeScreen(
 
             // 10. QUICK SHORTCUTS GRID
             QuickShortcutsGrid(
-                onNavigateToOptionChain = onNavigateToMarket,
+                onNavigateToOptionChain = { onNavigateToIndexDetails(selectedExchange, "NIFTY 50") },
                 onNavigateToScanner = onNavigateToMarket,
-                onNavigateToChart = onNavigateToMarket,
+                onNavigateToChart = { onNavigateToIndexDetails(selectedExchange, "NIFTY 50") },
                 onNavigateToOrders = onNavigateToOrders,
-                onNavigateToAISignals = onNavigateToMarket
+                onNavigateToAISignals = onNavigateToAISignals
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -705,7 +708,8 @@ private fun PrimaryAISignalSection(
     aiSignals: List<AISignalEntity>,
     viewModel: MainViewModel?,
     fallbackWatchlist: List<WatchlistItem>,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
+    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
+    onNavigateToAISignals: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -718,7 +722,7 @@ private fun PrimaryAISignalSection(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("KING KHAN AI SIGNAL (PRIMARY)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
-            Text("View All Signals >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
+            Text("View All Signals >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToAISignals() })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -787,7 +791,7 @@ private fun PrimaryAISignalSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { },
+                        onClick = onNavigateToAISignals,
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
@@ -867,7 +871,8 @@ private fun CircularConfidenceGauge(confidence: Int) {
 @Composable
 private fun OptionBuyerSignalsSection(
     aiSignals: List<AISignalEntity>,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
+    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
+    onNavigateToAISignals: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -880,7 +885,7 @@ private fun OptionBuyerSignalsSection(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("AI OPTION BUYER SIGNALS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
+            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToAISignals() })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -970,7 +975,7 @@ private fun OpenPositionsSection(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("OPEN POSITIONS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
+            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToOrders() })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -982,58 +987,51 @@ private fun OpenPositionsSection(
             border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                // Table Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.3f))
-                    Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
-                    Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
-                    Text("Avg", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                    Text("LTP", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                    Text("P&L", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
-                }
-
-                Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
-
-                val staticPositions = listOf(
-                    PositionRowData("NIFTY 25,000 CE", "BUY", "75", "125.40", "128.95", "+266.25", true),
-                    PositionRowData("BANKNIFTY 57,500 PE", "BUY", "25", "254.30", "251.10", "-80.00", false),
-                    PositionRowData("FINNIFTY 26,000 CE", "BUY", "50", "116.75", "118.60", "+92.50", true)
-                )
-
-                staticPositions.forEach { pos ->
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (orders.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(pos.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.3f))
-                        Text(pos.type, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.6f))
-                        Text(pos.qty, fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
-                        Text(pos.avg, fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
-                        Text(pos.ltp, fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
-                        Text(pos.pnl, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (pos.isPositive) ProfitGreen else LossRed, modifier = Modifier.weight(0.9f))
+                        Text("No active positions found in Dhan session", fontSize = 11.sp, color = TextGray)
+                    }
+                } else {
+                    // Table Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.3f))
+                        Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
+                        Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
+                        Text("Price", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
+                        Text("Status", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
+                    }
+
+                    Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
+
+                    orders.take(5).forEach { ord ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(ord.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.3f))
+                            Text(ord.orderType, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (ord.orderType.contains("BUY", ignoreCase = true)) ProfitGreen else LossRed, modifier = Modifier.weight(0.6f))
+                            Text("${ord.qty}", fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
+                            Text(String.format("%.2f", ord.price), fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
+                            Text(ord.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.9f))
+                        }
                     }
                 }
             }
         }
     }
 }
-
-private data class PositionRowData(
-    val symbol: String,
-    val type: String,
-    val qty: String,
-    val avg: String,
-    val ltp: String,
-    val pnl: String,
-    val isPositive: Boolean
-)
 
 // ==========================================
 // 9. RECENT ORDERS SECTION
@@ -1054,7 +1052,7 @@ private fun RecentOrdersSection(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("RECENT ORDERS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
-            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium)
+            Text("View All >", fontSize = 11.sp, color = SecondaryGold, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onNavigateToOrders() })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1066,42 +1064,45 @@ private fun RecentOrdersSection(
             border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2A2E35))
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                // Table Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Time", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                    Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.4f))
-                    Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
-                    Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
-                    Text("Price", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                    Text("Status", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
-                }
-
-                Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
-
-                val staticOrders = listOf(
-                    OrderRowData("07:45 PM", "NIFTY 25,000 CE", "BUY", "75", "125.40", "COMPLETE"),
-                    OrderRowData("07:30 PM", "BANKNIFTY 57,500 PE", "BUY", "25", "254.30", "COMPLETE"),
-                    OrderRowData("07:15 PM", "FINNIFTY 26,000 CE", "BUY", "50", "116.75", "COMPLETE")
-                )
-
-                staticOrders.forEach { ord ->
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (orders.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(ord.time, fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
-                        Text(ord.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.4f))
-                        Text(ord.type, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.6f))
-                        Text(ord.qty, fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
-                        Text(ord.price, fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
-                        Text(ord.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.9f))
+                        Text("No recent orders in Dhan session", fontSize = 11.sp, color = TextGray)
+                    }
+                } else {
+                    // Table Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Symbol", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(1.3f))
+                        Text("Type", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.6f))
+                        Text("Qty", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.5f))
+                        Text("Price", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.8f))
+                        Text("Status", fontSize = 9.sp, color = TextGray, modifier = Modifier.weight(0.9f))
+                    }
+
+                    Divider(color = Color(0xFF2A2E35), thickness = 0.5.dp)
+
+                    orders.take(5).forEach { ord ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(ord.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.weight(1.3f))
+                            Text(ord.orderType, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (ord.orderType.contains("BUY", ignoreCase = true)) ProfitGreen else LossRed, modifier = Modifier.weight(0.6f))
+                            Text("${ord.qty}", fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.5f))
+                            Text(String.format("%.2f", ord.price), fontSize = 10.sp, color = TextWhite, modifier = Modifier.weight(0.8f))
+                            Text(ord.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen, modifier = Modifier.weight(0.9f))
+                        }
                     }
                 }
             }

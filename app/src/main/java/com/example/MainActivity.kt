@@ -329,6 +329,9 @@ class MainActivity : FragmentActivity() {
                                             onNavigateToMarket = {
                                                 coroutineScope.launch { pagerState.animateScrollToPage(1) }
                                             },
+                                            onNavigateToAISignals = {
+                                                coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                                            },
                                             onNavigateToProfile = {
                                                 coroutineScope.launch { pagerState.animateScrollToPage(5) }
                                             },
