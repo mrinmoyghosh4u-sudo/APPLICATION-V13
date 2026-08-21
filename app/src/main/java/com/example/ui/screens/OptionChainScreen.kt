@@ -140,8 +140,15 @@ fun OptionChainScreen(
             
             Spacer(modifier = Modifier.height(8.dp))
 
+            val exchange = when {
+                currentIndex.contains("CRUDE", ignoreCase = true) || currentIndex.contains("NATURALGAS", ignoreCase = true) -> "MCX"
+                currentIndex.contains("SENSEX", ignoreCase = true) || currentIndex.contains("BANKEX", ignoreCase = true) -> "BSE"
+                else -> "NSE"
+            }
+
             OptionChainTabContent(
                 viewModel = viewModel,
+                exchange = exchange,
                 indexName = currentIndex,
                 onOpenOrderDialog = onOpenOrderDialog
             )

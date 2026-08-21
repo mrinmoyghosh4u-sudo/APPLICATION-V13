@@ -360,10 +360,21 @@ class AngelOneBrokerService(
             val token = instrumentMaster.resolveAngelToken(symbol, ex)
                 ?: throw Exception("Cannot resolve Angel One token for historical data of $symbol on $ex")
 
+            val angelInterval = when (interval.lowercase()) {
+                "1m" -> "ONE_MINUTE"
+                "3m" -> "THREE_MINUTE"
+                "5m" -> "FIVE_MINUTE"
+                "15m" -> "FIFTEEN_MINUTE"
+                "30m" -> "THIRTY_MINUTE"
+                "1h" -> "ONE_HOUR"
+                "1d" -> "ONE_DAY"
+                else -> "FIFTEEN_MINUTE"
+            }
+
             val request = AngelHistoricalRequest(
                 exchange = ex,
                 symboltoken = token,
-                interval = interval,
+                interval = angelInterval,
                 fromdate = fromDate,
                 todate = toDate
             )

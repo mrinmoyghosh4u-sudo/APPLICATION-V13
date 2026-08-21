@@ -836,9 +836,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getHistoricalCandlesForIndex(indexName: String, onResult: (List<com.example.ui.components.CandleData>) -> Unit) {
+    fun getHistoricalCandlesForIndex(indexName: String, interval: String = "15m", onResult: (List<com.example.ui.components.CandleData>) -> Unit) {
         viewModelScope.launch {
-            val res = brokerManager.getHistoricalCandles(indexName, "15m")
+            val res = brokerManager.getHistoricalCandles(indexName, interval)
             if (res.isSuccess) {
                 onResult(res.getOrDefault(emptyList()))
             } else {

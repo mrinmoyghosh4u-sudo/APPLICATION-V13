@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -226,7 +227,7 @@ fun IndexDetailsScreen(
             // Content
             when (selectedTab) {
                 "MARKET" -> MarketTabContent(indexName = indexName, ltp = ltp, change = change, hasData = hasData, viewModel = viewModel)
-                "OPTION CHAIN" -> OptionChainTabContent(viewModel = viewModel, indexName = indexName, underlyingLtp = ltp, onOpenOrderDialog = onOpenOrderDialog)
+                "OPTION CHAIN" -> OptionChainTabContent(viewModel = viewModel, exchange = exchange, indexName = indexName, underlyingLtp = ltp, onOpenOrderDialog = onOpenOrderDialog)
                 else -> HistoricalDataTabContent(viewModel = viewModel, indexName = indexName, ltp = ltp)
             }
         }
@@ -454,6 +455,7 @@ fun HistoricalRow(label: String, low: Double, high: Double) {
 @Composable
 fun OptionChainTabContent(
     viewModel: MainViewModel,
+    exchange: String,
     indexName: String,
     underlyingLtp: Double = 0.0,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
@@ -473,6 +475,8 @@ fun OptionChainTabContent(
         }
     }
 
+    var isScalpMode by remember { mutableStateOf(false) }
+    var scalpLotMultiplier by remember { mutableStateOf(1) }
     val lotSize = com.example.util.AppPreferences.getGlobalLotSize(indexName)
     val closestAtmStrikePrice = remember(strikes, underlyingLtp) {
         if (strikes.isEmpty()) 0.0
@@ -518,6 +522,63 @@ fun OptionChainTabContent(
                             fontWeight = FontWeight.Bold,
                             color = if (isSelected) Color.Black else TextWhite,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Scalp Mode Toggle Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.FlashOn,
+                    contentDescription = "Scalp Mode",
+                    tint = if (isScalpMode) ProfitGreen else TextGray,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("SCALP MODE (One-Tap MKT Order)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isScalpMode) ProfitGreen else TextGray)
+                Spacer(modifier = Modifier.width(8.dp))
+                Switch(
+                    checked = isScalpMode,
+                    onCheckedChange = { isScalpMode = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.Black,
+                        checkedTrackColor = ProfitGreen,
+                        uncheckedThumbColor = TextGray,
+                        uncheckedTrackColor = DarkCardSecondary
+                    ),
+                    modifier = Modifier.height(24.dp)
+                )
+            }
+            if (isScalpMode) {
+                Row(
+                    modifier = Modifier.background(DarkCardSecondary, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Qty:", fontSize = 10.sp, color = TextGray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    listOf(1, 2, 5).forEach { mult ->
+                        val selected = scalpLotMultiplier == mult
+                        Text(
+                            "${mult * lotSize}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) Color.Black else TextWhite,
+                            modifier = Modifier
+                                .padding(horizontal = 2.dp)
+                                .background(if (selected) PrimaryGold else Color.Transparent, RoundedCornerShape(4.dp))
+                                .clickable { scalpLotMultiplier = mult }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -586,25 +647,49 @@ fun OptionChainTabContent(
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(strikes) { strike ->
                     val isAtm = strike.isAtm || (closestAtmStrikePrice > 0.0 && strike.strikePrice == closestAtmStrikePrice)
+                    val callItm = strike.strikePrice < closestAtmStrikePrice
+                    val putItm = strike.strikePrice > closestAtmStrikePrice
+                    val itmBgColor = Color(0xFF2B2A26) // Faint yellow-tinted dark gray for ITM
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(if (isAtm) PrimaryGold.copy(alpha = 0.18f) else Color.Transparent)
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .background(if (isAtm) PrimaryGold.copy(alpha = 0.15f) else Color.Transparent),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // CALLS
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onOpenOrderDialog(strike.callSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} CE" }, "BUY", strike.callLtp, lotSize) },
+                                .background(if (callItm && !isAtm) itmBgColor else Color.Transparent)
+                                .clickable {
+                                    val symbol = strike.callSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} CE" }
+                                    if (isScalpMode) {
+                                        viewModel.placeNewOrder(
+                                            symbol = symbol,
+                                            exchange = exchange,
+                                            side = "BUY",
+                                            orderType = "MARKET",
+                                            qty = lotSize * scalpLotMultiplier,
+                                            price = strike.callLtp
+                                        )
+                                    } else {
+                                        onOpenOrderDialog(symbol, "BUY", strike.callLtp, lotSize)
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(strike.callOi, fontSize = 11.sp, color = TextWhite)
                                 Text(strike.callChgOi, fontSize = 9.sp, color = ProfitGreen)
+                                // Minimal OI Bar
+                                val oiVal = strike.callOi.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+                                if (oiVal > 0) {
+                                    Box(modifier = Modifier.padding(top = 2.dp).height(2.dp).fillMaxWidth((oiVal / 1000000f).coerceIn(0f, 1f)).background(ProfitGreen.copy(alpha = 0.5f)))
+                                }
                             }
-                            Column(horizontalAlignment = Alignment.End) {
+                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 4.dp)) {
                                 Text(if (strike.callLtp > 0.0) String.format("%,.2f", strike.callLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                                 Text(if (strike.callIv != null) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
@@ -612,7 +697,9 @@ fun OptionChainTabContent(
 
                         // STRIKE
                         Column(
-                            modifier = Modifier.weight(0.5f),
+                            modifier = Modifier
+                                .weight(0.5f)
+                                .padding(vertical = 10.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
@@ -631,16 +718,37 @@ fun OptionChainTabContent(
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onOpenOrderDialog(strike.putSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} PE" }, "BUY", strike.putLtp, lotSize) },
+                                .background(if (putItm && !isAtm) itmBgColor else Color.Transparent)
+                                .clickable {
+                                    val symbol = strike.putSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} PE" }
+                                    if (isScalpMode) {
+                                        viewModel.placeNewOrder(
+                                            symbol = symbol,
+                                            exchange = exchange,
+                                            side = "BUY",
+                                            orderType = "MARKET",
+                                            qty = lotSize * scalpLotMultiplier,
+                                            price = strike.putLtp
+                                        )
+                                    } else {
+                                        onOpenOrderDialog(symbol, "BUY", strike.putLtp, lotSize)
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
                                 Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                                 Text(if (strike.putIv != null) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
-                            Column(horizontalAlignment = Alignment.End) {
+                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
                                 Text(strike.putOi, fontSize = 11.sp, color = TextWhite)
                                 Text(strike.putChgOi, fontSize = 9.sp, color = ProfitGreen)
+                                // Minimal OI Bar
+                                val oiVal = strike.putOi.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+                                if (oiVal > 0) {
+                                    Box(modifier = Modifier.padding(top = 2.dp).height(2.dp).fillMaxWidth((oiVal / 1000000f).coerceIn(0f, 1f)).background(LossRed.copy(alpha = 0.5f)).align(Alignment.End))
+                                }
                             }
                         }
                     }
@@ -663,7 +771,7 @@ fun HistoricalDataTabContent(
 
     LaunchedEffect(indexName, selectedInterval) {
         isLoading = true
-        viewModel.getHistoricalCandlesForIndex(indexName) { fetched ->
+        viewModel.getHistoricalCandlesForIndex(indexName, selectedInterval) { fetched ->
             candleList = fetched
             isLoading = false
         }
