@@ -75,6 +75,7 @@ enum class AlgoScreenState {
 @Composable
 fun AlgoScreen(
     viewModel: MainViewModel,
+    notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
     onOpenNotificationCenter: () -> Unit,
     onNavigateToAISignals: () -> Unit = {},
     isRefreshing: Boolean = false,
@@ -82,6 +83,7 @@ fun AlgoScreen(
 ) {
     var currentState by remember { mutableStateOf(AlgoScreenState.DASHBOARD) }
 
+    val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val marketSourceState = viewModel.marketDataSource.collectAsStateWithLifecycle()
     val marketSource = marketSourceState.value
     val marketLastUpdatedState = viewModel.marketDataLastUpdated.collectAsStateWithLifecycle()
@@ -156,19 +158,30 @@ fun AlgoScreen(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         IconButton(onClick = onOpenNotificationCenter, modifier = Modifier.size(28.dp)) {
-                            Box {
+                            Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Outlined.Notifications,
                                     contentDescription = "Alerts",
                                     tint = SecondaryGold,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(ProfitGreen, CircleShape)
-                                        .align(Alignment.TopEnd)
-                                )
+                                if (unreadCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 3.dp, y = (-2).dp)
+                                            .size(14.dp)
+                                            .background(LossRed, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                            color = Color.White,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

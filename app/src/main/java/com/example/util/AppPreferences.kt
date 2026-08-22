@@ -102,7 +102,14 @@ data class LotSizeSettings(
     val sensex: Int = 20,
     val bankex: Int = 30,
     val crudeoil: Int = 100,
-    val crudeoilm: Int = 10
+    val crudeoilm: Int = 10,
+    val gold: Int = 100,
+    val goldm: Int = 10,
+    val silver: Int = 30,
+    val silverm: Int = 5,
+    val copper: Int = 2500,
+    val copperm: Int = 250,
+    val naturalgas: Int = 1250
 )
 
 class AppPreferences(private val context: Context) {
@@ -457,7 +464,14 @@ class AppPreferences(private val context: Context) {
             sensex = prefs.getInt("lot_sensex", 20),
             bankex = prefs.getInt("lot_bankex", 30),
             crudeoil = prefs.getInt("lot_crudeoil", 100),
-            crudeoilm = prefs.getInt("lot_crudeoilm", 10)
+            crudeoilm = prefs.getInt("lot_crudeoilm", 10),
+            gold = prefs.getInt("lot_gold", 100),
+            goldm = prefs.getInt("lot_goldm", 10),
+            silver = prefs.getInt("lot_silver", 30),
+            silverm = prefs.getInt("lot_silverm", 5),
+            copper = prefs.getInt("lot_copper", 2500),
+            copperm = prefs.getInt("lot_copperm", 250),
+            naturalgas = prefs.getInt("lot_naturalgas", 1250)
         )
     }
 
@@ -471,6 +485,13 @@ class AppPreferences(private val context: Context) {
             .putInt("lot_bankex", settings.bankex)
             .putInt("lot_crudeoil", settings.crudeoil)
             .putInt("lot_crudeoilm", settings.crudeoilm)
+            .putInt("lot_gold", settings.gold)
+            .putInt("lot_goldm", settings.goldm)
+            .putInt("lot_silver", settings.silver)
+            .putInt("lot_silverm", settings.silverm)
+            .putInt("lot_copper", settings.copper)
+            .putInt("lot_copperm", settings.copperm)
+            .putInt("lot_naturalgas", settings.naturalgas)
             .apply()
     }
 
@@ -486,6 +507,13 @@ class AppPreferences(private val context: Context) {
             upper.contains("SENSEX") -> settings.sensex
             upper.contains("CRUDEOILM") || upper.contains("CRUDE OIL M") -> settings.crudeoilm
             upper.contains("CRUDEOIL") || upper.contains("CRUDE OIL") -> settings.crudeoil
+            upper.contains("GOLDM") || upper.contains("GOLD M") -> settings.goldm
+            upper.contains("GOLD") -> settings.gold
+            upper.contains("SILVERM") || upper.contains("SILVER M") || upper.contains("SILVERMIC") -> settings.silverm
+            upper.contains("SILVER") -> settings.silver
+            upper.contains("COPPERM") || upper.contains("COPPER M") -> settings.copperm
+            upper.contains("COPPER") -> settings.copper
+            upper.contains("NATURALGAS") || upper.contains("NATURAL GAS") -> settings.naturalgas
             else -> 1
         }
     }
@@ -549,6 +577,12 @@ class AppPreferences(private val context: Context) {
                 upper.contains("SENSEX") -> 20
                 upper.contains("CRUDEOILM") || upper.contains("CRUDE OIL M") -> 10
                 upper.contains("CRUDEOIL") || upper.contains("CRUDE OIL") -> 100
+                upper.contains("GOLDM") || upper.contains("GOLD M") -> 10
+                upper.contains("GOLD") -> 1
+                upper.contains("SILVERM") || upper.contains("SILVER M") -> 5
+                upper.contains("SILVER") -> 30
+                upper.contains("COPPERM") || upper.contains("COPPER M") -> 250
+                upper.contains("COPPER") -> 2500
                 else -> 1
             }
         }

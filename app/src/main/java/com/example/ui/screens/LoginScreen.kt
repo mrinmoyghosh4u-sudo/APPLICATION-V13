@@ -11,22 +11,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.SupportAgent
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.material.icons.outlined.*
-
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -63,50 +53,25 @@ fun LoginScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // --- TOP-RIGHT SKIP BUTTON ---
-        TextButton(
-            onClick = onSkipLogin,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 8.dp, end = 12.dp)
-                .testTag("top_skip_login_button")
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "SKIP",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PrimaryGold,
-                    letterSpacing = 1.2.sp
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Skip Login",
-                    tint = PrimaryGold,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- HEADER & LOGO BLOCK ---
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 24.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Crown emblem with outer golden radial ambient glow
+                // --- HEADER & LOGO BLOCK (Compact & Polished) ---
+                Spacer(modifier = Modifier.height(4.dp))
+                
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(150.dp)
+                        .size(100.dp)
                         .background(
                             brush = Brush.radialGradient(
                                 colors = listOf(PrimaryGold.copy(alpha = 0.25f), Color.Transparent)
@@ -116,27 +81,27 @@ fun LoginScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(130.dp)
-                            .border(1.5.dp, PrimaryGold.copy(alpha = 0.6f), CircleShape)
-                            .padding(8.dp),
+                            .size(86.dp)
+                            .border(1.2.dp, PrimaryGold.copy(alpha = 0.6f), CircleShape)
+                            .padding(6.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CrownLogo(size = 110.dp)
+                        CrownLogo(size = 72.dp)
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 
                 Text(
                     text = "KING KHAN AI TRADE",
                     color = PrimaryGold,
-                    fontSize = 24.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.2.sp,
+                    letterSpacing = 1.sp,
                     textAlign = TextAlign.Center
                 )
                 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 
                 // Motto Line with side gold accents
                 Row(
@@ -145,184 +110,144 @@ fun LoginScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(32.dp)
+                            .width(28.dp)
                             .height(1.dp)
                             .background(PrimaryGold.copy(alpha = 0.6f))
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("TRADE ", color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("LIKE A ", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("KING 👑", color = PrimaryGold, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("TRADE ", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("LIKE A ", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("KING 👑", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .width(32.dp)
+                            .width(28.dp)
                             .height(1.dp)
                             .background(PrimaryGold.copy(alpha = 0.6f))
                     )
                 }
-            }
 
-            // --- BROKER CONNECT CARD ---
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = DarkCard,
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, PrimaryGold.copy(alpha = 0.5f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // --- BROKER CONNECT CARD ---
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DarkCard,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(0.8.dp, PrimaryGold.copy(alpha = 0.45f))
                 ) {
-                    // Header label
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(1.dp)
-                                .background(PrimaryGold.copy(alpha = 0.3f))
-                        )
-                        Text(
-                            text = "SELECT BROKER TO AUTHENTICATE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryGold,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(1.dp)
-                                .background(PrimaryGold.copy(alpha = 0.3f))
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // --- DHAN LOGIN BUTTON (PRIMARY EXECUTION) ---
-                    BrokerLoginCard(
-                        title = "LOGIN WITH DHAN",
-                        subtitle = "⚡ Primary Order Execution & Dhan HQ API",
-                        badgeText = "PRIMARY EXECUTION",
-                        badgeColor = ProfitGreen,
-                        containerColor = Color(0xFF003D2C),
-                        borderColor = Color(0xFF00875A),
-                        testTag = "dhan_login_button",
-                        iconContent = {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_dhan_logo),
-                                contentDescription = "Dhan Logo",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        onClick = { onConnectBroker("Dhan") }
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // --- ANGEL ONE LOGIN BUTTON (PRIMARY MARKET DATA) ---
-                    BrokerLoginCard(
-                        title = "LOGIN WITH ANGEL ONE",
-                        subtitle = "📊 Live Market Quotes & SmartAPI TOTP",
-                        badgeText = "MARKET DATA",
-                        badgeColor = Color(0xFF29B6F6),
-                        containerColor = Color(0xFF092B6B),
-                        borderColor = Color(0xFF1E88E5),
-                        testTag = "angel_login_button",
-                        iconContent = {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_angel_one_logo),
-                                contentDescription = "Angel One Logo",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        onClick = { onConnectBroker("Angel One") }
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // --- M.STOCK LOGIN BUTTON (SECONDARY DATA) ---
-                    BrokerLoginCard(
-                        title = "LOGIN WITH m.STOCK",
-                        subtitle = "📈 Secondary Data & Portfolio (Mirae Asset)",
-                        badgeText = "PORTFOLIO & DATA",
-                        badgeColor = PrimaryGold,
-                        containerColor = Color(0xFF8C1B1B),
-                        borderColor = Color(0xFFE53935),
-                        testTag = "mstock_login_button",
-                        iconContent = {
-                            Text(
-                                "m",
-                                color = Color(0xFFD32F2F),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        },
-                        onClick = { onConnectBroker("m.Stock") }
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Encrypted Connection Note
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color.Transparent, RoundedCornerShape(10.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-                            .padding(14.dp)
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lock,
-                            contentDescription = null,
-                            tint = PrimaryGold,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        // Header label
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(PrimaryGold.copy(alpha = 0.3f))
+                            )
                             Text(
-                                "OFFICIAL BROKER API & OAUTH 2.0",
-                                fontSize = 11.sp,
+                                text = "SELECT BROKER TO AUTHENTICATE",
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryGold,
-                                letterSpacing = 0.5.sp
+                                letterSpacing = 0.8.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                "Direct end-to-end token encryption • No password logging\nYour data is 100% secure with bank-grade protection.",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.7f),
-                                lineHeight = 14.sp
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(PrimaryGold.copy(alpha = 0.3f))
                             )
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    // Features
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        FeatureBadge(icon = Icons.Outlined.Lock, title = "256-BIT\nENCRYPTED")
-                        FeatureBadge(icon = Icons.Outlined.BarChart, title = "REAL TIME\nQUOTES")
-                        FeatureBadge(icon = Icons.Outlined.FlashOn, title = "ALGO\nEXECUTION")
-                        FeatureBadge(icon = Icons.Outlined.SupportAgent, title = "24/7\nSUPPORT")
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // --- DHAN LOGIN BUTTON (PRIMARY EXECUTION) ---
+                        BrokerLoginCard(
+                            title = "LOGIN WITH DHAN",
+                            subtitle = "⚡ Primary Order Execution & Dhan HQ API",
+                            containerColor = Color(0xFF003D2C),
+                            borderColor = Color(0xFF00875A),
+                            testTag = "dhan_login_button",
+                            iconContent = {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_dhan_logo),
+                                    contentDescription = "Dhan Logo",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            onClick = { onConnectBroker("Dhan") }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // --- ANGEL ONE LOGIN BUTTON (PRIMARY MARKET DATA) ---
+                        BrokerLoginCard(
+                            title = "LOGIN WITH ANGEL ONE",
+                            subtitle = "📊 Live Market Quotes & SmartAPI TOTP",
+                            containerColor = Color(0xFF092B6B),
+                            borderColor = Color(0xFF1E88E5),
+                            testTag = "angel_login_button",
+                            iconContent = {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_angel_one_logo),
+                                    contentDescription = "Angel One Logo",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            onClick = { onConnectBroker("Angel One") }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // --- M.STOCK LOGIN BUTTON (SECONDARY DATA) ---
+                        BrokerLoginCard(
+                            title = "LOGIN WITH m.STOCK",
+                            subtitle = "📈 Secondary Data & Portfolio (Mirae Asset)",
+                            containerColor = Color(0xFF8C1B1B),
+                            borderColor = Color(0xFFE53935),
+                            testTag = "mstock_login_button",
+                            iconContent = {
+                                Text(
+                                    "m",
+                                    color = Color(0xFFD32F2F),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            },
+                            onClick = { onConnectBroker("m.Stock") }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Features 4-in-a-row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            FeatureBadge(icon = Icons.Outlined.Lock, title = "256-BIT\nENCRYPTED")
+                            FeatureBadge(icon = Icons.Outlined.BarChart, title = "REAL TIME\nQUOTES")
+                            FeatureBadge(icon = Icons.Outlined.FlashOn, title = "ALGO\nEXECUTION")
+                            FeatureBadge(icon = Icons.Outlined.SupportAgent, title = "24/7\nSUPPORT")
+                        }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(30.dp))
-            
-            // SKIP LOGIN BUTTON AT BOTTOM
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- BOTTOM GOLDEN LINE < SKIP LOGIN > GOLDEN LINE ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -334,37 +259,62 @@ fun LoginScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .width(60.dp)
+                        .weight(1f)
                         .height(1.dp)
-                        .background(PrimaryGold.copy(alpha = 0.3f))
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, PrimaryGold.copy(alpha = 0.8f))
+                            )
+                        )
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                Text(
-                    text = "SKIP LOGIN",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryGold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Skip",
-                    tint = PrimaryGold,
-                    modifier = Modifier.size(20.dp)
-                )
-                
-                Spacer(modifier = Modifier.width(16.dp))
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(Color(0xFF14171C), RoundedCornerShape(18.dp))
+                        .border(0.8.dp, PrimaryGold.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronLeft,
+                        contentDescription = null,
+                        tint = PrimaryGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "SKIP LOGIN",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryGold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = PrimaryGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
                 Box(
                     modifier = Modifier
-                        .width(60.dp)
+                        .weight(1f)
                         .height(1.dp)
-                        .background(PrimaryGold.copy(alpha = 0.3f))
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(PrimaryGold.copy(alpha = 0.8f), Color.Transparent)
+                            )
+                        )
                 )
             }
             
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
@@ -373,8 +323,6 @@ fun LoginScreen(
 private fun BrokerLoginCard(
     title: String,
     subtitle: String,
-    badgeText: String,
-    badgeColor: Color,
     containerColor: Color,
     borderColor: Color,
     testTag: String,
@@ -386,7 +334,7 @@ private fun BrokerLoginCard(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .testTag(testTag),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = containerColor,
         border = BorderStroke(1.dp, borderColor)
     ) {
@@ -395,7 +343,7 @@ private fun BrokerLoginCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -404,46 +352,44 @@ private fun BrokerLoginCard(
                 // Logo Avatar Box
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(Color.White, RoundedCornerShape(10.dp))
-                        .padding(4.dp),
+                        .size(36.dp)
+                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .padding(3.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     iconContent()
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = title,
-                            fontSize = 13.sp,
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
+                    Text(
+                        text = title,
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.4.sp
+                    )
 
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
                         text = subtitle,
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         color = Color.White.copy(alpha = 0.85f),
                         fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             // Arrow Chevron
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -456,12 +402,12 @@ private fun FeatureBadge(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(76.dp)
+        modifier = Modifier.width(70.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .border(1.dp, PrimaryGold.copy(alpha = 0.7f), CircleShape)
+                .size(36.dp)
+                .border(0.8.dp, PrimaryGold.copy(alpha = 0.7f), CircleShape)
                 .background(DarkCard, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -469,20 +415,17 @@ private fun FeatureBadge(
                 imageVector = icon,
                 contentDescription = title,
                 tint = PrimaryGold,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = title,
-            fontSize = 9.sp,
+            fontSize = 8.5.sp,
             fontWeight = FontWeight.Bold,
             color = TextWhite,
             textAlign = TextAlign.Center,
-            lineHeight = 11.sp
+            lineHeight = 10.sp
         )
     }
 }
-
-
-

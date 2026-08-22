@@ -41,6 +41,12 @@ object YahooFinanceService {
         "BANKEX" to "BSE-BANK.BO",
         "CRUDEOIL" to "CL=F",
         "CRUDEOIL M" to "CL=F",
+        "GOLD" to "GC=F",
+        "GOLD M" to "GC=F",
+        "SILVER" to "SI=F",
+        "SILVER M" to "SI=F",
+        "COPPER" to "HG=F",
+        "COPPER M" to "HG=F",
         "RELIANCE" to "RELIANCE.NS",
         "TCS" to "TCS.NS",
         "INFY" to "INFY.NS",
@@ -58,6 +64,7 @@ object YahooFinanceService {
 
     suspend fun getMarketQuotes(symbols: List<String>): List<WatchlistItem> = withContext(Dispatchers.IO) {
         val result = mutableListOf<WatchlistItem>()
+        val usdInrRate = 87.2 // Benchmark USD/INR conversion rate for MCX commodity contracts
         
         for (symbol in symbols) {
             val yahooSymbol = getYahooSymbol(symbol)
@@ -78,14 +85,40 @@ object YahooFinanceService {
                                 if (resultArr.length() > 0) {
                                     val data = resultArr.getJSONObject(0)
                                     val meta = data.getJSONObject("meta")
-                                    val ltp = meta.optDouble("regularMarketPrice", 0.0)
-                                    val prevClose = meta.optDouble("chartPreviousClose", 0.0)
+                                    var rawLtp = meta.optDouble("regularMarketPrice", 0.0)
+                                    var rawPrevClose = meta.optDouble("chartPreviousClose", 0.0)
+                                    
+                                    val upperSym = symbol.uppercase()
+                                    // Scale international futures to Indian MCX standard INR contract sizes
+                                    val (ltp, prevClose) = when {
+                                        upperSym.startsWith("CRUDEOIL") -> {
+                                            // Crude Oil 1 bbl in INR
+                                            (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
+                                        }
+                                        upperSym.startsWith("GOLD") -> {
+                                            // Gold COMEX USD/oz to MCX Gold 10g INR (1 oz = 31.1035g + duty multiplier)
+                                            val factor = (10.0 / 31.1035) * usdInrRate * 1.12
+                                            (rawLtp * factor) to (rawPrevClose * factor)
+                                        }
+                                        upperSym.startsWith("SILVER") -> {
+                                            // Silver COMEX USD/oz to MCX Silver 1kg INR
+                                            val factor = (1000.0 / 31.1035) * usdInrRate * 1.08
+                                            (rawLtp * factor) to (rawPrevClose * factor)
+                                        }
+                                        upperSym.startsWith("COPPER") -> {
+                                            // Copper COMEX USD/lb to MCX Copper 1kg INR (1 kg = 2.20462 lbs)
+                                            val factor = 2.20462 * usdInrRate
+                                            (rawLtp * factor) to (rawPrevClose * factor)
+                                        }
+                                        else -> rawLtp to rawPrevClose
+                                    }
+
                                     val change = if (prevClose > 0.0) ltp - prevClose else 0.0
                                     val changePercent = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
                                     
                                     val exchange = when {
-                                        symbol.contains("CRUDE") -> "MCX"
-                                        symbol.contains("SENSEX") || symbol.contains("BANKEX") -> "BSE"
+                                        upperSym.contains("CRUDE") || upperSym.contains("GOLD") || upperSym.contains("SILVER") || upperSym.contains("COPPER") -> "MCX"
+                                        upperSym.contains("SENSEX") || upperSym.contains("BANKEX") -> "BSE"
                                         else -> "NSE"
                                     }
 

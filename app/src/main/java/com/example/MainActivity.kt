@@ -320,6 +320,7 @@ class MainActivity : FragmentActivity() {
                                             aiSignals = aiSignals,
                                             apiError = apiError,
                                             watchlist = watchlist,
+                                            notifications = notifications,
                                             marketDataSource = marketDataSource,
                                             marketDataLastUpdated = marketDataLastUpdated,
                                             viewModel = viewModel,
@@ -348,6 +349,7 @@ class MainActivity : FragmentActivity() {
                                         "market" -> MarketScreen(
                                             userProfile = userProfile,
                                             watchlist = watchlist,
+                                            notifications = notifications,
                                             recentSearches = recentSearches,
                                             marketDataSource = marketDataSource,
                                             marketDataLastUpdated = marketDataLastUpdated,
@@ -376,6 +378,7 @@ class MainActivity : FragmentActivity() {
                                         "ai_signals" -> AISignalsScreen(
                                             userProfile = userProfile,
                                             signals = aiSignals,
+                                            notifications = notifications,
                                             appPreferences = appPreferences,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onExecuteSignal = { signal ->
@@ -392,6 +395,7 @@ class MainActivity : FragmentActivity() {
                                             orders = orders,
                                             positions = holdings,
                                             watchlist = watchlist,
+                                            notifications = notifications,
                                             availableMargin = userProfile.availableMargin,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onOpenOrderDialog = { symbol, side, price, lot ->
@@ -432,6 +436,7 @@ class MainActivity : FragmentActivity() {
                                         )
                                         "algo" -> AlgoScreen(
                                             viewModel = viewModel,
+                                            notifications = notifications,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onNavigateToAISignals = { navController.navigate("ai_signals") },
                                             isRefreshing = isRefreshing,
@@ -443,6 +448,7 @@ class MainActivity : FragmentActivity() {
                                                 userProfile = userProfile,
                                                 orders = orders,
                                                 holdings = holdings,
+                                                notifications = notifications,
                                                 appPreferences = remember { com.example.util.AppPreferences(applicationContext) },
                                                 brokerStatuses = brokerStatuses,
                                                 onSwitchBroker = { broker ->

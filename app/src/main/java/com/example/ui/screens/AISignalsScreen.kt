@@ -49,6 +49,7 @@ import java.util.Locale
 fun AISignalsScreen(
     userProfile: UserProfileEntity = UserProfileEntity(),
     signals: List<AISignalEntity>,
+    notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
     appPreferences: AppPreferences? = null,
     onOpenNotificationCenter: () -> Unit = {},
     onExecuteSignal: (AISignalEntity) -> Unit,
@@ -57,6 +58,7 @@ fun AISignalsScreen(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
 
     // Tab view mode: "LIVE" vs "HISTORY"
     var viewMode by remember { mutableStateOf("LIVE") }
@@ -180,12 +182,23 @@ fun AISignalsScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.NotificationsNone, contentDescription = "Alerts", tint = SecondaryGold, modifier = Modifier.size(22.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(ProfitGreen, CircleShape)
-                                    .align(Alignment.TopEnd)
-                            )
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-2).dp)
+                                        .size(16.dp)
+                                        .background(LossRed, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1270,7 +1283,7 @@ private fun generateSmartFallbackSignals(): List<AISignalEntity> {
             trailingSl = 180.00,
             confidence = 91,
             riskReward = "1 : 2.8",
-            lotSize = 75,
+            lotSize = 65,
             timeframe = "5 MIN",
             timestamp = "Today 10:45 AM",
             isLive = true,
@@ -1328,7 +1341,7 @@ private fun generateSmartFallbackSignals(): List<AISignalEntity> {
             trailingSl = 120.00,
             confidence = 85,
             riskReward = "1 : 2.4",
-            lotSize = 65,
+            lotSize = 60,
             timeframe = "15 MIN",
             timestamp = "Today 12:05 PM",
             isLive = true,
@@ -1391,7 +1404,7 @@ private fun generateHistoricalSignals(): List<AISignalEntity> {
             trailingSl = 195.00,
             confidence = 94,
             riskReward = "1 : 2.8",
-            lotSize = 75,
+            lotSize = 65,
             timeframe = "5 MIN",
             timestamp = "09:30 AM",
             isLive = false,

@@ -49,6 +49,7 @@ fun ProfileScreen(
     userProfile: UserProfileEntity,
     orders: List<OrderEntity> = emptyList(),
     holdings: List<PortfolioHoldingEntity> = emptyList(),
+    notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
     appPreferences: AppPreferences,
     brokerStatuses: Map<String, com.example.data.network.BrokerConnectionState> = emptyMap(),
     onSwitchBroker: (String) -> Unit,
@@ -66,6 +67,7 @@ fun ProfileScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
+    val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
 
     // Dialog States
     var showAccountOverviewDialog by remember { mutableStateOf(false) }
@@ -200,12 +202,23 @@ fun ProfileScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications", tint = PrimaryGold, modifier = Modifier.size(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(ProfitGreen, CircleShape)
-                                    .align(Alignment.TopEnd)
-                            )
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-2).dp)
+                                        .size(16.dp)
+                                        .background(LossRed, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
 

@@ -41,6 +41,7 @@ fun OrdersScreen(
     orders: List<OrderEntity>,
     positions: List<PortfolioHoldingEntity> = emptyList(),
     watchlist: List<WatchlistItem> = emptyList(),
+    notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
     availableMargin: Double,
     onOpenNotificationCenter: () -> Unit = {},
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
@@ -52,6 +53,7 @@ fun OrdersScreen(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
+    val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val isBrokerConnected = (userProfile.isAngelConnected || userProfile.isDhanConnected) && userProfile.connectedBroker.isNotBlank()
     val activeBrokerName = if (isBrokerConnected) userProfile.connectedBroker else "Local State"
 
@@ -198,7 +200,26 @@ fun OrdersScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(onClick = onOpenNotificationCenter) {
-                    Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = SecondaryGold)
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = SecondaryGold)
+                        if (unreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-2).dp)
+                                    .size(16.dp)
+                                    .background(LossRed, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
