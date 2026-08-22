@@ -93,7 +93,7 @@ fun IndexDetailsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text("KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                        Text("Trade Like a King 👑", fontSize = 10.sp, color = SecondaryGold)
+                        com.example.ui.components.KingKhanTagline(fontSize = 10.sp)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

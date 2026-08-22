@@ -714,18 +714,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             while (true) {
-                kotlinx.coroutines.delay(15000L)
                 val isValidSession = sessionManager.hasValidSession()
+                syncMarketDataQuietly()
                 if (isValidSession) {
-                    syncMarketDataQuietly()
                     fetchOptionChain()
                 }
                 if (_marketDataLastUpdated.value.isBlank()) {
                     _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 }
                 com.example.util.AlgoEngine.processMarketFeed(_watchlist.value, isValidSession)
+                kotlinx.coroutines.delay(10000L)
             }
         }
+    }
+
+    private fun getAllLiveTrackingSymbols(): List<String> {
+        val baseSymbols = listOf(
+            "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
+            "SENSEX", "BANKEX",
+            "CRUDEOIL", "CRUDEOIL M", "GOLD", "GOLD M", "SILVER", "SILVER M", "COPPER", "COPPER M", "NATURALGAS", "NATURALGAS M",
+            "RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "TATAMOTORS", "TATASTEEL"
+        )
+        val watchSymbols = _watchlist.value.map { it.symbol }
+        return (baseSymbols + watchSymbols).distinct()
     }
 
     private fun syncMarketDataQuietly() {
@@ -734,8 +745,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (sessionManager.hasValidSession()) {
                     repository.syncWithBroker()
                 }
-                val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
-                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                val symbols = getAllLiveTrackingSymbols()
+                val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                quotesRes.getOrNull()?.let { quotes ->
+                    if (quotes.isNotEmpty()) {
+                        repository.updateWatchlistQuotes(quotes)
+                    }
+                }
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             }
         }
@@ -766,8 +782,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _apiError.value = e.message
                     }
                 }
-                val symbols = _watchlist.value.map { it.symbol }.ifEmpty { listOf("NIFTY 50", "BANKNIFTY", "RELIANCE") }
-                brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                val symbols = getAllLiveTrackingSymbols()
+                val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
+                quotesRes.getOrNull()?.let { quotes ->
+                    if (quotes.isNotEmpty()) {
+                        repository.updateWatchlistQuotes(quotes)
+                    }
+                }
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             } finally {
                 _isRefreshing.value = false

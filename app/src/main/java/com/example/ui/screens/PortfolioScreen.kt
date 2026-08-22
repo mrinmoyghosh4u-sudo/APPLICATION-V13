@@ -72,7 +72,7 @@ fun PortfolioScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text("KING KHAN AI TRADE", fontSize = 15.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                    Text("Portfolio & Wealth", fontSize = 10.sp, color = SecondaryGold)
+                    com.example.ui.components.KingKhanTagline(fontSize = 10.sp)
                 }
             }
             if (userProfile.connectedBroker.isNotEmpty()) {

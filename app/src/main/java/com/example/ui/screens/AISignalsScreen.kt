@@ -147,9 +147,9 @@ fun AISignalsScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("KING KHAN ", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                            Text("AI SIGNALS", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
+                            Text("AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
                         }
-                        Text("Quantitative Multi-Model Option Signals 👑", fontSize = 11.sp, color = SecondaryGold)
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
 

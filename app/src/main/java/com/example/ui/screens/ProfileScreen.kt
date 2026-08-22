@@ -191,7 +191,7 @@ fun ProfileScreen(
                             Text("KING KHAN ", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
                             Text("AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
                         }
-                        Text("Royal Algorithmic Trading Suite 👑", fontSize = 11.sp, color = SecondaryGold)
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
 

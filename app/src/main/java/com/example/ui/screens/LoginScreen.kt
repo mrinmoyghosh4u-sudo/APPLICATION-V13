@@ -116,9 +116,10 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("TRADE ", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("LIKE A ", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("KING 👑", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("Trade ", color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("Like a ", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("King ", color = LossRed, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("👑", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(

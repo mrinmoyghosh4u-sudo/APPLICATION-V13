@@ -78,13 +78,8 @@ fun DisclaimerScreen(
                     color = PrimaryGold,
                     letterSpacing = 1.sp
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "👑 Trade Like a King 👑",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SecondaryGold
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                com.example.ui.components.KingKhanTagline(fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
 
             // Main Disclaimer Card Frame

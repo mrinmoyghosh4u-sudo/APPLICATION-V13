@@ -96,12 +96,7 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Trade Like a King 👑",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryGold
-            )
+            com.example.ui.components.KingKhanTagline(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
 
             if (isRestoring) {
                 Spacer(modifier = Modifier.height(24.dp))

@@ -214,16 +214,11 @@ private fun MarketHeaderSection(
                 Text(
                     text = "KING KHAN AI TRADE",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Black,
                     color = Color.White,
                     letterSpacing = 0.5.sp
                 )
-                Text(
-                    text = "Trade Like a King 👑",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = PrimaryGold
-                )
+                com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
             }
         }
 
@@ -1004,7 +999,9 @@ private fun MarketMoversSection(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                if (item.expiry.isNotBlank() && item.expiry != "EQUITY") {
+                                val isExpiryInSymbol = item.symbol.contains(item.expiry, ignoreCase = true) || 
+                                                       item.symbol.contains(item.expiry.replace(" ", ""), ignoreCase = true)
+                                if (!isExpiryInSymbol && item.expiry.isNotBlank() && item.expiry != "EQUITY") {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Box(
                                         modifier = Modifier

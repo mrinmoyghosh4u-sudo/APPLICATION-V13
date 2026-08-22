@@ -99,8 +99,7 @@ fun AlgoScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .statusBarsPadding(),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -124,12 +123,7 @@ fun AlgoScreen(
                             fontWeight = FontWeight.Black,
                             color = TextWhite
                         )
-                        Text(
-                            "Trade like a King 👑",
-                            fontSize = 11.sp,
-                            color = SecondaryGold,
-                            fontWeight = FontWeight.Medium
-                        )
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
 
@@ -240,7 +234,7 @@ fun AlgoDashboard(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 14.dp),
         contentPadding = PaddingValues(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {

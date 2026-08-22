@@ -185,16 +185,11 @@ private fun HomeHeaderSection(
                 Text(
                     text = "KING KHAN AI TRADE",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Black,
                     color = Color.White,
                     letterSpacing = 0.5.sp
                 )
-                Text(
-                    text = "Trade Like a King 👑",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = PrimaryGold
-                )
+                com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
             }
         }
 

@@ -47,6 +47,10 @@ object YahooFinanceService {
         "SILVER M" to "SI=F",
         "COPPER" to "HG=F",
         "COPPER M" to "HG=F",
+        "NATURALGAS" to "NG=F",
+        "NATURALGAS M" to "NG=F",
+        "NATURALGASM" to "NG=F",
+        "NATURAL GAS" to "NG=F",
         "RELIANCE" to "RELIANCE.NS",
         "TCS" to "TCS.NS",
         "INFY" to "INFY.NS",
@@ -110,6 +114,10 @@ object YahooFinanceService {
                                             val factor = 2.20462 * usdInrRate
                                             (rawLtp * factor) to (rawPrevClose * factor)
                                         }
+                                        upperSym.startsWith("NATURALGAS") || upperSym.startsWith("NATURAL GAS") || upperSym.startsWith("NATURAL") -> {
+                                            // Natural Gas Henry Hub USD/MMBtu to MCX 1 MMBtu in INR
+                                            (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
+                                        }
                                         else -> rawLtp to rawPrevClose
                                     }
 
@@ -117,7 +125,7 @@ object YahooFinanceService {
                                     val changePercent = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
                                     
                                     val exchange = when {
-                                        upperSym.contains("CRUDE") || upperSym.contains("GOLD") || upperSym.contains("SILVER") || upperSym.contains("COPPER") -> "MCX"
+                                        upperSym.contains("CRUDE") || upperSym.contains("GOLD") || upperSym.contains("SILVER") || upperSym.contains("COPPER") || upperSym.contains("NATURAL") || upperSym.contains("GAS") -> "MCX"
                                         upperSym.contains("SENSEX") || upperSym.contains("BANKEX") -> "BSE"
                                         else -> "NSE"
                                     }
@@ -203,6 +211,15 @@ object YahooFinanceService {
 
                 val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
                 val candleList = mutableListOf<HistoricalCandle>()
+                val upperSym = symbol.uppercase()
+                val factor = when {
+                    upperSym.startsWith("CRUDEOIL") || upperSym.startsWith("CRUDE") -> 87.2
+                    upperSym.startsWith("GOLD") -> (10.0 / 31.1035) * 87.2 * 1.12
+                    upperSym.startsWith("SILVER") -> (1000.0 / 31.1035) * 87.2 * 1.08
+                    upperSym.startsWith("COPPER") -> 2.20462 * 87.2
+                    upperSym.startsWith("NATURALGAS") || upperSym.startsWith("NATURAL GAS") || upperSym.startsWith("NATURAL") -> 87.2
+                    else -> 1.0
+                }
 
                 for (i in 0 until timestamps.length()) {
                     val ts = timestamps.getLong(i) * 1000L
@@ -216,10 +233,10 @@ object YahooFinanceService {
                         candleList.add(
                             HistoricalCandle(
                                 time = timeFormat.format(Date(ts)),
-                                open = o,
-                                high = h,
-                                low = l,
-                                close = c,
+                                open = o * factor,
+                                high = h * factor,
+                                low = l * factor,
+                                close = c * factor,
                                 volume = v,
                                 timestamp = ts
                             )

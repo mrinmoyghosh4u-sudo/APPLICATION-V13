@@ -35,6 +35,71 @@ import com.example.R
 import com.example.ui.theme.*
 
 @Composable
+fun KingKhanTagline(
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    fontWeight: FontWeight = FontWeight.Bold
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Trade ",
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            color = ProfitGreen
+        )
+        Text(
+            text = "Like a ",
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            color = Color.White
+        )
+        Text(
+            text = "King ",
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            color = LossRed
+        )
+        Text(
+            text = "👑",
+            fontSize = fontSize,
+            fontWeight = fontWeight
+        )
+    }
+}
+
+@Composable
+fun KingKhanHeaderBrand(
+    modifier: Modifier = Modifier,
+    logoSize: Dp = 36.dp,
+    titleSize: androidx.compose.ui.unit.TextUnit = 15.sp,
+    taglineSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    showLogo: Boolean = true
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showLogo) {
+            CrownLogo(size = logoSize)
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Column {
+            Text(
+                text = "KING KHAN AI TRADE",
+                fontSize = titleSize,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                letterSpacing = 0.5.sp
+            )
+            KingKhanTagline(fontSize = taglineSize)
+        }
+    }
+}
+
+@Composable
 fun CrownLogo(
     modifier: Modifier = Modifier,
     size: Dp = 32.dp

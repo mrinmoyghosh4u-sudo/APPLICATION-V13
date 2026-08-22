@@ -2,9 +2,12 @@ package com.example
 
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -36,7 +39,14 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+        )
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         handleIntent(intent)
 
         setContent {
@@ -106,8 +116,7 @@ class MainActivity : FragmentActivity() {
                 LaunchedEffect(authSuccessEvent) {
                     if (authSuccessEvent) {
                         navController.navigate("main") {
-                            popUpTo("login") { inclusive = true }
-                            popUpTo("splash") { inclusive = true }
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                         viewModel.consumeAuthSuccessEvent()
                     }
@@ -270,7 +279,7 @@ class MainActivity : FragmentActivity() {
                                             else -> "login"
                                         }
                                         navController.navigate(startRoute) {
-                                            popUpTo("splash") { inclusive = true }
+                                            popUpTo(navController.graph.id) { inclusive = true }
                                         }
                                     }
                                 )
@@ -282,28 +291,42 @@ class MainActivity : FragmentActivity() {
                                     onAgreeAndContinue = {
                                         val startRoute = if (viewModel.isSessionActive()) "main" else "login"
                                         navController.navigate(startRoute) {
-                                            popUpTo("disclaimer") { inclusive = true }
-                                            popUpTo("splash") { inclusive = true }
+                                            popUpTo(navController.graph.id) { inclusive = true }
                                         }
                                     }
                                 )
                             }
 
                             composable("login") {
+                                val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+                                androidx.activity.compose.BackHandler(enabled = true) {
+                                    activity?.moveTaskToBack(true)
+                                }
+
                                 LoginScreen(
                                     onConnectBroker = { broker ->
                                         viewModel.openConnectDialog(broker)
                                     },
                                     onSkipLogin = {
                                         navController.navigate("main") {
-                                            popUpTo("login") { inclusive = true }
-                                            popUpTo("splash") { inclusive = true }
+                                            popUpTo(navController.graph.id) { inclusive = true }
                                         }
                                     }
                                 )
                             }
 
                             composable("main") {
+                                val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+                                androidx.activity.compose.BackHandler(enabled = true) {
+                                    if (pagerState.currentPage > 0) {
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(0)
+                                        }
+                                    } else {
+                                        activity?.moveTaskToBack(true)
+                                    }
+                                }
+
                                 LaunchedEffect(pagerState.currentPage) {
                                     viewModel.refreshBrokerData()
                                 }
@@ -528,6 +551,11 @@ class MainActivity : FragmentActivity() {
                             }
 
                             composable("portfolio") {
+                                androidx.activity.compose.BackHandler {
+                                    if (!navController.popBackStack()) {
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                    }
+                                }
                                 PortfolioScreen(
                                     holdings = holdings,
                                     userProfile = userProfile,
@@ -535,11 +563,11 @@ class MainActivity : FragmentActivity() {
                                     onRefresh = { viewModel.refreshBrokerData() },
                                     onNavigateToPositions = {
                                         coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
                                     },
                                     onNavigateToOrders = {
                                         coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
                                     }
                                 )
                             }
@@ -554,11 +582,21 @@ class MainActivity : FragmentActivity() {
                                 val exchange = backStackEntry.arguments?.getString("exchange") ?: "NSE"
                                 val indexName = backStackEntry.arguments?.getString("indexName") ?: "NIFTY 50"
                                 
+                                androidx.activity.compose.BackHandler {
+                                    if (!navController.popBackStack()) {
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                    }
+                                }
+
                                 IndexDetailsScreen(
                                     exchange = exchange,
                                     indexName = indexName,
                                     viewModel = viewModel,
-                                    onBack = { navController.popBackStack() },
+                                    onBack = { 
+                                        if (!navController.popBackStack()) {
+                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        }
+                                    },
                                     onOpenOrderDialog = { symbol, side, price, lot ->
                                         orderDialogState = Triple(symbol, side, price to lot)
                                     }
@@ -566,13 +604,22 @@ class MainActivity : FragmentActivity() {
                             }
 
                             composable("telegram_settings") {
+                                androidx.activity.compose.BackHandler {
+                                    if (!navController.popBackStack()) {
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                    }
+                                }
                                 TelegramSettingsScreen(
                                     botToken = telegramBotToken,
                                     chatId = telegramChatId,
                                     isAlertsEnabled = isTelegramAlertsEnabled,
                                     isTesting = isTelegramTesting,
                                     telegramResponseInfo = telegramResponseInfo,
-                                    onBack = { navController.popBackStack() },
+                                    onBack = { 
+                                        if (!navController.popBackStack()) {
+                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        }
+                                    },
                                     onSaveSettings = { token, chatId, enabled ->
                                         viewModel.saveTelegramSettings(token, chatId, enabled)
                                         coroutineScope.launch {
@@ -592,9 +639,18 @@ class MainActivity : FragmentActivity() {
                             }
                             
                             composable("diagnostics") {
+                                androidx.activity.compose.BackHandler {
+                                    if (!navController.popBackStack()) {
+                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                    }
+                                }
                                 com.example.ui.screens.DiagnosticsScreen(
                                     viewModel = viewModel,
-                                    onBack = { navController.popBackStack() }
+                                    onBack = { 
+                                        if (!navController.popBackStack()) {
+                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        }
+                                    }
                                 )
                             }
                         }
