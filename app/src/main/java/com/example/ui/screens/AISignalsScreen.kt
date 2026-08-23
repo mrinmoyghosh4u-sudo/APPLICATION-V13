@@ -77,18 +77,14 @@ fun AISignalsScreen(
     val mcxStatus = remember { MarketStatusUtil.getDetailedMarketStatus("MCX") }
     val isAnyMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
 
-    // Generate high-quality realistic fallback/active signals if DB is empty so screen provides immediate utility
+    // Real signals directly from database & live engine
     val resolvedSignals = remember(signals) {
-        if (signals.isNotEmpty()) {
-            signals
-        } else {
-            generateSmartFallbackSignals()
-        }
+        signals.filter { it.isLive || it.status == "LIVE" }
     }
 
     // Historical completed signals for performance & backtest validation
-    val completedSignals = remember {
-        generateHistoricalSignals()
+    val completedSignals = remember(signals) {
+        signals.filter { !it.isLive && it.status != "LIVE" }
     }
 
     val displayedSignalPool = if (viewMode == "LIVE") resolvedSignals else completedSignals
@@ -126,7 +122,7 @@ fun AISignalsScreen(
     val totalSignalsCount = displayedSignalPool.size
     val bullishCount = displayedSignalPool.count { it.actionType.contains("CE", ignoreCase = true) || it.trend.equals("BULLISH", ignoreCase = true) }
     val bearishCount = displayedSignalPool.count { it.actionType.contains("PE", ignoreCase = true) || it.trend.equals("BEARISH", ignoreCase = true) }
-    val avgConfidence = if (displayedSignalPool.isNotEmpty()) displayedSignalPool.map { it.confidence }.average().toInt() else 88
+    val avgConfidence = if (displayedSignalPool.isNotEmpty()) displayedSignalPool.map { it.confidence }.average().toInt() else 0
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
@@ -1282,220 +1278,4 @@ private fun DiagnosisRow(label: String, value: String, valueColor: Color) {
         Text(label, fontSize = 10.sp, color = TextGray)
         Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = valueColor, textAlign = TextAlign.End, modifier = Modifier.padding(start = 8.dp))
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART SAMPLE GENERATOR (FOR IMMEDIATE OPERATIONAL UTILITY)
-// ─────────────────────────────────────────────────────────────────────────────
-private fun generateSmartFallbackSignals(): List<AISignalEntity> {
-    return listOf(
-        AISignalEntity(
-            id = 101,
-            symbol = "NIFTY 24850 CE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 182.50,
-            changePercent = 14.8,
-            entryZone = "₹180 - ₹185",
-            target1 = 215.00,
-            target2 = 248.00,
-            target3 = 285.00,
-            target4 = 330.00,
-            stopLoss = 154.00,
-            trailingSl = 180.00,
-            confidence = 91,
-            riskReward = "1 : 2.8",
-            lotSize = 65,
-            timeframe = "5 MIN",
-            timestamp = "Today 10:45 AM",
-            isLive = true,
-            status = "LIVE",
-            strikePrice = "24850",
-            expiry = "Weekly",
-            reasons = "EMA 9>21 Golden Cross, Price Above VWAP, RSI 65.4, Heavy Put OI Support",
-            underlyingLtp = 24842.15,
-            underlyingChange = 124.60
-        ),
-        AISignalEntity(
-            id = 102,
-            symbol = "BANKNIFTY 53200 CE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 345.00,
-            changePercent = 18.2,
-            entryZone = "₹340 - ₹350",
-            target1 = 410.00,
-            target2 = 485.00,
-            target3 = 560.00,
-            target4 = 650.00,
-            stopLoss = 290.00,
-            trailingSl = 345.00,
-            confidence = 88,
-            riskReward = "1 : 2.5",
-            lotSize = 30,
-            timeframe = "5 MIN",
-            timestamp = "Today 11:15 AM",
-            isLive = true,
-            status = "LIVE",
-            strikePrice = "53200",
-            expiry = "Weekly",
-            reasons = "HDFC & ICICI Bank Heavy Buying, Supertrend Green, Volume 2.4x Spike",
-            underlyingLtp = 53180.40,
-            underlyingChange = 312.80
-        ),
-        AISignalEntity(
-            id = 103,
-            symbol = "FINNIFTY 23900 PE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY PE",
-            trend = "BEARISH",
-            ltp = 124.00,
-            changePercent = -8.5,
-            entryZone = "₹120 - ₹126",
-            target1 = 152.00,
-            target2 = 185.00,
-            target3 = 220.00,
-            target4 = 260.00,
-            stopLoss = 98.00,
-            trailingSl = 120.00,
-            confidence = 85,
-            riskReward = "1 : 2.4",
-            lotSize = 60,
-            timeframe = "15 MIN",
-            timestamp = "Today 12:05 PM",
-            isLive = true,
-            status = "LIVE",
-            strikePrice = "23900",
-            expiry = "Weekly",
-            reasons = "Rejection at Daily Resistance R2, Death Cross 15m, Call OI Buildup",
-            underlyingLtp = 23940.20,
-            underlyingChange = -45.10
-        ),
-        AISignalEntity(
-            id = 104,
-            symbol = "SENSEX 81500 CE",
-            exchange = "BSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 290.00,
-            changePercent = 12.0,
-            entryZone = "₹285 - ₹295",
-            target1 = 350.00,
-            target2 = 420.00,
-            target3 = 500.00,
-            target4 = 600.00,
-            stopLoss = 235.00,
-            trailingSl = 290.00,
-            confidence = 89,
-            riskReward = "1 : 2.7",
-            lotSize = 20,
-            timeframe = "5 MIN",
-            timestamp = "Today 12:30 PM",
-            isLive = true,
-            status = "LIVE",
-            strikePrice = "81500",
-            expiry = "Weekly",
-            reasons = "Heavyweights Reliance & Infosys Strong, Pivot S1 Bounce Confirmed",
-            underlyingLtp = 81480.90,
-            underlyingChange = 420.50
-        )
-    )
-}
-
-private fun generateHistoricalSignals(): List<AISignalEntity> {
-    return listOf(
-        AISignalEntity(
-            id = 201,
-            symbol = "NIFTY 24700 CE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 140.00,
-            changePercent = 38.5,
-            entryZone = "₹140.00",
-            target1 = 175.00,
-            target2 = 210.00,
-            target3 = 250.00,
-            target4 = 290.00,
-            stopLoss = 115.00,
-            trailingSl = 195.00,
-            confidence = 94,
-            riskReward = "1 : 2.8",
-            lotSize = 65,
-            timeframe = "5 MIN",
-            timestamp = "09:30 AM",
-            isLive = false,
-            status = "COMPLETED_T2",
-            strikePrice = "24700",
-            expiry = "Weekly",
-            reasons = "Morning Gap-Up Opening Range Breakout (ORB), High Volume Surge",
-            underlyingLtp = 24750.00,
-            underlyingChange = 180.00
-        ),
-        AISignalEntity(
-            id = 202,
-            symbol = "BANKNIFTY 52800 CE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 280.00,
-            changePercent = 42.0,
-            entryZone = "₹280.00",
-            target1 = 345.00,
-            target2 = 410.00,
-            target3 = 490.00,
-            target4 = 580.00,
-            stopLoss = 230.00,
-            trailingSl = 380.00,
-            confidence = 92,
-            riskReward = "1 : 2.6",
-            lotSize = 30,
-            timeframe = "5 MIN",
-            timestamp = "10:15 AM",
-            isLive = false,
-            status = "COMPLETED_T2",
-            strikePrice = "52800",
-            expiry = "Weekly",
-            reasons = "Banking Sector Momentum + VWAP Retest Successful",
-            underlyingLtp = 52950.00,
-            underlyingChange = 460.00
-        ),
-        AISignalEntity(
-            id = 203,
-            symbol = "MIDCPNIFTY 13100 CE",
-            exchange = "NSE",
-            side = "BUY",
-            actionType = "BUY CE",
-            trend = "BULLISH",
-            ltp = 65.00,
-            changePercent = 29.2,
-            entryZone = "₹65.00",
-            target1 = 82.00,
-            target2 = 98.00,
-            target3 = 115.00,
-            target4 = 135.00,
-            stopLoss = 52.00,
-            trailingSl = 78.00,
-            confidence = 87,
-            riskReward = "1 : 2.5",
-            lotSize = 120,
-            timeframe = "5 MIN",
-            timestamp = "11:40 AM",
-            isLive = false,
-            status = "COMPLETED_T1",
-            strikePrice = "13100",
-            expiry = "Weekly",
-            reasons = "Midcap 50 Index Multi-Day Cup & Handle Breakout",
-            underlyingLtp = 13120.00,
-            underlyingChange = 65.00
-        )
-    )
 }

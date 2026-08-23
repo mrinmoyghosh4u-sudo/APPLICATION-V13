@@ -712,23 +712,13 @@ private fun AiMarketInsightsSection(
         ?: marketDataMap.values.find { it.symbol.contains(selectedSymbol, ignoreCase = true) }
     val watchItem = watchlist.find { it.symbol.equals(selectedSymbol, ignoreCase = true) }
 
-    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: when (selectedSymbol) {
-        "NIFTY 50" -> 24231.85
-        "BANKNIFTY" -> 51420.50
-        "FINNIFTY" -> 23850.10
-        "MIDCPNIFTY" -> 12640.20
-        "SENSEX" -> 79840.60
-        "CRUDEOIL" -> 6245.0
-        "GOLD" -> 78450.0
-        "SILVER" -> 89200.0
-        else -> 24000.0
-    })
-
+    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
     val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else (watchItem?.change ?: 0.0)
+    val hasPrice = ltp > 0.0
     val isBullish = change >= 0
 
-    val supportPrice = (ltp * 0.992).toInt()
-    val resistancePrice = (ltp * 1.008).toInt()
+    val supportPrice = if (hasPrice) (ltp * 0.992).toInt() else 0
+    val resistancePrice = if (hasPrice) (ltp * 1.008).toInt() else 0
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -806,14 +796,14 @@ private fun AiMarketInsightsSection(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    if (isBullish) Color(0xFF163824) else Color(0xFF381616),
+                                    if (!hasPrice) Color(0xFF202530) else if (isBullish) Color(0xFF163824) else Color(0xFF381616),
                                     RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = if (isBullish) "↑ BULLISH BIAS" else "↓ BEARISH BIAS",
-                                color = if (isBullish) ProfitGreen else LossRed,
+                                text = if (!hasPrice) "NEUTRAL" else if (isBullish) "↑ BULLISH BIAS" else "↓ BEARISH BIAS",
+                                color = if (!hasPrice) TextGray else if (isBullish) ProfitGreen else LossRed,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -823,7 +813,9 @@ private fun AiMarketInsightsSection(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = if (isBullish) {
+                        text = if (!hasPrice) {
+                            "Awaiting market tick data for $selectedSymbol. Active live session feed updates in real-time."
+                        } else if (isBullish) {
                             "Strong support cushion at ₹${String.format("%,d", supportPrice)}. Breakout above ₹${String.format("%,d", resistancePrice)} signals long momentum continuation."
                         } else {
                             "Overhead resistance capped at ₹${String.format("%,d", resistancePrice)}. Breakdown below ₹${String.format("%,d", supportPrice)} tests downside levels."
@@ -840,15 +832,15 @@ private fun AiMarketInsightsSection(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Column {
                             Text(text = "Support", color = TextGray, fontSize = 9.sp)
-                            Text(text = "₹${String.format("%,d", supportPrice)}", color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = if (hasPrice) "₹${String.format("%,d", supportPrice)}" else "--", color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Column {
                             Text(text = "Resistance", color = TextGray, fontSize = 9.sp)
-                            Text(text = "₹${String.format("%,d", resistancePrice)}", color = LossRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = if (hasPrice) "₹${String.format("%,d", resistancePrice)}" else "--", color = LossRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Column {
                             Text(text = "LTP", color = TextGray, fontSize = 9.sp)
-                            Text(text = "₹${String.format("%,.2f", ltp)}", color = PrimaryGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = if (hasPrice) "₹${String.format("%,.2f", ltp)}" else "--", color = PrimaryGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

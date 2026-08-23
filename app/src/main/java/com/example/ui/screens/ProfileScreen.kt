@@ -131,8 +131,6 @@ fun ProfileScreen(
     val winRateStr = if (totalEvaluatedTrades > 0) {
         val rate = (winningTradesCount.toDouble() / totalEvaluatedTrades) * 100
         String.format(Locale.getDefault(), "%.1f%%", rate)
-    } else if (isDhanConnected) {
-        "78.5%"
     } else {
         "--"
     }
@@ -147,7 +145,7 @@ fun ProfileScreen(
     val positionsStr = "$positionsCount Active"
     val holdingsStr = "$holdingsCount Assets"
 
-    val availableMargin = customSimulatedMargin ?: if (userProfile.availableMargin > 0) userProfile.availableMargin else 500000.0
+    val availableMargin = customSimulatedMargin ?: userProfile.availableMargin
     val availableBalanceStr = String.format(Locale.getDefault(), "₹%,.2f", availableMargin)
     val realizedPnlStr = String.format(Locale.getDefault(), "₹%,.2f", realizedPnlVal)
     val unrealizedPnlStr = String.format(Locale.getDefault(), "₹%,.2f", unrealizedPnlVal)
@@ -155,18 +153,20 @@ fun ProfileScreen(
     val realizedPnlColor = if (realizedPnlVal > 0) ProfitGreen else if (realizedPnlVal < 0) LossRed else TextWhite
     val unrealizedPnlColor = if (unrealizedPnlVal > 0) ProfitGreen else if (unrealizedPnlVal < 0) LossRed else TextWhite
 
-    val accountHolderName = remember(userProfile.name, userProfile.dhanClientId, isDhanConnected) {
+    val accountHolderName = remember(userProfile.name, userProfile.dhanClientId, userProfile.angelClientId) {
         if (userProfile.name.isNotBlank()) {
             userProfile.name
         } else if (userProfile.dhanClientId.isNotBlank()) {
             "Trader (${userProfile.dhanClientId})"
+        } else if (userProfile.angelClientId.isNotBlank()) {
+            "Trader (${userProfile.angelClientId})"
         } else {
-            "Mrinmoy Ghosh"
+            "Trader"
         }
     }
 
-    val userClientId = if (userProfile.dhanClientId.isNotBlank()) userProfile.dhanClientId else "DHAN111228"
-    val userEmail = if (userProfile.email.isNotBlank()) userProfile.email else "mrinmoyghosh4u@gmail.com"
+    val userClientId = if (userProfile.dhanClientId.isNotBlank()) userProfile.dhanClientId else if (userProfile.angelClientId.isNotBlank()) userProfile.angelClientId else "--"
+    val userEmail = if (userProfile.email.isNotBlank()) userProfile.email else "--"
 
     val currentTimeStr = remember {
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())

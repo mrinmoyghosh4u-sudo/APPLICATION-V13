@@ -140,14 +140,7 @@ object AlgoEngine {
     val engineStatusMessage: StateFlow<String> = _engineStatusMessage.asStateFlow()
 
     // System Logs Feed
-    private val _systemLogs = MutableStateFlow<List<AlgoSystemLog>>(
-        listOf(
-            AlgoSystemLog(level = "INFO", tag = "INIT", message = "King Khan AI Algo Trading Engine Initialized"),
-            AlgoSystemLog(level = "INFO", tag = "CONFIG", message = "Active Strategy: KK BUY-ONLY AI (Index: NIFTY 50)"),
-            AlgoSystemLog(level = "RISK", tag = "RISK_CONTROL", message = "Risk Per Trade: 1.0% | Max Daily Loss Limit: 3.0%"),
-            AlgoSystemLog(level = "INFO", tag = "RULES", message = "Option Mode: AUTO CE / PE (Buy-Only Enforcement Active)")
-        )
-    )
+    private val _systemLogs = MutableStateFlow<List<AlgoSystemLog>>(emptyList())
     val systemLogs: StateFlow<List<AlgoSystemLog>> = _systemLogs.asStateFlow()
 
     fun log(tag: String, message: String, level: String = "INFO") {
@@ -160,9 +153,7 @@ object AlgoEngine {
     }
 
     fun clearLogs() {
-        _systemLogs.value = listOf(
-            AlgoSystemLog(level = "INFO", tag = "SYSTEM", message = "Logs cleared by user")
-        )
+        _systemLogs.value = emptyList()
     }
 
     // Control Functions
