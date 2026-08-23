@@ -79,8 +79,15 @@ fun OptionChainScreen(
                         com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
-                IconButton(onClick = onOpenNotificationCenter) {
-                    Icon(Icons.Outlined.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isDhanConnected = userProfile.isDhanConnected || (viewModel?.sessionManager?.isDhanConnected == true)
+                    com.example.ui.components.DhanLiveStatusBadge(
+                        isDhanConnected = isDhanConnected,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    IconButton(onClick = onOpenNotificationCenter) {
+                        Icon(Icons.Outlined.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
+                    }
                 }
             }
 

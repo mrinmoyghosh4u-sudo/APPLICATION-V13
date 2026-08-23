@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.network.TelegramApiResponseInfo
 import com.example.ui.components.GoldCard
 import com.example.ui.theme.*
+import com.example.util.AlertPreferences
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -37,17 +38,34 @@ fun TelegramSettingsScreen(
     isAlertsEnabled: Boolean,
     isTesting: Boolean,
     telegramResponseInfo: TelegramApiResponseInfo?,
+    alertPreferences: AlertPreferences = AlertPreferences(),
+    isSmsEnabled: Boolean = false,
+    smsPhone: String = "",
+    smsGatewayUrl: String = "",
+    smsApiKey: String = "",
+    isSmsTesting: Boolean = false,
+    smsStatusMessage: String? = null,
     onBack: () -> Unit,
     onSaveSettings: (token: String, chatId: String, isEnabled: Boolean, channelId: String) -> Unit,
+    onToggleAlertEvent: (eventType: String, enabled: Boolean) -> Unit = { _, _ -> },
+    onSaveSmsSettings: (phone: String, enabled: Boolean, gatewayUrl: String, apiKey: String) -> Unit = { _, _, _, _ -> },
     onTestTelegramBot: (token: String, chatId: String, channelId: String) -> Unit,
     onTestAlert: (alertType: String, symbol: String, details: String) -> Unit,
-    onClearResponse: () -> Unit
+    onTestSms: (phone: String, message: String) -> Unit = { _, _ -> },
+    onClearResponse: () -> Unit,
+    onClearSmsStatus: () -> Unit = {}
 ) {
     var tokenInput by remember(botToken) { mutableStateOf(botToken) }
     var chatIdInput by remember(chatId) { mutableStateOf(chatId) }
     var channelIdInput by remember(channelId) { mutableStateOf(channelId) }
     var alertsEnabledState by remember(isAlertsEnabled) { mutableStateOf(isAlertsEnabled) }
     var isTokenVisible by remember { mutableStateOf(false) }
+
+    // SMS States
+    var smsPhoneInput by remember(smsPhone) { mutableStateOf(smsPhone) }
+    var smsEnabledState by remember(isSmsEnabled) { mutableStateOf(isSmsEnabled) }
+    var smsGatewayUrlInput by remember(smsGatewayUrl) { mutableStateOf(smsGatewayUrl) }
+    var smsApiKeyInput by remember(smsApiKey) { mutableStateOf(smsApiKey) }
 
     Column(
         modifier = Modifier
@@ -74,13 +92,13 @@ fun TelegramSettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Telegram Bot Integration",
+                            text = "Alerts & Telegram Engine",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextWhite
                         )
                         Text(
-                            text = "Real-time AI Trading Signals & Order Alerts",
+                            text = "Real-time AI Trading Signals, Orders & SMS",
                             fontSize = 11.sp,
                             color = TextGray
                         )
@@ -96,7 +114,7 @@ fun TelegramSettingsScreen(
                     )
                 ) {
                     Text(
-                        text = if (alertsEnabledState) "ALERTS LIVE" else "DISABLED",
+                        text = if (alertsEnabledState) "TELEGRAM LIVE" else "DISABLED",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (alertsEnabledState) ProfitGreen else LossRed,
@@ -112,7 +130,7 @@ fun TelegramSettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Enable / Disable Master Switch
+            // 1. Telegram Master Switch
             GoldCard(borderColor = if (alertsEnabledState) PrimaryGold else DarkCardBorder) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -171,7 +189,7 @@ fun TelegramSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Telegram Bot Credentials Card
+            // 2. Telegram Bot Credentials Card
             GoldCard(borderColor = DarkCardBorder) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -289,12 +307,11 @@ fun TelegramSettingsScreen(
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    // Buttons Row
+                    // Save & Test Buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Save Settings Button
                         Button(
                             onClick = {
                                 onSaveSettings(tokenInput, chatIdInput, alertsEnabledState, channelIdInput)
@@ -312,7 +329,6 @@ fun TelegramSettingsScreen(
                             }
                         }
 
-                        // Test Telegram Button
                         OutlinedButton(
                             onClick = {
                                 onTestTelegramBot(tokenInput, chatIdInput, channelIdInput)
@@ -341,7 +357,7 @@ fun TelegramSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ACTUAL Telegram API Response Card (Requirement 7 - Real API Response)
+            // Telegram API Response Card
             telegramResponseInfo?.let { response ->
                 GoldCard(
                     borderColor = if (response.isSuccess) ProfitGreen else LossRed
@@ -375,7 +391,6 @@ fun TelegramSettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Status Row
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -387,7 +402,6 @@ fun TelegramSettingsScreen(
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Description
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             color = DarkCardSecondary,
@@ -400,65 +414,248 @@ fun TelegramSettingsScreen(
                                 modifier = Modifier.padding(10.dp)
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Raw JSON payload
-                        Text("Raw Telegram Server JSON Response:", fontSize = 10.sp, color = TextGray)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, DarkCardBorder)
-                        ) {
-                            Text(
-                                text = response.rawJson,
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = PrimaryGold,
-                                modifier = Modifier.padding(8.dp)
-                            )
-                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Configured Telegram Alert Categories (Requirement 5)
+            // 3. SMS ALERT SERVICES CARD
+            GoldCard(borderColor = if (smsEnabledState) SecondaryGold else DarkCardBorder) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF2E7D32).copy(alpha = 0.2f), CircleShape)
+                                    .border(1.dp, Color(0xFF2E7D32), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Sms, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("SMS Alert Transport", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                Text("Cellular & Web SMS Gateway Delivery", fontSize = 10.sp, color = TextGray)
+                            }
+                        }
+
+                        Switch(
+                            checked = smsEnabledState,
+                            onCheckedChange = {
+                                smsEnabledState = it
+                                onSaveSmsSettings(smsPhoneInput, it, smsGatewayUrlInput, smsApiKeyInput)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = PrimaryGold,
+                                uncheckedThumbColor = TextGray,
+                                uncheckedTrackColor = DarkCardSecondary
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Recipient Phone Number (+91)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextWhite)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = smsPhoneInput,
+                        onValueChange = { smsPhoneInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. 9876543210", fontSize = 11.sp, color = TextGray) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGold,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite,
+                            focusedContainerColor = DarkCardSecondary,
+                            unfocusedContainerColor = DarkCardSecondary
+                        ),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Custom Web SMS Gateway URL (Optional)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextWhite)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = smsGatewayUrlInput,
+                        onValueChange = { smsGatewayUrlInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. https://api.sms-gateway.com/send", fontSize = 11.sp, color = TextGray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGold,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite,
+                            focusedContainerColor = DarkCardSecondary,
+                            unfocusedContainerColor = DarkCardSecondary
+                        ),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                onSaveSmsSettings(smsPhoneInput, smsEnabledState, smsGatewayUrlInput, smsApiKeyInput)
+                            },
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold)
+                        ) {
+                            Text("SAVE SMS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                onTestSms(smsPhoneInput, "KK TRADE ALERT: Real-time SMS alert integration verified successfully.")
+                            },
+                            enabled = !isSmsTesting && (smsPhoneInput.isNotBlank() || smsGatewayUrlInput.isNotBlank()),
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen)
+                        ) {
+                            if (isSmsTesting) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ProfitGreen, strokeWidth = 2.dp)
+                            } else {
+                                Text("TEST SMS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    smsStatusMessage?.let { status ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = DarkCardSecondary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(status, fontSize = 11.sp, color = SecondaryGold, modifier = Modifier.weight(1f))
+                                IconButton(onClick = onClearSmsStatus, modifier = Modifier.size(20.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextGray, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. ALERT PREFERENCES (ENFORCE ON / OFF FOR ALL 16 EVENTS)
+            GoldCard(borderColor = DarkCardBorder) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Enforced Alert Triggers (16 Events)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SecondaryGold
+                            )
+                            Text(
+                                text = "Strictly controls Telegram, SMS & Push for each event",
+                                fontSize = 10.sp,
+                                color = TextGray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val toggles = listOf(
+                        Triple("brokerConnected", "🟢 Broker Connected", alertPreferences.brokerConnected),
+                        Triple("brokerDisconnected", "🔴 Broker Disconnected", alertPreferences.brokerDisconnected),
+                        Triple("buyCeSignal", "🟢 AI BUY CE Signal", alertPreferences.buyCeSignal),
+                        Triple("buyPeSignal", "🔴 AI BUY PE Signal", alertPreferences.buyPeSignal),
+                        Triple("entryPosition", "⚡ Entry / Position Opened", alertPreferences.entryPosition),
+                        Triple("stopLossHit", "🛑 Stop Loss Hit", alertPreferences.stopLossHit),
+                        Triple("target1Hit", "🎯 Target 1 Hit", alertPreferences.target1Hit),
+                        Triple("target2Hit", "🎯 Target 2 Hit", alertPreferences.target2Hit),
+                        Triple("target3Hit", "🚀 Target 3 Hit", alertPreferences.target3Hit),
+                        Triple("target4Hit", "🏆 Target 4 Hit", alertPreferences.target4Hit),
+                        Triple("trailingSlHit", "📈 Trailing Stop Loss Hit", alertPreferences.trailingSlHit),
+                        Triple("orderExecuted", "✅ Broker Order Executed", alertPreferences.orderExecuted),
+                        Triple("orderRejected", "❌ Broker Order Rejected", alertPreferences.orderRejected),
+                        Triple("algoStarted", "🤖 Algo Engine Started", alertPreferences.algoStarted),
+                        Triple("algoStopped", "⏹️ Algo Engine Stopped", alertPreferences.algoStopped),
+                        Triple("riskLimitReached", "🚨 Risk Limit Reached", alertPreferences.riskLimitReached)
+                    )
+
+                    toggles.forEach { (key, label, isChecked) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, fontSize = 12.sp, color = TextWhite, fontWeight = FontWeight.Medium)
+                            Switch(
+                                checked = isChecked,
+                                onCheckedChange = { onToggleAlertEvent(key, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = PrimaryGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = DarkCardSecondary
+                                )
+                            )
+                        }
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. TEST REAL ALERT DISPATCH BUTTONS
             GoldCard(borderColor = DarkCardBorder) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Configured Alert Triggers (All 16 Categories)",
+                        text = "Instant Alert Trigger Tests",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = SecondaryGold
                     )
                     Text(
-                        text = "Tap any alert type to send a real test trigger to your Telegram chat/channel",
+                        text = "Dispatches configured alert format directly to Telegram & SMS",
                         fontSize = 10.sp,
                         color = TextGray
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val alertCategories = listOf(
-                        Triple("Broker Connected", "🟢", "Dhan Broker Session Connected"),
-                        Triple("Broker Disconnected", "🔴", "Dhan Broker Session Disconnected"),
+                    val testList = listOf(
                         Triple("AI BUY CE Signal", "🟢", "NIFTY 24850 CE Buy Signal Triggered @ ₹125"),
                         Triple("AI BUY PE Signal", "🔴", "BANKNIFTY 52400 PE Buy Signal Triggered @ ₹210"),
-                        Triple("Entry / Position Opened", "⚡", "BUY 65 x NIFTY 24850 CE @ ₹125.00 Entry Executed"),
+                        Triple("Order Executed", "✅", "Order Executed: BUY 65 x NIFTY 24850 CE @ ₹125.00"),
+                        Triple("Order Rejected", "❌", "Order Rejected: Insufficient Margin"),
                         Triple("Stop Loss Hit", "🛑", "NIFTY 24850 CE Stop Loss Hit @ ₹95.00"),
                         Triple("Target 1 Hit", "🎯", "NIFTY Target 1 Achieved @ ₹145.00"),
                         Triple("Target 2 Hit", "🎯", "NIFTY Target 2 Achieved @ ₹165.00"),
-                        Triple("Target 3 Hit", "🚀", "NIFTY Target 3 Achieved @ ₹190.00"),
-                        Triple("Target 4 Hit", "🏆", "NIFTY Target 4 Achieved @ ₹220.00"),
-                        Triple("Trailing Stop Loss Hit", "📈", "NIFTY Trailing SL Updated @ ₹135.00"),
-                        Triple("Order Executed", "✅", "Order Executed: BUY 65 x NIFTY 24850 CE @ ₹125.00"),
-                        Triple("Order Rejected", "❌", "Order Rejected: Insufficient Margin"),
-                        Triple("Algo Started", "🤖", "Algo Engine Active: KK BUY-ONLY AI on NIFTY 50"),
-                        Triple("Algo Stopped", "⏹️", "Algo Engine Stopped by User"),
                         Triple("Risk Limit Reached", "🚨", "Daily Max Loss Limit Reached: Trading Halted")
                     )
 
@@ -467,7 +664,7 @@ fun TelegramSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        alertCategories.forEach { (type, emoji, sampleDetails) ->
+                        testList.forEach { (type, emoji, sampleDetails) ->
                             Surface(
                                 modifier = Modifier.clickable {
                                     onTestAlert(type, "NIFTY 50", sampleDetails)

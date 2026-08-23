@@ -202,6 +202,11 @@ fun ProfileScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    com.example.ui.components.DhanLiveStatusBadge(
+                        isDhanConnected = isDhanConnected,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+
                     IconButton(
                         onClick = onOpenNotificationCenter,
                         modifier = Modifier.size(36.dp)

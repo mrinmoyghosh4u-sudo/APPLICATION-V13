@@ -81,13 +81,19 @@ fun PortfolioScreen(
                     com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                 }
             }
-            if (userProfile.connectedBroker.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .background(ProfitGreen.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(userProfile.connectedBroker, color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                com.example.ui.components.DhanLiveStatusBadge(
+                    isDhanConnected = userProfile.isDhanConnected,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+                if (userProfile.connectedBroker.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .background(ProfitGreen.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(userProfile.connectedBroker, color = ProfitGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

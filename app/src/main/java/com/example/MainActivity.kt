@@ -86,6 +86,14 @@ class MainActivity : FragmentActivity() {
                 val isTelegramTesting by viewModel.isTelegramTesting.collectAsStateWithLifecycle()
                 val telegramResponseInfo by viewModel.telegramResponseInfo.collectAsStateWithLifecycle()
 
+                val alertPreferences by viewModel.alertPreferences.collectAsStateWithLifecycle()
+                val isSmsAlertsEnabled by viewModel.isSmsAlertsEnabled.collectAsStateWithLifecycle()
+                val smsAlertPhone by viewModel.smsAlertPhone.collectAsStateWithLifecycle()
+                val smsGatewayUrl by viewModel.smsGatewayUrl.collectAsStateWithLifecycle()
+                val smsApiKey by viewModel.smsApiKey.collectAsStateWithLifecycle()
+                val isSmsTesting by viewModel.isSmsTesting.collectAsStateWithLifecycle()
+                val smsStatusMessage by viewModel.smsStatusMessage.collectAsStateWithLifecycle()
+
                 val showConnectDialog by viewModel.showConnectDialog.collectAsStateWithLifecycle()
                 val connectingBrokerName by viewModel.connectingBrokerName.collectAsStateWithLifecycle()
                 val isAuthInProgress by viewModel.isAuthInProgress.collectAsStateWithLifecycle()
@@ -412,6 +420,9 @@ class MainActivity : FragmentActivity() {
                                                     signal.ltp to signal.lotSize
                                                 )
                                             },
+                                            onSendToTelegram = { signal ->
+                                                viewModel.sendSignalToTelegram(signal)
+                                            },
                                             onRefresh = { viewModel.refreshBrokerData() }
                                         )
                                         "orders" -> OrdersScreen(
@@ -453,6 +464,12 @@ class MainActivity : FragmentActivity() {
                                                 viewModel.updateStopLossTarget(id, newSl, newTarget)
                                                 coroutineScope.launch {
                                                     snackbarHostState.showSnackbar("Stop Loss & Target updated for $id")
+                                                }
+                                            },
+                                            onSendToTelegram = { order ->
+                                                viewModel.sendBrokerOrderToTelegram(order)
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar("Order ${order.orderId} transmitted to Telegram & Alerts 🚀")
                                                 }
                                             },
                                             isRefreshing = isRefreshing,
@@ -547,6 +564,9 @@ class MainActivity : FragmentActivity() {
                                             signal.ltp to signal.lotSize
                                         )
                                     },
+                                    onSendToTelegram = { signal ->
+                                        viewModel.sendSignalToTelegram(signal)
+                                    },
                                     onRefresh = { viewModel.refreshBrokerData() }
                                 )
                             }
@@ -617,6 +637,13 @@ class MainActivity : FragmentActivity() {
                                     isAlertsEnabled = isTelegramAlertsEnabled,
                                     isTesting = isTelegramTesting,
                                     telegramResponseInfo = telegramResponseInfo,
+                                    alertPreferences = alertPreferences,
+                                    isSmsEnabled = isSmsAlertsEnabled,
+                                    smsPhone = smsAlertPhone,
+                                    smsGatewayUrl = smsGatewayUrl,
+                                    smsApiKey = smsApiKey,
+                                    isSmsTesting = isSmsTesting,
+                                    smsStatusMessage = smsStatusMessage,
                                     onBack = { 
                                         if (!navController.popBackStack()) {
                                             navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
@@ -628,14 +655,29 @@ class MainActivity : FragmentActivity() {
                                             snackbarHostState.showSnackbar("Telegram settings saved successfully")
                                         }
                                     },
+                                    onToggleAlertEvent = { key, enabled ->
+                                        viewModel.toggleAlertEvent(key, enabled)
+                                    },
+                                    onSaveSmsSettings = { phone, enabled, gw, key ->
+                                        viewModel.saveSmsSettings(phone, enabled, gw, key)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("SMS alert settings saved successfully")
+                                        }
+                                    },
                                     onTestTelegramBot = { token, chatId, channelId ->
                                         viewModel.testTelegramBot(token, chatId, channelId)
                                     },
                                     onTestAlert = { alertType, symbol, details ->
                                         viewModel.testSpecificTelegramAlert(alertType, symbol, details)
                                     },
+                                    onTestSms = { phone, msg ->
+                                        viewModel.testSmsAlert(phone, msg)
+                                    },
                                     onClearResponse = {
                                         viewModel.clearTelegramResponseInfo()
+                                    },
+                                    onClearSmsStatus = {
+                                        viewModel.clearSmsStatus()
                                     }
                                 )
                             }

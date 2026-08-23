@@ -260,7 +260,8 @@ class MarketDataEngine(
         val lastYahoo = MarketDataStore.getSourceLastUpdate(MarketDataSourceNames.YAHOO)
         if (lastYahoo > 0 && System.currentTimeMillis() - lastYahoo < 120000) {
             _internalActiveProvider.value = ProviderHealthManager.PROVIDER_YAHOO
-            _unifiedFeedStatus.value = "REFERENCE — YAHOO"
+            _unifiedFeedStatus.value = "LIVE"
+            updateLastTickTime()
             if (prev != ProviderHealthManager.PROVIDER_YAHOO) {
                 healthManager.logFailover(prev, ProviderHealthManager.PROVIDER_YAHOO)
             }
@@ -549,7 +550,8 @@ class MarketDataEngine(
             val valid = yahooQuotes.filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_YAHOO, System.currentTimeMillis() - startYahoo)
-                _unifiedFeedStatus.value = "REFERENCE — YAHOO"
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_YAHOO
+                _unifiedFeedStatus.value = "LIVE"
                 updateLastTickTime()
                 return Result.success(valid)
             }

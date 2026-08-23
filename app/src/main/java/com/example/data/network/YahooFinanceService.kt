@@ -8,6 +8,9 @@ import com.example.data.model.MarketDataStore
 import com.example.data.model.OptionStrikeItem
 import com.example.data.model.WatchlistItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -66,104 +69,131 @@ object YahooFinanceService {
         return symbolMap[norm] ?: symbolMap[norm.replace(" ", "")] ?: if (!norm.contains("^") && !norm.endsWith(".NS") && !norm.endsWith(".BO")) "$norm.NS" else norm
     }
 
-    suspend fun getMarketQuotes(symbols: List<String>): List<WatchlistItem> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<WatchlistItem>()
+    private val USER_AGENTS = listOf(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+    )
+
+    private fun getOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    suspend fun getMarketQuotes(symbols: List<String>): List<WatchlistItem> = coroutineScope {
         val usdInrRate = 87.2 // Benchmark USD/INR conversion rate for MCX commodity contracts
         
-        for (symbol in symbols) {
-            val yahooSymbol = getYahooSymbol(symbol)
-            if (yahooSymbol != null) {
-                try {
-                    val request = Request.Builder()
-                        .url("https://query1.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1d&range=1d")
-                        .header("User-Agent", "Mozilla/5.0")
-                        .build()
-                        
-                    client.newCall(request).execute().use { response ->
-                        if (response.isSuccessful) {
-                            val body = response.body?.string()
-                            if (body != null) {
-                                val json = JSONObject(body)
-                                val chart = json.getJSONObject("chart")
-                                val resultArr = chart.getJSONArray("result")
-                                if (resultArr.length() > 0) {
-                                    val data = resultArr.getJSONObject(0)
-                                    val meta = data.getJSONObject("meta")
-                                    var rawLtp = meta.optDouble("regularMarketPrice", 0.0)
-                                    var rawPrevClose = meta.optDouble("chartPreviousClose", 0.0)
-                                    
-                                    val upperSym = symbol.uppercase()
-                                    // Scale international futures to Indian MCX standard INR contract sizes
-                                    val (ltp, prevClose) = when {
-                                        upperSym.startsWith("CRUDEOIL") -> {
-                                            // Crude Oil 1 bbl in INR
-                                            (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
-                                        }
-                                        upperSym.startsWith("GOLD") -> {
-                                            // Gold COMEX USD/oz to MCX Gold 10g INR (1 oz = 31.1035g + duty multiplier)
-                                            val factor = (10.0 / 31.1035) * usdInrRate * 1.12
-                                            (rawLtp * factor) to (rawPrevClose * factor)
-                                        }
-                                        upperSym.startsWith("SILVER") -> {
-                                            // Silver COMEX USD/oz to MCX Silver 1kg INR
-                                            val factor = (1000.0 / 31.1035) * usdInrRate * 1.08
-                                            (rawLtp * factor) to (rawPrevClose * factor)
-                                        }
-                                        upperSym.startsWith("COPPER") -> {
-                                            // Copper COMEX USD/lb to MCX Copper 1kg INR (1 kg = 2.20462 lbs)
-                                            val factor = 2.20462 * usdInrRate
-                                            (rawLtp * factor) to (rawPrevClose * factor)
-                                        }
-                                        upperSym.startsWith("NATURALGAS") || upperSym.startsWith("NATURAL GAS") || upperSym.startsWith("NATURAL") -> {
-                                            // Natural Gas Henry Hub USD/MMBtu to MCX 1 MMBtu in INR
-                                            (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
-                                        }
-                                        else -> rawLtp to rawPrevClose
-                                    }
+        val deferredList = symbols.distinct().map { symbol ->
+            async(Dispatchers.IO) {
+                fetchSingleSymbolQuote(symbol, usdInrRate)
+            }
+        }
+        
+        deferredList.awaitAll().filterNotNull()
+    }
 
-                                    val change = if (prevClose > 0.0) ltp - prevClose else 0.0
-                                    val changePercent = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
-                                    
-                                    val exchange = when {
-                                        upperSym.contains("CRUDE") || upperSym.contains("GOLD") || upperSym.contains("SILVER") || upperSym.contains("COPPER") || upperSym.contains("NATURAL") || upperSym.contains("GAS") -> "MCX"
-                                        upperSym.contains("SENSEX") || upperSym.contains("BANKEX") -> "BSE"
-                                        else -> "NSE"
-                                    }
+    private fun fetchSingleSymbolQuote(symbol: String, usdInrRate: Double): WatchlistItem? {
+        val yahooSymbol = getYahooSymbol(symbol) ?: return null
+        val endpoints = listOf(
+            "https://query1.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1d&range=1d",
+            "https://query2.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1d&range=1d"
+        )
+        
+        for (url in endpoints) {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", USER_AGENTS.random())
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .build()
 
-                                    if (ltp > 0.0) {
-                                        MarketDataStore.updateTick(
-                                            source = MarketDataSourceNames.YAHOO,
-                                            symbol = symbol,
-                                            token = "",
-                                            exchange = exchange,
-                                            ltp = ltp,
-                                            close = prevClose,
-                                            receivedTimestamp = System.currentTimeMillis(),
-                                            state = "REFERENCE"
-                                        )
-                                        
-                                        result.add(
-                                            WatchlistItem(
-                                                symbol = symbol,
-                                                exchange = exchange,
-                                                ltp = ltp,
-                                                change = change,
-                                                changePercent = changePercent,
-                                                lotSize = com.example.util.AppPreferences.getGlobalLotSize(symbol),
-                                                isPositive = change >= 0
-                                            )
-                                        )
+                getOkHttpClient().newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (!body.isNullOrBlank()) {
+                            val json = JSONObject(body)
+                            val chart = json.optJSONObject("chart") ?: return@use
+                            val resultArr = chart.optJSONArray("result") ?: return@use
+                            if (resultArr.length() > 0) {
+                                val data = resultArr.getJSONObject(0)
+                                val meta = data.getJSONObject("meta")
+                                var rawLtp = meta.optDouble("regularMarketPrice", 0.0)
+                                var rawPrevClose = meta.optDouble("chartPreviousClose", 0.0)
+                                if (rawLtp <= 0.0) {
+                                    rawLtp = meta.optDouble("previousClose", 0.0)
+                                }
+                                if (rawPrevClose <= 0.0) {
+                                    rawPrevClose = rawLtp
+                                }
+
+                                val upperSym = symbol.uppercase()
+                                // Scale international futures to Indian MCX standard INR contract sizes
+                                val (ltp, prevClose) = when {
+                                    upperSym.startsWith("CRUDEOIL") -> {
+                                        (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
                                     }
+                                    upperSym.startsWith("GOLD") -> {
+                                        val factor = (10.0 / 31.1035) * usdInrRate * 1.12
+                                        (rawLtp * factor) to (rawPrevClose * factor)
+                                    }
+                                    upperSym.startsWith("SILVER") -> {
+                                        val factor = (1000.0 / 31.1035) * usdInrRate * 1.08
+                                        (rawLtp * factor) to (rawPrevClose * factor)
+                                    }
+                                    upperSym.startsWith("COPPER") -> {
+                                        val factor = 2.20462 * usdInrRate
+                                        (rawLtp * factor) to (rawPrevClose * factor)
+                                    }
+                                    upperSym.startsWith("NATURALGAS") || upperSym.startsWith("NATURAL GAS") || upperSym.startsWith("NATURAL") -> {
+                                        (rawLtp * usdInrRate) to (rawPrevClose * usdInrRate)
+                                    }
+                                    else -> rawLtp to rawPrevClose
+                                }
+
+                                val change = if (prevClose > 0.0) ltp - prevClose else 0.0
+                                val changePercent = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
+                                
+                                val exchange = when {
+                                    upperSym.contains("CRUDE") || upperSym.contains("GOLD") || upperSym.contains("SILVER") || upperSym.contains("COPPER") || upperSym.contains("NATURAL") || upperSym.contains("GAS") -> "MCX"
+                                    upperSym.contains("SENSEX") || upperSym.contains("BANKEX") -> "BSE"
+                                    else -> "NSE"
+                                }
+
+                                if (ltp > 0.0) {
+                                    MarketDataStore.updateTick(
+                                        source = MarketDataSourceNames.YAHOO,
+                                        symbol = symbol,
+                                        token = "",
+                                        exchange = exchange,
+                                        ltp = ltp,
+                                        close = prevClose,
+                                        receivedTimestamp = System.currentTimeMillis(),
+                                        state = "LIVE"
+                                    )
+
+                                    return WatchlistItem(
+                                        symbol = symbol,
+                                        exchange = exchange,
+                                        ltp = ltp,
+                                        change = change,
+                                        changePercent = changePercent,
+                                        lotSize = com.example.util.AppPreferences.getGlobalLotSize(symbol),
+                                        isPositive = change >= 0
+                                    )
                                 }
                             }
                         }
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error fetching Yahoo reference quote for $symbol: ${e.localizedMessage}")
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error fetching quote for $symbol from $url: ${e.message}")
             }
         }
-        return@withContext result
+        return null
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<HistoricalCandle>> = withContext(Dispatchers.IO) {

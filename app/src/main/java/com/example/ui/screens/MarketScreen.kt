@@ -97,8 +97,11 @@ fun MarketScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            // 1. TOP HEADER (Crown Logo, App Name, Notifications with true unread count badge only - Search & Profile removed)
+            val isDhanConnected = userProfile.isDhanConnected
+
+            // 1. TOP HEADER (Crown Logo, App Name, Dhan Live Badge, Notifications with badge)
             MarketHeaderSection(
+                isDhanConnected = isDhanConnected,
                 unreadCount = unreadCount,
                 onOpenNotificationCenter = onOpenNotificationCenter
             )
@@ -195,10 +198,11 @@ fun MarketScreen(
 }
 
 // ==========================================
-// 1. TOP HEADER (Search & Profile Removed)
+// 1. TOP HEADER (Logo, App Title, Dhan Live Badge, Notification Icon)
 // ==========================================
 @Composable
 private fun MarketHeaderSection(
+    isDhanConnected: Boolean,
     unreadCount: Int,
     onOpenNotificationCenter: () -> Unit
 ) {
@@ -222,34 +226,41 @@ private fun MarketHeaderSection(
             }
         }
 
-        // Notification Icon with dynamic badge ONLY when unreadCount > 0
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable { onOpenNotificationCenter() }
-                .padding(6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Notifications,
-                contentDescription = "Notifications",
-                tint = PrimaryGold,
-                modifier = Modifier.size(24.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            com.example.ui.components.DhanLiveStatusBadge(
+                isDhanConnected = isDhanConnected,
+                modifier = Modifier.padding(end = 6.dp)
             )
-            if (unreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 4.dp, y = (-2).dp)
-                        .size(16.dp)
-                        .background(LossRed, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
+            // Notification Icon with dynamic badge ONLY when unreadCount > 0
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onOpenNotificationCenter() }
+                    .padding(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = "Notifications",
+                    tint = PrimaryGold,
+                    modifier = Modifier.size(24.dp)
+                )
+                if (unreadCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 4.dp, y = (-2).dp)
+                            .size(16.dp)
+                            .background(LossRed, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

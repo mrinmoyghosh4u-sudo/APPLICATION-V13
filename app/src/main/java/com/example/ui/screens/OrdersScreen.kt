@@ -50,6 +50,7 @@ fun OrdersScreen(
     onExitPosition: ((orderId: String, exitPrice: Double, realizedPnl: Double) -> Unit)? = null,
     onPartialExitPosition: ((orderId: String, exitLots: Int, exitPrice: Double, partialPnl: Double) -> Unit)? = null,
     onUpdateStopLossTarget: ((orderId: String, newSl: Double, newTarget: Double) -> Unit)? = null,
+    onSendToTelegram: ((OrderEntity) -> Unit)? = null,
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
@@ -193,18 +194,11 @@ fun OrdersScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .background(if (isBrokerConnected) ProfitGreenBg else SecondaryGold.copy(alpha = 0.2f), CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(6.dp).background(if (isBrokerConnected) ProfitGreen else SecondaryGold, CircleShape))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (isBrokerConnected) "LIVE API" else "LOCAL STATE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isBrokerConnected) ProfitGreen else SecondaryGold)
-                    }
-                }
-                Spacer(modifier = Modifier.width(8.dp))
+                val isDhanConnected = userProfile.isDhanConnected
+                com.example.ui.components.DhanLiveStatusBadge(
+                    isDhanConnected = isDhanConnected,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
                 IconButton(onClick = onOpenNotificationCenter) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = SecondaryGold)
@@ -683,7 +677,8 @@ fun OrdersScreen(
                             order = order,
                             liveLtp = liveLtp,
                             onCancelOrder = onCancelOrder,
-                            onOpenModify = { selectedOrderForModify = it }
+                            onOpenModify = { selectedOrderForModify = it },
+                            onSendToTelegram = onSendToTelegram
                         )
                     }
                 }
@@ -982,7 +977,8 @@ private fun DetailedOrderCardItem(
     order: OrderEntity,
     liveLtp: Double,
     onCancelOrder: ((String) -> Unit)?,
-    onOpenModify: (OrderEntity) -> Unit
+    onOpenModify: (OrderEntity) -> Unit,
+    onSendToTelegram: ((OrderEntity) -> Unit)? = null
 ) {
     val isBuy = order.side.equals("BUY", ignoreCase = true)
     val isPendingOrOpen = order.status.equals("PENDING", ignoreCase = true) || order.status.equals("OPEN", ignoreCase = true)
@@ -1025,6 +1021,17 @@ private fun DetailedOrderCardItem(
 
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    onSendToTelegram?.let { send ->
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Send Order to Telegram",
+                            tint = Color(0xFF0088CC),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { send(order) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                     Box(
                         modifier = Modifier
                             .background(if (isBuy) ProfitGreenBg else LossRedBg, RoundedCornerShape(4.dp))

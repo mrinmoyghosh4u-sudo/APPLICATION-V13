@@ -425,6 +425,19 @@ class AppPreferences(private val context: Context) {
             .apply()
     }
 
+    // SMS Alert Settings
+    fun isSmsAlertsEnabled(): Boolean = prefs.getBoolean("sms_alerts_enabled", false)
+    fun setSmsAlertsEnabled(enabled: Boolean) = prefs.edit().putBoolean("sms_alerts_enabled", enabled).apply()
+
+    fun getSmsAlertPhone(): String = prefs.getString("sms_alert_phone", "") ?: ""
+    fun setSmsAlertPhone(phone: String) = prefs.edit().putString("sms_alert_phone", phone.trim()).apply()
+
+    fun getSmsGatewayUrl(): String = prefs.getString("sms_gateway_url", "") ?: ""
+    fun setSmsGatewayUrl(url: String) = prefs.edit().putString("sms_gateway_url", url.trim()).apply()
+
+    fun getSmsApiKey(): String = prefs.getString("sms_api_key", "") ?: ""
+    fun setSmsApiKey(apiKey: String) = prefs.edit().putString("sms_api_key", apiKey.trim()).apply()
+
     // AI Signal Settings
     fun getAiSignalSettings(): AiSignalSettings {
         return AiSignalSettings(

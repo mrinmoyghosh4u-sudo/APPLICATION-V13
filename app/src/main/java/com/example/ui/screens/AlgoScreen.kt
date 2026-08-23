@@ -85,6 +85,8 @@ fun AlgoScreen(
     var currentState by remember { mutableStateOf(AlgoScreenState.DASHBOARD) }
 
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val isDhanConnected = userProfile.isDhanConnected || viewModel.sessionManager.isDhanConnected
     val marketSourceState = viewModel.marketDataSource.collectAsStateWithLifecycle()
     val marketSource = marketSourceState.value
     val marketLastUpdatedState = viewModel.marketDataLastUpdated.collectAsStateWithLifecycle()
@@ -128,34 +130,41 @@ fun AlgoScreen(
                     }
                 }
 
-                // Notification Icon with dynamic badge ONLY when unreadCount > 0
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onOpenNotificationCenter() }
-                        .padding(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notifications,
-                        contentDescription = "Notifications",
-                        tint = SecondaryGold,
-                        modifier = Modifier.size(24.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    com.example.ui.components.DhanLiveStatusBadge(
+                        isDhanConnected = isDhanConnected,
+                        modifier = Modifier.padding(end = 6.dp)
                     )
-                    if (unreadCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-2).dp)
-                                .size(16.dp)
-                                .background(LossRed, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+
+                    // Notification Icon with dynamic badge ONLY when unreadCount > 0
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onOpenNotificationCenter() }
+                            .padding(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = "Notifications",
+                            tint = SecondaryGold,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        if (unreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-2).dp)
+                                    .size(16.dp)
+                                    .background(LossRed, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

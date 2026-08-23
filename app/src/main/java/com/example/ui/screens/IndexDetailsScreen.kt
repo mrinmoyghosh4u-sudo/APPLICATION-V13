@@ -103,6 +103,11 @@ fun IndexDetailsScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isDhanConnected = viewModel?.sessionManager?.isDhanConnected == true
+                    com.example.ui.components.DhanLiveStatusBadge(
+                        isDhanConnected = isDhanConnected,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
                     IconButton(onClick = { /* Favorite */ }) {
                         Icon(
                             imageVector = if (indexItem?.isFavorite == true) Icons.Default.Star else Icons.Default.StarBorder,

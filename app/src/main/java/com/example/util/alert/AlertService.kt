@@ -31,6 +31,7 @@ class AlertService(
 ) {
     val preferenceManager = AlertPreferenceManager(appPreferences)
     val duplicateGuard = DuplicateAlertGuard()
+    val smsService = SmsService(context, appPreferences)
 
     private val notificationIdCounter = AtomicInteger(1000)
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -106,7 +107,16 @@ class AlertService(
             Log.e(TAG, "Error posting system push notification: ${e.message}")
         }
 
-        // 5. Send Telegram Message (if Telegram master alert is enabled & credentials configured)
+        // 5. Send SMS Alert (if SMS alerts are enabled)
+        if (appPreferences.isSmsAlertsEnabled()) {
+            try {
+                smsService.sendAlertSms(smsMessage)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending SMS alert: ${e.message}")
+            }
+        }
+
+        // 6. Send Telegram Message (if Telegram master alert is enabled & credentials configured)
         if (sessionManager.isTelegramAlertsEnabled) {
             val token = sessionManager.telegramBotToken
             val chatId = sessionManager.telegramChatId

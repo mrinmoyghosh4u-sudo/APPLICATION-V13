@@ -53,6 +53,7 @@ fun AISignalsScreen(
     appPreferences: AppPreferences? = null,
     onOpenNotificationCenter: () -> Unit = {},
     onExecuteSignal: (AISignalEntity) -> Unit,
+    onSendToTelegram: (AISignalEntity) -> Unit = {},
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
@@ -157,6 +158,12 @@ fun AISignalsScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isDhanConnected = userProfile.isDhanConnected
+                    com.example.ui.components.DhanLiveStatusBadge(
+                        isDhanConnected = isDhanConnected,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+
                     IconButton(
                         onClick = {
                             isSoundAlertEnabled = !isSoundAlertEnabled
@@ -400,6 +407,10 @@ fun AISignalsScreen(
                             activeBrokerName = activeBrokerName,
                             isHistory = viewMode == "HISTORY",
                             onExecute = { onExecuteSignal(signal) },
+                            onSendTelegram = {
+                                onSendToTelegram(signal)
+                                Toast.makeText(context, "Transmitting ${signal.symbol} signal to Telegram & Alerts 🚀", Toast.LENGTH_SHORT).show()
+                            },
                             onDeepAnalysis = { selectedSignalForDetail = signal },
                             onCopySignal = {
                                 val shareText = """
@@ -709,6 +720,7 @@ private fun EnhancedAISignalCard(
     activeBrokerName: String,
     isHistory: Boolean = false,
     onExecute: () -> Unit,
+    onSendTelegram: () -> Unit = {},
     onDeepAnalysis: () -> Unit,
     onCopySignal: () -> Unit
 ) {
@@ -765,6 +777,15 @@ private fun EnhancedAISignalCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Time: ${signal.timestamp.substringAfter(" ")}", fontSize = 10.sp, color = TextGray)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = "Send to Telegram",
+                        tint = Color(0xFF0088CC),
+                        modifier = Modifier
+                            .size(15.dp)
+                            .clickable { onSendTelegram() }
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         Icons.Default.Share,

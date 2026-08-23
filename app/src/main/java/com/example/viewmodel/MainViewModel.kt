@@ -9,7 +9,10 @@ import com.example.data.model.*
 import com.example.data.network.*
 import com.example.data.repository.TradingRepository
 import com.example.util.AngelAuthHelper
+import com.example.util.AlertPreferences
+import com.example.util.AppPreferences
 import com.example.util.OptionExpiryUtil
+import com.example.util.alert.AlertPreferenceManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +28,7 @@ import java.util.*
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    val appPrefs = AppPreferences.getInstance(application)
     val sessionManager = SessionManager(application)
     private val networkClient = BrokerNetworkClient(sessionManager)
 
@@ -37,7 +41,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val alertService = com.example.util.alert.AlertService(
         context = application,
         sessionManager = sessionManager,
-        appPreferences = com.example.util.AppPreferences.getInstance(application),
+        appPreferences = appPrefs,
         telegramService = telegramService,
         repository = repository
     )
@@ -138,6 +142,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _alertPreferences = MutableStateFlow(appPrefs.getAlertPreferences())
+    val alertPreferences: StateFlow<AlertPreferences> = _alertPreferences.asStateFlow()
+
+    private val _isSmsAlertsEnabled = MutableStateFlow(appPrefs.isSmsAlertsEnabled())
+    val isSmsAlertsEnabled: StateFlow<Boolean> = _isSmsAlertsEnabled.asStateFlow()
+
+    private val _smsAlertPhone = MutableStateFlow(appPrefs.getSmsAlertPhone())
+    val smsAlertPhone: StateFlow<String> = _smsAlertPhone.asStateFlow()
+
+    private val _smsGatewayUrl = MutableStateFlow(appPrefs.getSmsGatewayUrl())
+    val smsGatewayUrl: StateFlow<String> = _smsGatewayUrl.asStateFlow()
+
+    private val _smsApiKey = MutableStateFlow(appPrefs.getSmsApiKey())
+    val smsApiKey: StateFlow<String> = _smsApiKey.asStateFlow()
+
+    private val _isSmsTesting = MutableStateFlow(false)
+    val isSmsTesting: StateFlow<Boolean> = _isSmsTesting.asStateFlow()
+
+    private val _smsStatusMessage = MutableStateFlow<String?>(null)
+    val smsStatusMessage: StateFlow<String?> = _smsStatusMessage.asStateFlow()
 
     val brokerAuthManager = brokerManager.brokerAuthManager
     val brokerStatuses = brokerAuthManager.statuses
@@ -1195,6 +1220,128 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearTelegramResponseInfo() {
         _telegramResponseInfo.value = null
+    }
+
+    fun saveAlertPreferences(prefs: AlertPreferences) {
+        appPrefs.saveAlertPreferences(prefs)
+        _alertPreferences.value = prefs
+        alertService.preferenceManager.saveAllPreferences(prefs)
+    }
+
+    fun toggleAlertEvent(key: String, enabled: Boolean) {
+        val current = _alertPreferences.value
+        val updated = when (key) {
+            "brokerConnected" -> current.copy(brokerConnected = enabled)
+            "brokerDisconnected" -> current.copy(brokerDisconnected = enabled)
+            "buyCeSignal" -> current.copy(buyCeSignal = enabled)
+            "buyPeSignal" -> current.copy(buyPeSignal = enabled)
+            "entryPosition" -> current.copy(entryPosition = enabled)
+            "stopLossHit" -> current.copy(stopLossHit = enabled)
+            "target1Hit" -> current.copy(target1Hit = enabled)
+            "target2Hit" -> current.copy(target2Hit = enabled)
+            "target3Hit" -> current.copy(target3Hit = enabled)
+            "target4Hit" -> current.copy(target4Hit = enabled)
+            "trailingSlHit" -> current.copy(trailingSlHit = enabled)
+            "orderExecuted" -> current.copy(orderExecuted = enabled)
+            "orderRejected" -> current.copy(orderRejected = enabled)
+            "algoStarted" -> current.copy(algoStarted = enabled)
+            "algoStopped" -> current.copy(algoStopped = enabled)
+            "riskLimitReached" -> current.copy(riskLimitReached = enabled)
+            else -> current
+        }
+        saveAlertPreferences(updated)
+    }
+
+    fun sendSignalToTelegram(signal: com.example.data.model.AISignalEntity) {
+        viewModelScope.launch {
+            val isBullish = signal.trend.equals("BULLISH", ignoreCase = true) || signal.actionType.contains("CE", ignoreCase = true)
+            if (isBullish) {
+                alertService.notifyAiBuyCeSignal(
+                    symbol = signal.symbol,
+                    contract = "${signal.symbol} ${signal.actionType}",
+                    entry = String.format(Locale.US, "%.2f", signal.ltp),
+                    sl = String.format(Locale.US, "%.2f", signal.stopLoss),
+                    t1 = String.format(Locale.US, "%.2f", signal.target1),
+                    t2 = String.format(Locale.US, "%.2f", signal.target2),
+                    t3 = if (signal.target3 > 0) String.format(Locale.US, "%.2f", signal.target3) else "",
+                    t4 = if (signal.target4 > 0) String.format(Locale.US, "%.2f", signal.target4) else "",
+                    confidence = signal.confidence
+                )
+            } else {
+                alertService.notifyAiBuyPeSignal(
+                    symbol = signal.symbol,
+                    contract = "${signal.symbol} ${signal.actionType}",
+                    entry = String.format(Locale.US, "%.2f", signal.ltp),
+                    sl = String.format(Locale.US, "%.2f", signal.stopLoss),
+                    t1 = String.format(Locale.US, "%.2f", signal.target1),
+                    t2 = String.format(Locale.US, "%.2f", signal.target2),
+                    t3 = if (signal.target3 > 0) String.format(Locale.US, "%.2f", signal.target3) else "",
+                    t4 = if (signal.target4 > 0) String.format(Locale.US, "%.2f", signal.target4) else "",
+                    confidence = signal.confidence
+                )
+            }
+            repository.addNotification(
+                title = "Signal Dispatched",
+                message = "AI Signal for ${signal.symbol} routed to Telegram & Alert channels.",
+                type = "SUCCESS"
+            )
+        }
+    }
+
+    fun sendBrokerOrderToTelegram(order: OrderEntity) {
+        viewModelScope.launch {
+            if (order.status.equals("REJECTED", ignoreCase = true) || order.status.equals("CANCELLED", ignoreCase = true)) {
+                alertService.notifyOrderRejected(
+                    symbol = order.symbol,
+                    contract = order.symbol,
+                    side = order.side,
+                    quantity = order.qty.toString(),
+                    rejectionReason = "Status: ${order.status}",
+                    orderId = order.brokerOrderId.ifBlank { order.orderId },
+                    broker = sessionManager.activeBroker
+                )
+            } else {
+                alertService.notifyOrderExecuted(
+                    symbol = order.symbol,
+                    contract = order.symbol,
+                    side = order.side,
+                    price = String.format(Locale.US, "%.2f", order.price),
+                    quantity = order.qty.toString(),
+                    orderId = order.brokerOrderId.ifBlank { order.orderId },
+                    broker = sessionManager.activeBroker
+                )
+            }
+        }
+    }
+
+    fun saveSmsSettings(phone: String, enabled: Boolean, gatewayUrl: String = "", apiKey: String = "") {
+        appPrefs.setSmsAlertPhone(phone)
+        appPrefs.setSmsAlertsEnabled(enabled)
+        appPrefs.setSmsGatewayUrl(gatewayUrl)
+        appPrefs.setSmsApiKey(apiKey)
+        _smsAlertPhone.value = phone
+        _isSmsAlertsEnabled.value = enabled
+        _smsGatewayUrl.value = gatewayUrl
+        _smsApiKey.value = apiKey
+    }
+
+    fun testSmsAlert(phone: String, message: String) {
+        viewModelScope.launch {
+            _isSmsTesting.value = true
+            _smsStatusMessage.value = null
+            val testMsg = if (message.isNotBlank()) message else "KK AI TRADE TEST: SMS alerts configured successfully for +91${phone.takeLast(10)} at ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
+            val res = alertService.smsService.sendAlertSms(testMsg, phone)
+            _isSmsTesting.value = false
+            if (res.isSuccess) {
+                _smsStatusMessage.value = "SMS Alert dispatched successfully to $phone"
+            } else {
+                _smsStatusMessage.value = "SMS Dispatch failed: ${res.exceptionOrNull()?.message ?: "Unknown Error"}"
+            }
+        }
+    }
+
+    fun clearSmsStatus() {
+        _smsStatusMessage.value = null
     }
 
     fun toggleBiometric(enabled: Boolean) {

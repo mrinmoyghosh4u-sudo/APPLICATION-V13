@@ -100,6 +100,48 @@ fun KingKhanHeaderBrand(
 }
 
 @Composable
+fun DhanLiveStatusBadge(
+    isDhanConnected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    Surface(
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isDhanConnected) ProfitGreen.copy(alpha = 0.15f) else DarkCardSecondary,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (isDhanConnected) ProfitGreen.copy(alpha = 0.6f) else DarkCardBorder
+        ),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .background(
+                        color = if (isDhanConnected) ProfitGreen else TextGray,
+                        shape = CircleShape
+                    )
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = if (isDhanConnected) "LIVE" else "OFFLINE",
+                color = if (isDhanConnected) ProfitGreen else TextGray,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@Composable
 fun CrownLogo(
     modifier: Modifier = Modifier,
     size: Dp = 32.dp
