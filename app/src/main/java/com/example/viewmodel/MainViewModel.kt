@@ -34,6 +34,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val brokerManager = com.example.data.network.BrokerManager(sessionManager, angelOneService, dhanService, instrumentMasterService)
     val telegramService = TelegramService(sessionManager)
     private val repository = TradingRepository(TradingDatabase.getDatabase(application).tradingDao(), brokerManager)
+    val alertService = com.example.util.alert.AlertService(
+        context = application,
+        sessionManager = sessionManager,
+        appPreferences = com.example.util.AppPreferences.getInstance(application),
+        telegramService = telegramService,
+        repository = repository
+    )
 
     // UI States
     private val _userProfile = MutableStateFlow(UserProfileEntity())
@@ -143,6 +150,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         com.example.util.InstrumentMapUtil.setInstrumentMaster(instrumentMasterService)
         com.example.util.AlgoEngine.telegramService = telegramService
+        com.example.util.AlgoEngine.alertService = alertService
         viewModelScope.launch {
             repository.checkAndSeedInitialData()
             brokerAuthManager.initialize()
@@ -455,11 +463,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _brokerSwitchStatus.value = "Broker Connected • Dhan"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
-                repository.addNotification("Broker Connected", "Connected to Dhan successfully", "SUCCESS")
-                telegramService.sendFormattedEvent(
-                    "DHAN_CONN_${sessionManager.dhanClientId}",
-                    com.example.data.network.TelegramMessageFormatter.formatDhanConnected()
-                )
+                alertService.notifyBrokerConnected("Dhan", account = sessionManager.dhanClientId)
             } else {
                 _authErrorMessage.value = "Failed to validate Dhan connection. Please verify token."
             }
@@ -483,11 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _brokerSwitchStatus.value = "Angel One Feed Connected"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
-                repository.addNotification("Broker Connected", "Connected to Angel One successfully", "SUCCESS")
-                telegramService.sendFormattedEvent(
-                    "ANGEL_CONN_${sessionManager.angelClientId}",
-                    com.example.data.network.TelegramMessageFormatter.formatAngelConnected()
-                )
+                alertService.notifyBrokerConnected("Angel One", account = sessionManager.angelClientId)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Angel One login failed"
                 _authErrorMessage.value = err
@@ -526,11 +526,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _brokerSwitchStatus.value = "m.Stock Feed Connected"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
-                repository.addNotification("Broker Connected", "Connected to m.Stock (Mirae Asset) successfully", "SUCCESS")
-                telegramService.sendFormattedEvent(
-                    "MSTOCK_CONN_${clientCode}",
-                    "<b>🟢 BROKER CONNECTED</b>\n\nBroker: <b>m.Stock (Mirae Asset)</b>\nClient Code: <code>${clientCode}</code>\nStatus: <b>Active Secondary Market Feed Session</b>"
-                )
+                alertService.notifyBrokerConnected("m.Stock", account = clientCode)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "m.Stock login failed. Please verify credentials."
                 _authErrorMessage.value = err
@@ -561,7 +557,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _brokerSwitchStatus.value = "Broker Connected • TradeSmart"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
-                repository.addNotification("Broker Connected", "Connected to TradeSmart successfully", "SUCCESS")
+                alertService.notifyBrokerConnected("TradeSmart", account = clientId)
             } else {
                 _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Failed to connect TradeSmart."
             }
@@ -574,7 +570,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val res = brokerAuthManager.reconnectBroker(brokerName)
             _isSessionRestoring.value = false
             if (res.isSuccess && res.getOrThrow()) {
-                repository.addNotification("Broker Reconnected", "$brokerName session refreshed successfully", "SUCCESS")
+                alertService.notifyBrokerConnected(brokerName)
             } else {
                 _authErrorMessage.value = "Failed to refresh $brokerName session. Re-authentication required."
                 openConnectDialog(brokerName)
@@ -585,7 +581,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnectBroker(brokerName: String) {
         viewModelScope.launch {
             brokerAuthManager.disconnectBroker(brokerName)
-            repository.addNotification("Broker Disconnected", "$brokerName disconnected (credentials preserved)", "INFO")
+            alertService.notifyBrokerDisconnected(brokerName)
         }
     }
 
@@ -955,13 +951,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (notif.notifyOrderUpdates) {
                     repository.addNotification("Order Submitted", "Order ID: $realOrderId\n$side $qty of $symbol @ ₹$price", type = "SUCCESS")
                 }
-                telegramService.sendFormattedEvent(
-                    "ORDER_${realOrderId}",
-                    "<b>🟢 REAL DHAN ORDER PLACED</b>\n\nOrder ID: <code>$realOrderId</code>\nSymbol: <b>$symbol</b>\nSide: <b>$side</b>\nQty: $qty\nType: $orderType\nPrice: ₹$price\nStatus: <b>PENDING</b>\n\n#DhanExecution"
+                alertService.notifyOrderExecuted(
+                    symbol = symbol,
+                    contract = symbol,
+                    side = side,
+                    price = String.format(Locale.US, "%.2f", price),
+                    quantity = qty.toString(),
+                    orderId = realOrderId,
+                    broker = sessionManager.activeBroker
                 )
                 refreshBrokerData()
             } catch (e: Exception) {
-                _apiError.value = "Order Placement Failed: ${e.message}"
+                val errorMsg = e.message ?: "Order Placement Failed"
+                _apiError.value = errorMsg
+                alertService.notifyOrderRejected(
+                    symbol = symbol,
+                    contract = symbol,
+                    side = side,
+                    quantity = qty.toString(),
+                    rejectionReason = errorMsg,
+                    orderId = "REJ_${System.currentTimeMillis()}",
+                    broker = sessionManager.activeBroker
+                )
             } finally {
                 _isPlacingOrder.value = false
             }

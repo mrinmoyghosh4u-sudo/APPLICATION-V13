@@ -251,51 +251,154 @@ class TelegramService(private val sessionManager: SessionManager) {
         symbol: String,
         details: String
     ): TelegramApiResponseInfo? {
-        val eventId = "${alertType}_${symbol}_${details.hashCode()}"
+        val eventId = "${alertType}_${symbol}_${System.currentTimeMillis()}"
         val formatted = when (alertType) {
-            "BUY Signal", "BUY CE Signal" -> {
-                TelegramMessageFormatter.formatAiSignal(
-                    actionType = "BUY CE",
-                    index = symbol,
-                    strike = "$symbol 24850 CE",
-                    expiry = "WEEKLY",
-                    entry = "150.00", sl = "120.00", t1 = "180.00", t2 = "210.00", t3 = "240.00", t4 = "270.00",
-                    trailingSl = "135.00", timeframe = "5 MIN", marketBias = "BULLISH",
-                    confirmations = listOf("EMA", "VWAP", "RSI", "Supertrend", "OI", "Volume"), confidence = 88
+            "BUY Signal", "BUY CE Signal", "AI BUY CE Signal" -> {
+                com.example.util.alert.TelegramFormatter.formatAiBuyCe(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    sl = "95.00",
+                    t1 = "145.00",
+                    t2 = "165.00",
+                    t3 = "190.00",
+                    t4 = "220.00",
+                    confidence = 92
                 )
             }
-            "BUY PE Signal" -> {
-                TelegramMessageFormatter.formatAiSignal(
-                    actionType = "BUY PE",
-                    index = symbol,
-                    strike = "$symbol 52400 PE",
-                    expiry = "WEEKLY",
-                    entry = "210.00", sl = "175.00", t1 = "240.00", t2 = "270.00", t3 = "300.00", t4 = "340.00",
-                    trailingSl = "190.00", timeframe = "5 MIN", marketBias = "BEARISH",
-                    confirmations = listOf("EMA", "VWAP", "RSI", "Supertrend", "OI", "Volume"), confidence = 82
+            "BUY PE Signal", "AI BUY PE Signal" -> {
+                com.example.util.alert.TelegramFormatter.formatAiBuyPe(
+                    symbol = symbol,
+                    contract = "$symbol 52400 PE",
+                    entry = "210.00",
+                    sl = "175.00",
+                    t1 = "240.00",
+                    t2 = "270.00",
+                    t3 = "300.00",
+                    t4 = "340.00",
+                    confidence = 88
+                )
+            }
+            "Entry / Position", "Entry / Position Opened", "Position Opened" -> {
+                com.example.util.alert.TelegramFormatter.formatEntryPositionOpened(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    quantity = "65",
+                    sl = "95.00",
+                    t1 = "145.00",
+                    t2 = "165.00",
+                    t3 = "190.00",
+                    t4 = "220.00"
                 )
             }
             "Order Executed", "Order Placed" -> {
-                TelegramMessageFormatter.formatLiveOrderPlaced(
-                    broker = "Dhan", actionType = "BUY CE", index = symbol, strike = symbol, expiry = "WEEKLY",
-                    quantity = "65", orderPrice = "150.00", orderId = "ORD_${System.currentTimeMillis()}", status = "EXECUTED"
+                com.example.util.alert.TelegramFormatter.formatOrderExecuted(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    side = "BUY CE",
+                    price = "125.00",
+                    quantity = "65",
+                    orderId = "ORD_${System.currentTimeMillis().toString().takeLast(6)}"
                 )
             }
             "Order Rejected" -> {
-                TelegramMessageFormatter.formatOrderRejected("Dhan", "BUY CE", symbol, symbol, details)
+                com.example.util.alert.TelegramFormatter.formatOrderRejected(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    side = "BUY CE",
+                    quantity = "65",
+                    rejectionReason = details.ifBlank { "Insufficient Margin in Trading Account" },
+                    orderId = "ORD_${System.currentTimeMillis().toString().takeLast(6)}"
+                )
             }
-            "Stop Loss" -> {
-                TelegramMessageFormatter.formatStopLossHit("BUY CE", symbol, symbol, "150.00", "120.00", "-1950.00")
+            "Stop Loss", "Stop Loss Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatStopLossHit(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    exit = "95.00",
+                    loss = "1,950.00",
+                    returnPercent = "24.0",
+                    reason = "Stop Loss Level Triggered"
+                )
             }
-            "Target 1" -> TelegramMessageFormatter.formatTargetHit(1, "BUY CE", symbol, symbol, "150.00", "180.00", "+1950.00")
-            "Target 2" -> TelegramMessageFormatter.formatTargetHit(2, "BUY CE", symbol, symbol, "150.00", "210.00", "+3900.00")
-            "Target 3" -> TelegramMessageFormatter.formatTargetHit(3, "BUY CE", symbol, symbol, "150.00", "240.00", "+5850.00")
-            "Target 4" -> TelegramMessageFormatter.formatTargetHit(4, "BUY CE", symbol, symbol, "150.00", "270.00", "+7800.00")
-            "Trailing Stop Loss" -> TelegramMessageFormatter.formatTrailingSlHit("BUY CE", symbol, symbol, "150.00", "165.00", "+975.00")
-            "Broker Connected" -> TelegramMessageFormatter.formatDhanConnected()
-            "Session Expired" -> TelegramMessageFormatter.formatSessionExpired("Dhan")
+            "Target 1", "Target 1 Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatTargetHit(
+                    targetNumber = 1,
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    price = "145.00",
+                    profit = "1,300.00",
+                    returnPercent = "16.0"
+                )
+            }
+            "Target 2", "Target 2 Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatTargetHit(
+                    targetNumber = 2,
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    price = "165.00",
+                    profit = "2,600.00",
+                    returnPercent = "32.0"
+                )
+            }
+            "Target 3", "Target 3 Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatTargetHit(
+                    targetNumber = 3,
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    price = "190.00",
+                    profit = "4,225.00",
+                    returnPercent = "52.0"
+                )
+            }
+            "Target 4", "Target 4 Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatTargetHit(
+                    targetNumber = 4,
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    price = "220.00",
+                    profit = "6,175.00",
+                    returnPercent = "76.0"
+                )
+            }
+            "Trailing Stop Loss", "Trailing Stop Loss Hit" -> {
+                com.example.util.alert.TelegramFormatter.formatTrailingSlUpdated(
+                    symbol = symbol,
+                    contract = "$symbol 24850 CE",
+                    entry = "125.00",
+                    current = "155.00",
+                    oldSL = "95.00",
+                    newSL = "135.00",
+                    nextTarget = "165.00",
+                    pnl = "+1,950.00"
+                )
+            }
+            "Broker Connected" -> {
+                com.example.util.alert.TelegramFormatter.formatBrokerConnected("Dhan")
+            }
+            "Broker Disconnected" -> {
+                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected("Dhan")
+            }
+            "Algo Started" -> {
+                com.example.util.alert.TelegramFormatter.formatAlgoStarted("Supertrend Scalper", symbol)
+            }
+            "Algo Stopped" -> {
+                com.example.util.alert.TelegramFormatter.formatAlgoStopped("Supertrend Scalper")
+            }
+            "Risk Limit Reached" -> {
+                com.example.util.alert.TelegramFormatter.formatRiskLimitReached("-10,000.00", "10,000.00")
+            }
+            "Session Expired" -> {
+                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected("Dhan")
+            }
             else -> {
-                TelegramMessageFormatter.build("<b>$alertType</b>\n\nInstrument: $symbol\nDetails: $details")
+                com.example.data.network.TelegramMessageFormatter.build("<b>$alertType</b>\n\nInstrument: $symbol\nDetails: $details")
             }
         }
         return sendFormattedEvent(eventId, formatted)

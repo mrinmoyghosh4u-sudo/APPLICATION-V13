@@ -1,247 +1,106 @@
 package com.example.data.network
 
+import com.example.util.alert.TelegramFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 object TelegramMessageFormatter {
 
-    private const val HEADER = "💥KING KHAN AI TRADE💥\n   👑Trade Like a King 👑"
-    private const val FOOTER = "Thanks\nKK"
-
-    private fun currentTime(): String {
-        return SimpleDateFormat("hh:mm:ss a dd-MMM-yyyy", Locale.getDefault()).format(Date())
-    }
+    fun currentTime(): String = TelegramFormatter.getCurrentTime()
 
     fun build(body: String): String {
-        return "$HEADER\n\n$body\n\n$FOOTER"
+        return "${TelegramFormatter.APP_HEADER}\n\n$body\n\n${TelegramFormatter.APP_FOOTER}"
     }
 
-    fun formatTestMessage(): String {
-        val body = """
-            ✅ TELEGRAM CONNECTED
+    fun formatTestMessage(): String = TelegramFormatter.formatTestMessage()
 
-            Telegram notification system is working correctly.
+    fun formatDhanConnected(): String = TelegramFormatter.formatBrokerConnected("Dhan")
 
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
+    fun formatAngelConnected(): String = TelegramFormatter.formatBrokerConnected("Angel One")
 
-    fun formatDhanConnected(): String {
-        val body = """
-            🟢 DHAN CONNECTED
+    fun formatBrokerConnected(broker: String): String = TelegramFormatter.formatBrokerConnected(broker)
 
-            Broker: Dhan
-            Status: CONNECTED
+    fun formatBrokerDisconnected(broker: String, reason: String = "Session Disconnected"): String = 
+        TelegramFormatter.formatBrokerDisconnected(broker)
 
-            Trading Mode: OPTIONS BUYER ONLY
+    fun formatSessionExpired(broker: String): String = 
+        TelegramFormatter.formatBrokerDisconnected(broker)
 
-            ✅ BUY CE
-            ✅ BUY PE
+    fun formatAlgoStarted(strategyName: String, index: String, timeframe: String = "", mode: String = ""): String =
+        TelegramFormatter.formatAlgoStarted(strategyName, index)
 
-            Market Data: CONNECTED
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatAngelConnected(): String {
-        val body = """
-            🟢 ANGEL ONE CONNECTED
-
-            Broker: Angel One
-            Status: CONNECTED
-
-            Trading Mode: OPTIONS BUYER ONLY
-
-            ✅ BUY CE
-            ✅ BUY PE
-
-            Market Data: CONNECTED
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatBrokerDisconnected(broker: String, reason: String): String {
-        val body = """
-            🔴 BROKER DISCONNECTED
-
-            Broker: $broker
-            Status: DISCONNECTED
-
-            Reason: $reason
-
-            Algo Status: STOPPED
-            New Trading: DISABLED
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatSessionExpired(broker: String): String {
-        val body = """
-            ⚠️ BROKER SESSION EXPIRED
-
-            Broker: $broker
-
-            Status: SESSION EXPIRED
-
-            New Signals: DISABLED
-            New Orders: DISABLED
-
-            Action:
-            Please reconnect the broker.
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatAlgoStarted(strategyName: String, index: String, timeframe: String, mode: String): String {
-        val body = """
-            🟢 ALGO STARTED
-
-            Strategy: $strategyName
-            Index: $index
-            Timeframe: $timeframe
-
-            Mode: $mode
-
-            Options Buyer Only:
-
-            ✅ BUY CE
-            ✅ BUY PE
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatAlgoStopped(strategyName: String, reason: String): String {
-        val body = """
-            🛑 ALGO STOPPED
-
-            Strategy: $strategyName
-
-            New Signals: DISABLED
-            New Orders: DISABLED
-
-            Reason:
-            $reason
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
+    fun formatAlgoStopped(strategyName: String, reason: String = ""): String =
+        TelegramFormatter.formatAlgoStopped(strategyName)
 
     fun formatAiSignal(
         actionType: String,
         index: String,
         strike: String,
-        expiry: String,
+        expiry: String = "WEEKLY",
         entry: String,
         sl: String,
         t1: String,
         t2: String,
         t3: String,
         t4: String,
-        trailingSl: String,
-        timeframe: String,
-        marketBias: String,
-        confirmations: List<String>,
-        confidence: Int
+        trailingSl: String = "",
+        timeframe: String = "5 MIN",
+        marketBias: String = "BULLISH",
+        confirmations: List<String> = emptyList(),
+        confidence: Int = 85
     ): String {
-        val icon = if (actionType.contains("PE")) "🔴" else "🟢"
-        val formattedConfirmations = if (confirmations.isNotEmpty()) {
-            confirmations.joinToString("\n") { "✅ $it" }
+        return if (actionType.contains("PE")) {
+            TelegramFormatter.formatAiBuyPe(
+                symbol = index,
+                contract = strike,
+                entry = entry,
+                sl = sl,
+                t1 = t1,
+                t2 = t2,
+                t3 = t3,
+                t4 = t4,
+                confidence = confidence
+            )
         } else {
-            "✅ EMA\n✅ VWAP\n✅ RSI\n✅ Supertrend\n✅ OI\n✅ Volume"
+            TelegramFormatter.formatAiBuyCe(
+                symbol = index,
+                contract = strike,
+                entry = entry,
+                sl = sl,
+                t1 = t1,
+                t2 = t2,
+                t3 = t3,
+                t4 = t4,
+                confidence = confidence
+            )
         }
-
-        val body = """
-            🚨 AI SIGNAL
-
-            $icon $actionType
-
-            Index: $index
-            Strike: $strike
-            Expiry: $expiry
-
-            Entry: ₹$entry
-            Stop Loss: ₹$sl
-
-            Target 1: ₹$t1
-            Target 2: ₹$t2
-            Target 3: ₹$t3
-            Target 4: ₹$t4
-
-            Trailing SL: ₹$trailingSl
-
-            Timeframe: $timeframe
-            Market Bias: $marketBias
-
-            AI Confirmation:
-            $formattedConfirmations
-
-            Confidence: $confidence%
-
-            Mode: OPTIONS BUYER ONLY
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
-    }
-
-    fun formatNoTrade(index: String, marketBias: String, reason: String = "Insufficient market confirmation."): String {
-        val body = """
-            ⚪ NO TRADE
-
-            Index: $index
-
-            Reason:
-            $reason
-
-            Market Bias: $marketBias
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
     }
 
     fun formatPaperTradeOpened(
         actionType: String,
         index: String,
         strike: String,
-        expiry: String,
+        expiry: String = "WEEKLY",
         entryPrice: String,
         quantity: String,
         sl: String,
-        t1: String
+        t1: String,
+        t2: String = "",
+        t3: String = "",
+        t4: String = ""
     ): String {
-        val icon = if (actionType.contains("PE")) "🔴" else "🟢"
-        val body = """
-            🟡 PAPER TRADE OPENED
-
-            $icon $actionType
-
-            Index: $index
-            Strike: $strike
-            Expiry: $expiry
-
-            Entry: ₹$entryPrice
-            Quantity: $quantity
-
-            Stop Loss: ₹$sl
-            Target 1: ₹$t1
-
-            Mode: PAPER TRADING
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        return TelegramFormatter.formatEntryPositionOpened(
+            symbol = index,
+            contract = strike,
+            entry = entryPrice,
+            quantity = quantity,
+            sl = sl,
+            t1 = t1,
+            t2 = t2.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.15) },
+            t3 = t3.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.25) },
+            t4 = t4.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.35) }
+        )
     }
 
     fun formatLiveOrderPlaced(
@@ -255,28 +114,14 @@ object TelegramMessageFormatter {
         orderId: String,
         status: String
     ): String {
-        val body = """
-            🟢 ORDER PLACED
-
-            Broker: $broker
-
-            $actionType
-
-            Index: $index
-            Strike: $strike
-            Expiry: $expiry
-
-            Quantity: $quantity
-            Order Price: ₹$orderPrice
-
-            Order ID: $orderId
-            Status: $status
-
-            Mode: AUTO TRADING
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        return TelegramFormatter.formatOrderExecuted(
+            symbol = index,
+            contract = strike,
+            side = actionType,
+            price = orderPrice,
+            quantity = quantity,
+            orderId = orderId
+        )
     }
 
     fun formatOrderRejected(
@@ -284,24 +129,17 @@ object TelegramMessageFormatter {
         actionType: String,
         index: String,
         strike: String,
-        reason: String
+        reason: String,
+        orderId: String = "ORD_${System.currentTimeMillis()}"
     ): String {
-        val body = """
-            🔴 ORDER REJECTED
-
-            Broker: $broker
-
-            $actionType
-
-            Index: $index
-            Strike: $strike
-
-            Reason:
-            $reason
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        return TelegramFormatter.formatOrderRejected(
+            symbol = index,
+            contract = strike,
+            side = actionType,
+            quantity = "1 LOT",
+            rejectionReason = reason,
+            orderId = orderId
+        )
     }
 
     fun formatStopLossHit(
@@ -312,22 +150,17 @@ object TelegramMessageFormatter {
         exit: String,
         pnl: String
     ): String {
-        val body = """
-            🛑 STOP LOSS HIT
-
-            $actionType
-
-            Index: $index
-            Strike: $strike
-
-            Entry: ₹$entry
-            Exit: ₹$exit
-
-            P&L: ₹$pnl
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        val entryVal = entry.toDoubleOrNull() ?: 100.0
+        val exitVal = exit.toDoubleOrNull() ?: 80.0
+        val retPct = String.format(Locale.getDefault(), "%.1f", ((exitVal - entryVal) / entryVal) * 100)
+        return TelegramFormatter.formatStopLossHit(
+            symbol = index,
+            contract = strike,
+            entry = entry,
+            exit = exit,
+            loss = pnl.replace("-", ""),
+            returnPercent = retPct
+        )
     }
 
     fun formatTargetHit(
@@ -339,22 +172,18 @@ object TelegramMessageFormatter {
         currentLtp: String,
         pnl: String
     ): String {
-        val body = """
-            🎯 TARGET $targetNumber HIT
-
-            $actionType
-
-            Index: $index
-            Strike: $strike
-
-            Entry: ₹$entry
-            Current LTP: ₹$currentLtp
-
-            P&L: ₹$pnl
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        val entryVal = entry.toDoubleOrNull() ?: 100.0
+        val ltpVal = currentLtp.toDoubleOrNull() ?: 120.0
+        val retPct = String.format(Locale.getDefault(), "%.1f", ((ltpVal - entryVal) / entryVal) * 100)
+        return TelegramFormatter.formatTargetHit(
+            targetNumber = targetNumber,
+            symbol = index,
+            contract = strike,
+            entry = entry,
+            price = currentLtp,
+            profit = pnl.replace("+", ""),
+            returnPercent = retPct
+        )
     }
 
     fun formatTrailingSlHit(
@@ -365,22 +194,16 @@ object TelegramMessageFormatter {
         exit: String,
         pnl: String
     ): String {
-        val body = """
-            🔄 TRAILING STOP LOSS HIT
-
-            $actionType
-
-            Index: $index
-            Strike: $strike
-
-            Entry: ₹$entry
-            Exit: ₹$exit
-
-            P&L: ₹$pnl
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        return TelegramFormatter.formatTrailingSlUpdated(
+            symbol = index,
+            contract = strike,
+            entry = entry,
+            current = exit,
+            oldSL = entry,
+            newSL = exit,
+            nextTarget = "TARGET 2",
+            pnl = pnl
+        )
     }
 
     fun formatPositionClosed(
@@ -393,47 +216,21 @@ object TelegramMessageFormatter {
         quantity: String,
         pnl: String
     ): String {
-        val body = """
-            🏁 POSITION CLOSED
-
-            $actionType
-
-            Broker: $broker
-
-            Index: $index
-            Strike: $strike
-
-            Entry: ₹$entry
-            Exit: ₹$exit
-
-            Quantity: $quantity
-
-            P&L: ₹$pnl
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        val pnlVal = pnl.toDoubleOrNull() ?: 0.0
+        return if (pnlVal >= 0) {
+            formatTargetHit(1, actionType, index, strike, entry, exit, pnl)
+        } else {
+            formatStopLossHit(actionType, index, strike, entry, exit, pnl)
+        }
     }
 
     fun formatRiskLimitReached(
         reason: String,
         dailyPnl: String
     ): String {
-        val body = """
-            🚨 RISK LIMIT REACHED
-
-            Algo: STOPPED
-
-            Reason:
-            $reason
-
-            Daily P&L: ₹$dailyPnl
-
-            New Signals: DISABLED
-            New Orders: DISABLED
-
-            Time: ${currentTime()}
-        """.trimIndent()
-        return build(body)
+        return TelegramFormatter.formatRiskLimitReached(
+            pnl = dailyPnl,
+            maxLoss = "10,000.00"
+        )
     }
 }

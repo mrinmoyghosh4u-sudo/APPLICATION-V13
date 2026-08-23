@@ -19,6 +19,7 @@ import kotlin.math.roundToInt
 
 object AlgoEngine {
     var telegramService: com.example.data.network.TelegramService? = null
+    var alertService: com.example.util.alert.AlertService? = null
     private val coroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
 
     // Engine State
@@ -198,7 +199,10 @@ object AlgoEngine {
             _engineStatusMessage.value = "ALGO ENGINE RUNNING"
             log("ENGINE", "Algo Engine STARTED with Strategy: ${_currentStrategy.value.name}", "INFO")
             coroutineScope.launch {
-                telegramService?.sendFormattedEvent(
+                alertService?.notifyAlgoStarted(
+                    strategy = _currentStrategy.value.name,
+                    symbol = _selectedIndex.value
+                ) ?: telegramService?.sendFormattedEvent(
                     "ALGO_START_${System.currentTimeMillis()}",
                     com.example.data.network.TelegramMessageFormatter.formatAlgoStarted(
                         _currentStrategy.value.name,
@@ -212,7 +216,9 @@ object AlgoEngine {
             _engineStatusMessage.value = "ALGO ENGINE STOPPED"
             log("ENGINE", "Algo Engine STOPPED by user", "WARN")
             coroutineScope.launch {
-                telegramService?.sendFormattedEvent(
+                alertService?.notifyAlgoStopped(
+                    strategy = _currentStrategy.value.name
+                ) ?: telegramService?.sendFormattedEvent(
                     "ALGO_STOP_${System.currentTimeMillis()}",
                     com.example.data.network.TelegramMessageFormatter.formatAlgoStopped(
                         _currentStrategy.value.name,
@@ -229,7 +235,9 @@ object AlgoEngine {
         _engineStatusMessage.value = "EMERGENCY STOP TRIGGERED"
         log("EMERGENCY", "EMERGENCY STOP TRIGGERED! All automated execution halted immediately.", "WARN")
         coroutineScope.launch {
-            telegramService?.sendFormattedEvent(
+            alertService?.notifyAlgoStopped(
+                strategy = "${_currentStrategy.value.name} (Emergency Stop)"
+            ) ?: telegramService?.sendFormattedEvent(
                 "ALGO_EMERGENCY_STOP_${System.currentTimeMillis()}",
                 com.example.data.network.TelegramMessageFormatter.formatAlgoStopped(
                     _currentStrategy.value.name,
@@ -479,6 +487,109 @@ object AlgoEngine {
                 val newLtp = if (currentQuoteLtp > 0.0) currentQuoteLtp else pos.currentLtp
                 val diff = newLtp - pos.entryPrice
                 val pnl = diff * pos.qty
+
+                // Evaluate Targets
+                if (newLtp >= pos.target1 && pos.target1 > 0) {
+                    coroutineScope.launch {
+                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target1 - pos.entryPrice) / pos.entryPrice) * 100) else "25.0"
+                        alertService?.notifyTargetHit(
+                            targetNumber = 1,
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            price = String.format(Locale.US, "%.2f", pos.target1),
+                            profit = String.format(Locale.US, "%.2f", (pos.target1 - pos.entryPrice) * pos.qty),
+                            returnPercent = returnPct,
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+                if (newLtp >= pos.target2 && pos.target2 > 0) {
+                    coroutineScope.launch {
+                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target2 - pos.entryPrice) / pos.entryPrice) * 100) else "50.0"
+                        alertService?.notifyTargetHit(
+                            targetNumber = 2,
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            price = String.format(Locale.US, "%.2f", pos.target2),
+                            profit = String.format(Locale.US, "%.2f", (pos.target2 - pos.entryPrice) * pos.qty),
+                            returnPercent = returnPct,
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+                if (pos.target3 > 0 && newLtp >= pos.target3) {
+                    coroutineScope.launch {
+                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target3 - pos.entryPrice) / pos.entryPrice) * 100) else "75.0"
+                        alertService?.notifyTargetHit(
+                            targetNumber = 3,
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            price = String.format(Locale.US, "%.2f", pos.target3),
+                            profit = String.format(Locale.US, "%.2f", (pos.target3 - pos.entryPrice) * pos.qty),
+                            returnPercent = returnPct,
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+                if (pos.target4 > 0 && newLtp >= pos.target4) {
+                    coroutineScope.launch {
+                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target4 - pos.entryPrice) / pos.entryPrice) * 100) else "100.0"
+                        alertService?.notifyTargetHit(
+                            targetNumber = 4,
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            price = String.format(Locale.US, "%.2f", pos.target4),
+                            profit = String.format(Locale.US, "%.2f", (pos.target4 - pos.entryPrice) * pos.qty),
+                            returnPercent = returnPct,
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+
+                // Evaluate Stop Loss
+                if (newLtp <= pos.sl && pos.sl > 0) {
+                    coroutineScope.launch {
+                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.entryPrice - pos.sl) / pos.entryPrice) * 100) else "25.0"
+                        alertService?.notifyStopLossHit(
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            exit = String.format(Locale.US, "%.2f", pos.sl),
+                            loss = String.format(Locale.US, "%.2f", abs((pos.entryPrice - pos.sl) * pos.qty)),
+                            returnPercent = returnPct,
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+
+                // Evaluate Trailing SL
+                val tsl = pos.trailingSl
+                if (tsl != null && tsl > 0 && newLtp <= tsl && newLtp > pos.sl) {
+                    coroutineScope.launch {
+                        alertService?.notifyTrailingSlUpdated(
+                            symbol = _selectedIndex.value,
+                            contract = pos.symbol,
+                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
+                            current = String.format(Locale.US, "%.2f", newLtp),
+                            oldSL = String.format(Locale.US, "%.2f", pos.sl),
+                            newSL = String.format(Locale.US, "%.2f", tsl),
+                            nextTarget = String.format(Locale.US, "%.2f", pos.target1),
+                            pnl = if (pnl >= 0) "+${String.format(Locale.US, "%.2f", pnl)}" else String.format(Locale.US, "%.2f", pnl),
+                            orderId = pos.id,
+                            positionId = pos.id
+                        )
+                    }
+                }
+
                 pos.copy(currentLtp = newLtp, pnl = pnl)
             } else pos
         }
@@ -511,19 +622,54 @@ object AlgoEngine {
         _paperTradeHistory.value = listOf(historyItem) + _paperTradeHistory.value
 
         coroutineScope.launch {
-            telegramService?.sendFormattedEvent(
-                "POS_CLOSED_${target.id}",
-                com.example.data.network.TelegramMessageFormatter.formatPositionClosed(
-                    broker = if (_tradingMode.value == "PAPER TRADING") "PAPER TRADING" else "Dhan",
-                    actionType = if (target.type == "PE") "BUY PE" else "BUY CE",
-                    index = _selectedIndex.value,
-                    strike = target.symbol,
-                    entry = String.format("%.2f", target.entryPrice),
-                    exit = String.format("%.2f", target.currentLtp),
-                    quantity = target.qty.toString(),
-                    pnl = String.format("%.2f", target.pnl)
+            if (target.pnl < 0) {
+                alertService?.notifyStopLossHit(
+                    symbol = _selectedIndex.value,
+                    contract = target.symbol,
+                    entry = String.format(Locale.US, "%.2f", target.entryPrice),
+                    exit = String.format(Locale.US, "%.2f", target.currentLtp),
+                    loss = String.format(Locale.US, "%.2f", abs(target.pnl)),
+                    returnPercent = String.format(Locale.US, "%.1f", abs(target.pnl / (target.entryPrice * target.qty) * 100)),
+                    orderId = target.id,
+                    positionId = target.id
+                ) ?: telegramService?.sendFormattedEvent(
+                    "POS_CLOSED_${target.id}",
+                    com.example.data.network.TelegramMessageFormatter.formatPositionClosed(
+                        broker = if (_tradingMode.value == "PAPER TRADING") "PAPER TRADING" else "Dhan",
+                        actionType = if (target.type == "PE") "BUY PE" else "BUY CE",
+                        index = _selectedIndex.value,
+                        strike = target.symbol,
+                        entry = String.format("%.2f", target.entryPrice),
+                        exit = String.format("%.2f", target.currentLtp),
+                        quantity = target.qty.toString(),
+                        pnl = String.format("%.2f", target.pnl)
+                    )
                 )
-            )
+            } else {
+                alertService?.notifyTargetHit(
+                    targetNumber = 1,
+                    symbol = _selectedIndex.value,
+                    contract = target.symbol,
+                    entry = String.format(Locale.US, "%.2f", target.entryPrice),
+                    price = String.format(Locale.US, "%.2f", target.currentLtp),
+                    profit = String.format(Locale.US, "%.2f", target.pnl),
+                    returnPercent = String.format(Locale.US, "%.1f", (target.pnl / (target.entryPrice * target.qty) * 100)),
+                    orderId = target.id,
+                    positionId = target.id
+                ) ?: telegramService?.sendFormattedEvent(
+                    "POS_CLOSED_${target.id}",
+                    com.example.data.network.TelegramMessageFormatter.formatPositionClosed(
+                        broker = if (_tradingMode.value == "PAPER TRADING") "PAPER TRADING" else "Dhan",
+                        actionType = if (target.type == "PE") "BUY PE" else "BUY CE",
+                        index = _selectedIndex.value,
+                        strike = target.symbol,
+                        entry = String.format("%.2f", target.entryPrice),
+                        exit = String.format("%.2f", target.currentLtp),
+                        quantity = target.qty.toString(),
+                        pnl = String.format("%.2f", target.pnl)
+                    )
+                )
+            }
         }
         log("POSITION", "Closed position: ${target.symbol} | P&L: ₹${String.format("%.2f", target.pnl)}", if (target.pnl >= 0) "INFO" else "WARN")
     }
@@ -561,7 +707,19 @@ object AlgoEngine {
         log("ORDER", "Paper Order Placed: ${signal.actionType} ${signal.symbol} @ ₹${signal.ltp} (Qty: $lotSize)", "EXECUTION")
 
         coroutineScope.launch {
-            telegramService?.sendFormattedEvent(
+            alertService?.notifyEntryPositionOpened(
+                symbol = _selectedIndex.value,
+                contract = signal.symbol,
+                entry = String.format(Locale.US, "%.2f", signal.ltp),
+                quantity = lotSize.toString(),
+                sl = String.format(Locale.US, "%.2f", signal.stopLoss),
+                t1 = String.format(Locale.US, "%.2f", signal.target1),
+                t2 = String.format(Locale.US, "%.2f", signal.target2),
+                t3 = String.format(Locale.US, "%.2f", signal.target2 * 1.15),
+                t4 = String.format(Locale.US, "%.2f", signal.target2 * 1.30),
+                orderId = pos.id,
+                positionId = pos.id
+            ) ?: telegramService?.sendFormattedEvent(
                 "POS_OPEN_${pos.id}",
                 com.example.data.network.TelegramMessageFormatter.formatPaperTradeOpened(
                     actionType = signal.actionType,

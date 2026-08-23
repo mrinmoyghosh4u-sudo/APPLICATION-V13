@@ -430,13 +430,13 @@ fun TelegramSettingsScreen(
             GoldCard(borderColor = DarkCardBorder) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Configured Alert Triggers (10 Categories)",
+                        text = "Configured Alert Triggers (All 16 Categories)",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = SecondaryGold
                     )
                     Text(
-                        text = "Tap any alert type to send a real test trigger to your Telegram chat",
+                        text = "Tap any alert type to send a real test trigger to your Telegram chat/channel",
                         fontSize = 10.sp,
                         color = TextGray
                     )
@@ -444,16 +444,22 @@ fun TelegramSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     val alertCategories = listOf(
-                        Triple("BUY CE Signal", "🟢", "NIFTY 24850 CE Buy Signal Triggered @ ₹145"),
-                        Triple("BUY PE Signal", "🔴", "BANKNIFTY 52400 PE Buy Signal Triggered @ ₹210"),
-                        Triple("Order Placed", "🟢", "BUY 65 x NIFTY 24850 CE @ ₹145. Order Executed"),
+                        Triple("Broker Connected", "🟢", "Dhan Broker Session Connected"),
+                        Triple("Broker Disconnected", "🔴", "Dhan Broker Session Disconnected"),
+                        Triple("AI BUY CE Signal", "🟢", "NIFTY 24850 CE Buy Signal Triggered @ ₹125"),
+                        Triple("AI BUY PE Signal", "🔴", "BANKNIFTY 52400 PE Buy Signal Triggered @ ₹210"),
+                        Triple("Entry / Position Opened", "⚡", "BUY 65 x NIFTY 24850 CE @ ₹125.00 Entry Executed"),
+                        Triple("Stop Loss Hit", "🛑", "NIFTY 24850 CE Stop Loss Hit @ ₹95.00"),
+                        Triple("Target 1 Hit", "🎯", "NIFTY Target 1 Achieved @ ₹145.00"),
+                        Triple("Target 2 Hit", "🎯", "NIFTY Target 2 Achieved @ ₹165.00"),
+                        Triple("Target 3 Hit", "🚀", "NIFTY Target 3 Achieved @ ₹190.00"),
+                        Triple("Target 4 Hit", "🏆", "NIFTY Target 4 Achieved @ ₹220.00"),
+                        Triple("Trailing Stop Loss Hit", "📈", "NIFTY Trailing SL Updated @ ₹135.00"),
+                        Triple("Order Executed", "✅", "Order Executed: BUY 65 x NIFTY 24850 CE @ ₹125.00"),
                         Triple("Order Rejected", "❌", "Order Rejected: Insufficient Margin"),
-                        Triple("Stop Loss", "🛑", "NIFTY 24850 CE Stop Loss Hit @ ₹120. Position Closed"),
-                        Triple("Target 1", "🎯", "NIFTY Target 1 Achieved @ ₹180"),
-                        Triple("Target 2", "🎯", "BANKNIFTY Target 2 Achieved @ ₹210"),
-                        Triple("Target 3", "🚀", "SENSEX Target 3 Achieved @ ₹520"),
-                        Triple("Target 4", "🎯", "NIFTY Target 4 Achieved @ ₹270"),
-                        Triple("Trailing Stop Loss", "📈", "NIFTY Trailing SL Hit @ ₹165. Position Closed")
+                        Triple("Algo Started", "🤖", "Algo Engine Active: KK BUY-ONLY AI on NIFTY 50"),
+                        Triple("Algo Stopped", "⏹️", "Algo Engine Stopped by User"),
+                        Triple("Risk Limit Reached", "🚨", "Daily Max Loss Limit Reached: Trading Halted")
                     )
 
                     FlowRow(

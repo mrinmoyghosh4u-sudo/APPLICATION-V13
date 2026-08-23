@@ -22,6 +22,8 @@ data class AlgoPosition(
     val sl: Double,
     val target1: Double,
     val target2: Double,
+    val target3: Double = target2 * 1.15,
+    val target4: Double = target2 * 1.30,
     val trailingSl: Double? = null,
     val currentLtp: Double,
     val pnl: Double,
