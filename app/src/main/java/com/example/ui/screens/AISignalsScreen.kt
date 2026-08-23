@@ -145,10 +145,13 @@ fun AISignalsScreen(
                     CrownLogo(size = 36.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("KING KHAN ", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                            Text("AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
-                        }
+                        Text(
+                            text = "KING KHAN AI TRADE",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
                         com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }

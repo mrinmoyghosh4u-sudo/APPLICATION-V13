@@ -93,6 +93,9 @@ fun ProfileScreen(
 
     // Stat calculations strictly from Dhan / Broker Orders
     val isDhanConnected = userProfile.isDhanConnected || brokerStatuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isAngelConnected = userProfile.isAngelConnected || brokerStatuses["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isMStockConnected = brokerStatuses["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isAnyBrokerConnected = isDhanConnected || isAngelConnected || isMStockConnected || (userProfile.connectedBroker.isNotBlank() && (userProfile.isDhanConnected || userProfile.isAngelConnected))
 
     val completedOrders = remember(orders) {
         orders.filter { order ->
@@ -184,13 +187,16 @@ fun ProfileScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CrownLogo(size = 38.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
+                    CrownLogo(size = 36.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("KING KHAN ", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                            Text("AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
-                        }
+                        Text(
+                            text = "KING KHAN AI TRADE",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
                         com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
@@ -297,78 +303,44 @@ fun ProfileScreen(
                             }
                         }
 
-                        // VIP Tier Badge
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF2E2207),
-                            border = BorderStroke(1.dp, PrimaryGold)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        // Dynamic Broker Live Status Badge
+                        if (isAnyBrokerConnected) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF0D2517),
+                                border = BorderStroke(1.dp, ProfitGreen)
                             ) {
-                                Text("👑 VIP PRO", fontSize = 10.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .background(ProfitGreen, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("LIVE", fontSize = 10.sp, fontWeight = FontWeight.Black, color = ProfitGreen)
+                                }
                             }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Safe Guard Badges
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF0D2517),
-                            border = BorderStroke(0.5.dp, ProfitGreen.copy(alpha = 0.5f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 4.dp, horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF1E232F),
+                                border = BorderStroke(1.dp, TextGray.copy(alpha = 0.5f))
                             ) {
-                                Icon(Icons.Default.Shield, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("BUY-ONLY GUARD", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF102131),
-                            border = BorderStroke(0.5.dp, Color(0xFF29B6F6).copy(alpha = 0.5f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 4.dp, horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(Icons.Default.AccessTime, contentDescription = null, tint = Color(0xFF29B6F6), modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("AUTO SQ-OFF 03:15 PM", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF2A1C08),
-                            border = BorderStroke(0.5.dp, PrimaryGold.copy(alpha = 0.5f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 4.dp, horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(Icons.Default.Bolt, contentDescription = null, tint = PrimaryGold, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("AI ENGINE V2", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(TextGray, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("OFFLINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextGray)
+                                }
                             }
                         }
                     }
@@ -625,7 +597,7 @@ fun ProfileScreen(
 
                 // 1. Dhan Row
                 val dhanInfo = brokerStatuses["Dhan"]
-                val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.CONNECTED
+                val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Dhan",
                     subtitle = "Primary Order Execution Engine",
@@ -642,7 +614,7 @@ fun ProfileScreen(
 
                 // 2. Angel One Row
                 val angelInfo = brokerStatuses["Angel One"]
-                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.CONNECTED
+                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Angel One",
                     subtitle = "Primary Live Market Data Feed (SmartAPI)",
@@ -960,17 +932,17 @@ fun ProfileScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
-                            icon = Icons.Default.Info,
-                            title = "ABOUT KING KHAN",
-                            subtitle = "v2.4.0-PRO Architecture",
-                            onClick = { showAboutDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                        SettingMenuGridCard(
                             icon = Icons.Default.SystemUpdate,
                             title = "CHECK FOR UPDATES",
                             subtitle = "Latest stable version",
                             onClick = { showUpdateDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingMenuGridCard(
+                            icon = Icons.Default.Info,
+                            title = "ABOUT KING KHAN",
+                            subtitle = "v${com.example.BuildConfig.VERSION_NAME} Official",
+                            onClick = { showAboutDialog = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -979,39 +951,55 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 7. SAFE LOGOUT CARD
+            // 7. SAFE LOGOUT CARD (CENTERED)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showLogoutConfirmDialog = true },
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = Color(0xFF1F1214),
                 border = BorderStroke(1.dp, Color(0xFF7F1D1D))
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 14.dp, horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .background(Color(0xFF450A0A), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = LossRed, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = null,
+                                tint = LossRed,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("LOG OUT OF ACCOUNT", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFCA5A5))
-                            Text("Safely terminate local encrypted broker sessions", fontSize = 10.sp, color = TextGray)
-                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "LOG OUT OF ACCOUNT",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFCA5A5),
+                            letterSpacing = 0.5.sp
+                        )
                     }
-
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "Safely terminate local encrypted broker sessions",
+                        fontSize = 10.sp,
+                        color = TextGray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
 
@@ -1582,11 +1570,11 @@ private fun BrokerStatusRow(
     onRemoveAccount: (() -> Unit)? = null
 ) {
     val statusText = when (status) {
-        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Connected (Active)"
-        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟢 Standby (Session Valid)"
+        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 LIVE"
+        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟢 LIVE (STANDBY)"
         com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> "🟠 Re-auth Required"
-        com.example.data.network.BrokerAuthStatus.OFFLINE -> "⚪ Not Configured"
-        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Configured"
+        com.example.data.network.BrokerAuthStatus.OFFLINE -> "⚪ Not Connected"
+        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Connected"
         com.example.data.network.BrokerAuthStatus.ERROR -> "⚠️ Auth Error"
     }
 

@@ -69,28 +69,18 @@ fun OptionChainScreen(
                     CrownLogo(size = 36.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text("KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                        Text("Trade Like a King \uD83D\uDC51", fontSize = 10.sp, color = SecondaryGold)
+                        Text(
+                            text = "KING KHAN AI TRADE",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.example.ui.components.MarketDataStatusIndicator(
-                        source = marketDataSource,
-                        lastUpdatedTime = marketDataLastUpdated,
-                        isMarketOpen = com.example.util.MarketStatusUtil.getDetailedMarketStatus(selectedOptionIndex).isOpen
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(onClick = onOpenNotificationCenter) {
-                        Box {
-                            Icon(Icons.Outlined.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(ProfitGreen, CircleShape)
-                                    .align(Alignment.TopEnd)
-                            )
-                        }
-                    }
+                IconButton(onClick = onOpenNotificationCenter) {
+                    Icon(Icons.Outlined.Notifications, contentDescription = "Alerts", tint = SecondaryGold)
                 }
             }
 

@@ -23,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -127,59 +128,36 @@ fun AlgoScreen(
                     }
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val isLive = marketSource.contains("LIVE")
-                        val statusColor = if (isLive) ProfitGreen else SecondaryGold
-                        Surface(
-                            color = statusColor.copy(alpha = 0.15f),
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
+                // Notification Icon with dynamic badge ONLY when unreadCount > 0
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onOpenNotificationCenter() }
+                        .padding(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = "Notifications",
+                        tint = SecondaryGold,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    if (unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-2).dp)
+                                .size(16.dp)
+                                .background(LossRed, CircleShape),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.size(6.dp).background(statusColor, CircleShape))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    marketSource.ifBlank { "REAL MARKET DATA UNAVAILABLE" },
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = statusColor
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(onClick = onOpenNotificationCenter, modifier = Modifier.size(28.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Outlined.Notifications,
-                                    contentDescription = "Alerts",
-                                    tint = SecondaryGold,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                if (unreadCount > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .offset(x = 3.dp, y = (-2).dp)
-                                            .size(14.dp)
-                                            .background(LossRed, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                                            color = Color.White,
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
+                            Text(
+                                text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
-                    Text("Updated: ${if (marketLastUpdated.isNotBlank()) marketLastUpdated else "Not Updated"}", fontSize = 9.sp, color = TextGray)
                 }
             }
 

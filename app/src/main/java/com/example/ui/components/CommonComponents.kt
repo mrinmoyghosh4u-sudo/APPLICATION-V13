@@ -74,7 +74,7 @@ fun KingKhanTagline(
 fun KingKhanHeaderBrand(
     modifier: Modifier = Modifier,
     logoSize: Dp = 36.dp,
-    titleSize: androidx.compose.ui.unit.TextUnit = 15.sp,
+    titleSize: androidx.compose.ui.unit.TextUnit = 16.sp,
     taglineSize: androidx.compose.ui.unit.TextUnit = 11.sp,
     showLogo: Boolean = true
 ) {

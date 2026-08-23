@@ -179,12 +179,12 @@ private fun HomeHeaderSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CrownLogo(size = 38.dp)
-            Spacer(modifier = Modifier.width(10.dp))
+            CrownLogo(size = 36.dp)
+            Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(
                     text = "KING KHAN AI TRADE",
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.White,
                     letterSpacing = 0.5.sp

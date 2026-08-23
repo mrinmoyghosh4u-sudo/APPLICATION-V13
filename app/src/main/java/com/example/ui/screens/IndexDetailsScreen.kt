@@ -92,8 +92,14 @@ fun IndexDetailsScreen(
                     CrownLogo(size = 36.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text("KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TextWhite)
-                        com.example.ui.components.KingKhanTagline(fontSize = 10.sp)
+                        Text(
+                            text = "KING KHAN AI TRADE",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,16 +185,6 @@ fun IndexDetailsScreen(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Status Banner
-                MarketDataStatusIndicator(
-                    source = marketDataSource,
-                    lastUpdatedTime = marketDataLastUpdated,
-                    isMarketOpen = isMarketOpen,
-                    onRefresh = { viewModel.refreshMarketData() }
-                )
             }
             
             Spacer(modifier = Modifier.height(14.dp))

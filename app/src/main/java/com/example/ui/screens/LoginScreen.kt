@@ -94,7 +94,7 @@ fun LoginScreen(
                 
                 Text(
                     text = "KING KHAN AI TRADE",
-                    color = PrimaryGold,
+                    color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp,

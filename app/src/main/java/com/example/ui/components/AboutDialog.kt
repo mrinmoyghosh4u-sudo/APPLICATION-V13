@@ -65,7 +65,7 @@ fun AboutDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text("ABOUT KING KHAN AI TRADE", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                        Text("King Khan AI Algorithmic Platform", fontSize = 11.sp, color = SecondaryGold)
+                        com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
                     }
                 }
 
@@ -75,7 +75,7 @@ fun AboutDialog(
 
                 AboutRowItem("Version", "v$versionName", isHighlight = false)
                 AboutRowItem("Trading Mode", "OPTIONS BUYER ONLY", isHighlight = true)
-                AboutRowItem("Supported Brokers", "Dhan, Angel One", isHighlight = true)
+                AboutRowItem("Supported Brokers", "Dhan", isHighlight = true)
                 AboutRowItem("Supported Markets", "NSE, BSE, MCX", isHighlight = true)
                 AboutRowItem("Developer", "KING KHAN AI TRADE", isHighlight = true)
 

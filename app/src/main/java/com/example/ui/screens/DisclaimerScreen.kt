@@ -73,9 +73,9 @@ fun DisclaimerScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "KING KHAN AI TRADE",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PrimaryGold,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
                     letterSpacing = 1.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
