@@ -337,13 +337,13 @@ class SessionManager(context: Context) {
     }
 
     var isDhanConnected: Boolean
-        get() = prefs.getBoolean("is_dhan_connected", !dhanAccessToken.isNullOrBlank())
+        get() = prefs.getBoolean("is_dhan_connected", false) && !dhanAccessToken.isNullOrBlank()
         set(value) {
             prefs.edit().putBoolean("is_dhan_connected", value).commit()
         }
 
     var isAngelConnected: Boolean
-        get() = prefs.getBoolean("is_angel_connected", !angelJwtToken.isNullOrBlank())
+        get() = prefs.getBoolean("is_angel_connected", false) && !angelJwtToken.isNullOrBlank()
         set(value) {
             prefs.edit().putBoolean("is_angel_connected", value).commit()
         }

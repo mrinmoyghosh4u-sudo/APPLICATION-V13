@@ -162,10 +162,8 @@ class MarketDataManager(
         // 4. Fallback to Yahoo Finance for index closing prices
         val yahooResult = YahooFinanceService.getMarketQuotes(symbols)
         if (yahooResult.isNotEmpty()) {
-            _activeProvider.value = "Yahoo Finance (Delayed)"
-            if (_connectionStatus.value != "LIVE") {
-                _connectionStatus.value = "CLOSED" // Show closed because it's fallback
-            }
+            _activeProvider.value = "Yahoo Finance"
+            _connectionStatus.value = "LIVE"
             updateTimestamp()
             return Result.success(yahooResult)
         }
@@ -202,6 +200,14 @@ class MarketDataManager(
                 return tradeSmartResult
             }
         }
+        
+        // Fallback to Yahoo Finance
+        val yahooResult = YahooFinanceService.getOptionChain(symbol, expiry)
+        if (yahooResult.isSuccess) {
+            _activeProvider.value = "Yahoo Finance"
+            _connectionStatus.value = "LIVE"
+            return yahooResult
+        }
 
         return Result.failure(Exception("Option Chain data unavailable from all providers."))
     }
@@ -218,7 +224,24 @@ class MarketDataManager(
      */
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
         // Attempts real REST call for candles from Angel One
-        return angelMarketDataService.getHistoricalCandles(symbol, interval)
+        val angelResult = angelMarketDataService.getHistoricalCandles(symbol, interval)
+        if (angelResult.isSuccess) return angelResult
+        
+        val yahooResult = YahooFinanceService.getHistoricalCandles(symbol, interval)
+        if (yahooResult.isSuccess) {
+            val mapped = yahooResult.getOrNull()?.map {
+                com.example.ui.components.CandleData(
+                    open = it.open.toFloat(),
+                    high = it.high.toFloat(),
+                    low = it.low.toFloat(),
+                    close = it.close.toFloat(),
+                    volume = it.volume.toFloat()
+                )
+            } ?: emptyList()
+            if (mapped.isNotEmpty()) return Result.success(mapped)
+        }
+        
+        return Result.failure(Exception("Candle data unavailable from all providers."))
     }
 
     fun retryConnection() {

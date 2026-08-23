@@ -338,7 +338,20 @@ class MarketDataEngine(
                 }
             }
             healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
+            healthManager.logFailover(ProviderHealthManager.PROVIDER_MSTOCK, ProviderHealthManager.PROVIDER_YAHOO)
         }
+
+        // Priority 3: Yahoo Finance
+        val startYahoo = System.currentTimeMillis()
+        val yahooRes = YahooFinanceService.getOptionChain(symbol, expiry)
+        if (yahooRes.isSuccess && yahooRes.getOrDefault(emptyList()).isNotEmpty()) {
+            val validStrikes = yahooRes.getOrDefault(emptyList()).filter { DataValidator.validateOptionStrikeItem(it) }
+            if (validStrikes.isNotEmpty()) {
+                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_YAHOO, System.currentTimeMillis() - startYahoo)
+                return Result.success(validStrikes)
+            }
+        }
+        healthManager.reportError(ProviderHealthManager.PROVIDER_YAHOO)
 
         return Result.failure(Exception("Option chain unavailable from all configured REAL providers."))
     }

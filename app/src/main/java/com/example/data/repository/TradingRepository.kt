@@ -60,8 +60,8 @@ class TradingRepository(
             val profileRes = manager.getProfile()
             profileRes.getOrNull()?.let { prof ->
                 val current = dao.getUserProfile().firstOrNull() ?: UserProfileEntity()
-                val isAngelConn = if (prof.connectedBroker == "Angel One") true else (current.isAngelConnected || prof.isAngelConnected)
-                val isDhanConn = if (prof.connectedBroker == "Dhan") true else (current.isDhanConnected || prof.isDhanConnected)
+                val isAngelConn = if (prof.connectedBroker == "Angel One") true else prof.isAngelConnected
+                val isDhanConn = if (prof.connectedBroker == "Dhan") true else prof.isDhanConnected
 
                 dao.insertOrUpdateProfile(
                     current.copy(
@@ -159,14 +159,27 @@ class TradingRepository(
             com.example.data.model.WatchlistItem(symbol = "BANKEX", exchange = "BSE", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("BANKEX"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "CRUDEOIL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "CRUDEOIL M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("CRUDEOIL M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "NATURALGAS", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NATURALGAS"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "NATURALGAS M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NATURALGAS M"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "GOLD", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("GOLD"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "GOLD M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("GOLD M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "GOLD GUINEA", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("GOLD GUINEA"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "GOLD PETAL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("GOLD PETAL"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "SILVER", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("SILVER"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "SILVER M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("SILVER M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "SILVER MIC", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("SILVER MIC"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "COPPER", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("COPPER"), isPositive=true),
             com.example.data.model.WatchlistItem(symbol = "COPPER M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("COPPER M"), isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "NATURALGAS", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NATURALGAS"), isPositive=true),
-            com.example.data.model.WatchlistItem(symbol = "NATURALGAS M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NATURALGAS M"), isPositive=true)
+            com.example.data.model.WatchlistItem(symbol = "ZINC", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("ZINC"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "ZINC M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("ZINC M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "ALUMINIUM", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("ALUMINIUM"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "ALUMINIUM M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("ALUMINIUM M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "LEAD", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("LEAD"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "LEAD M", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("LEAD M"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "NICKEL", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("NICKEL"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "MCXBULLDEX", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("MCXBULLDEX"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "MCXMETLDEX", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("MCXMETLDEX"), isPositive=true),
+            com.example.data.model.WatchlistItem(symbol = "MCXENRGDEX", exchange = "MCX", ltp=0.0, change=0.0, changePercent=0.0, lotSize=com.example.util.AppPreferences.getGlobalLotSize("MCXENRGDEX"), isPositive=true)
         )
         indices.forEach { idx ->
             if (currentList.none { it.symbol == idx.symbol }) {

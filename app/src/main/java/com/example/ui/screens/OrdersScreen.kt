@@ -165,572 +165,576 @@ fun OrdersScreen(
     val mtmVal = unrealizedPnl
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBackground)
+                .background(DarkBackground),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-        // Top Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CrownLogo(size = 36.dp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "KING KHAN AI TRADE",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 0.5.sp
-                    )
-                    com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
+            // 1. Top Header
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CrownLogo(size = 36.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "KING KHAN AI TRADE",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                            com.example.ui.components.KingKhanTagline(fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val isDhanConnected = userProfile.isDhanConnected
+                        com.example.ui.components.DhanLiveStatusBadge(
+                            isDhanConnected = isDhanConnected,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        IconButton(onClick = onOpenNotificationCenter) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = SecondaryGold)
+                                if (unreadCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 4.dp, y = (-2).dp)
+                                            .size(16.dp)
+                                            .background(LossRed, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val isDhanConnected = userProfile.isDhanConnected
-                com.example.ui.components.DhanLiveStatusBadge(
-                    isDhanConnected = isDhanConnected,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-                IconButton(onClick = onOpenNotificationCenter) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = SecondaryGold)
-                        if (unreadCount > 0) {
-                            Box(
+            // 2. Active Broker Banner / Disconnected Warning Screen
+            item {
+                if (!isBrokerConnected) {
+                    GoldCard(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        borderColor = LossRed.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .background(LossRedBg, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = LossRed, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Broker Disconnected", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
+                                    Text("Operating in Local State. Connect Dhan for real orders.", fontSize = 9.sp, color = TextGray)
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Available Margin", fontSize = 8.sp, color = TextGray)
+                                Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                            }
+                        }
+                    }
+                } else {
+                    GoldCard(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        borderColor = DarkCardBorder
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .background(ProfitGreenBg, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.FlashOn, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Connected • $activeBrokerName", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
+                                    Text("NSE • BSE • MCX Live Orders & Positions", fontSize = 9.sp, color = TextGray)
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Available Margin", fontSize = 8.sp, color = TextGray)
+                                Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 3. Main Mode Switcher: "📋 ORDERS" vs "💼 POSITIONS"
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { selectedMainMode = "POSITIONS" },
+                        color = if (selectedMainMode == "POSITIONS") PrimaryGold else DarkCard,
+                        border = if (selectedMainMode == "POSITIONS") null else androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Assessment,
+                                contentDescription = null,
+                                tint = if (selectedMainMode == "POSITIONS") Color.Black else SecondaryGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "POSITIONS (${openPositions.size})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selectedMainMode == "POSITIONS") Color.Black else TextWhite
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { selectedMainMode = "ORDERS" },
+                        color = if (selectedMainMode == "ORDERS") PrimaryGold else DarkCard,
+                        border = if (selectedMainMode == "ORDERS") null else androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.ReceiptLong,
+                                contentDescription = null,
+                                tint = if (selectedMainMode == "ORDERS") Color.Black else SecondaryGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "ORDERS (${orders.size})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selectedMainMode == "ORDERS") Color.Black else TextWhite
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // ==========================================
+            // CONTENT BLOCK 1: POSITIONS VIEW
+            // ==========================================
+            if (selectedMainMode == "POSITIONS") {
+                item {
+                    // Summary Banner Metrics
+                    GoldCard(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        borderColor = DarkCardBorder
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Today's P&L", fontSize = 10.sp, color = TextGray)
+                                    val isPos = todayPnl >= 0
+                                    Text(
+                                        text = String.format("%s₹%,.2f", if (isPos) "+" else "", todayPnl),
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isPos) ProfitGreen else LossRed
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Overall P&L", fontSize = 10.sp, color = TextGray)
+                                    val isOvPos = overallPnl >= 0
+                                    Text(
+                                        text = String.format("%s₹%,.2f", if (isOvPos) "+" else "", overallPnl),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isOvPos) ProfitGreen else LossRed
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Divider(color = DarkCardBorder, thickness = 0.5.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("Unrealized MTM", fontSize = 9.sp, color = TextGray)
+                                    Text(
+                                        String.format("%s₹%,.2f", if (mtmVal >= 0) "+" else "", mtmVal),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (mtmVal >= 0) ProfitGreen else LossRed
+                                    )
+                                }
+
+                                Column {
+                                    Text("Realized P&L", fontSize = 9.sp, color = TextGray)
+                                    Text(
+                                        String.format("%s₹%,.2f", if (realizedPnl >= 0) "+" else "", realizedPnl),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (realizedPnl >= 0) ProfitGreen else LossRed
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Open Positions", fontSize = 9.sp, color = TextGray)
+                                    Text("${openPositions.size} Active", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                item {
+                    // Sub-tabs: Open Positions vs Closed Positions
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val openCount = if (useHoldings) openHoldingPositions.size else openPositions.size
+                        val closedCount = if (useHoldings) closedHoldingPositions.size else closedPositions.size
+
+                        listOf("OPEN" to openCount, "CLOSED" to closedCount).forEach { (tab, count) ->
+                            val isSel = selectedPositionsSubTab == tab
+                            Surface(
                                 modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 4.dp, y = (-2).dp)
-                                    .size(16.dp)
-                                    .background(LossRed, CircleShape),
-                                contentAlignment = Alignment.Center
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { selectedPositionsSubTab = tab },
+                                color = if (isSel) DarkCardSecondary else DarkCard,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) PrimaryGold else DarkCardBorder),
+                                shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = if (tab == "OPEN") "Open Positions ($count)" else "Closed Positions ($count)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSel) SecondaryGold else TextGray,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = 6.dp)
                                 )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                if (useHoldings) {
+                    val holdingList = if (selectedPositionsSubTab == "OPEN") openHoldingPositions else closedHoldingPositions
+                    if (holdingList.isNotEmpty()) {
+                        items(holdingList, key = { "${it.symbol}_${it.exchange}" }) { holding ->
+                            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                                HoldingPositionCardItem(
+                                    holding = holding,
+                                    liveLtp = holding.ltp,
+                                    isOpen = selectedPositionsSubTab == "OPEN",
+                                    onSquareOff = { },
+                                    onPartialExit = { }
+                                )
+                            }
+                        }
+                    } else {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Assessment, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = if (selectedPositionsSubTab == "OPEN") "No open positions currently active." else "No closed positions history today.",
+                                        fontSize = 13.sp,
+                                        color = TextWhite,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Real position data synchronized with broker.", fontSize = 10.sp, color = TextGray)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("Pull down to refresh from broker", fontSize = 10.sp, color = PrimaryGold.copy(alpha = 0.8f))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    val currentPositionsList = if (selectedPositionsSubTab == "OPEN") openPositions else closedPositions
+
+                    if (currentPositionsList.isNotEmpty()) {
+                        items(currentPositionsList, key = { if (it.orderId.isNotBlank()) it.orderId else "${it.symbol}_${it.time}_${it.id}" }) { order ->
+                            val liveLtp = calculateLiveLtp(order, watchlist)
+                            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                                PositionCardItem(
+                                    order = order,
+                                    liveLtp = liveLtp,
+                                    isOpen = selectedPositionsSubTab == "OPEN",
+                                    onSquareOff = { selectedOrderForSquareOff = order to liveLtp },
+                                    onPartialExit = { selectedOrderForPartialExit = order to liveLtp },
+                                    onOpenModifySlTarget = { selectedOrderForModify = order }
+                                )
+                            }
+                        }
+                    } else {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Assessment, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = if (selectedPositionsSubTab == "OPEN") "No open positions currently active." else "No closed positions history today.",
+                                        fontSize = 13.sp,
+                                        color = TextWhite,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Use BUY / SELL in Market or Option Chain to enter trades.", fontSize = 10.sp, color = TextGray)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("Pull down to refresh from broker", fontSize = 10.sp, color = PrimaryGold.copy(alpha = 0.8f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // CONTENT BLOCK 2: ORDERS VIEW
+            // ==========================================
+            else {
+                item {
+                    // Status Filter Chips (ALL, PENDING, OPEN, EXECUTED, CANCELLED, REJECTED)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val statusList = listOf("ALL", "PENDING", "OPEN", "EXECUTED", "CANCELLED", "REJECTED")
+                        statusList.forEach { status ->
+                            val isSelected = selectedOrderStatusFilter == status
+                            val count = when (status) {
+                                "ALL" -> orders.size
+                                "PENDING" -> orders.count { it.status.equals("PENDING", ignoreCase = true) }
+                                "OPEN" -> orders.count { it.status.equals("OPEN", ignoreCase = true) }
+                                "EXECUTED" -> orders.count { it.status.equals("EXECUTED", ignoreCase = true) || it.status.equals("TRADED", ignoreCase = true) }
+                                "CANCELLED" -> orders.count { it.status.equals("CANCELLED", ignoreCase = true) }
+                                "REJECTED" -> orders.count { it.status.equals("REJECTED", ignoreCase = true) }
+                                else -> 0
+                            }
+
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedOrderStatusFilter = status },
+                                label = {
+                                    Text(
+                                        "$status ($count)",
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryGold,
+                                    selectedLabelColor = Color.Black,
+                                    containerColor = DarkCard,
+                                    labelColor = TextGray
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = DarkCardBorder,
+                                    selectedBorderColor = PrimaryGold
+                                )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                item {
+                    // Search Bar & Filter Button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search Symbol, Order ID...", fontSize = 11.sp, color = TextGray) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = null, tint = TextGray, modifier = Modifier.size(16.dp)) } }
+                            } else null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryGold,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedContainerColor = DarkCard,
+                                unfocusedContainerColor = DarkCard
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        IconButton(
+                            onClick = { showFilterDialog = true },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(DarkCard, RoundedCornerShape(8.dp))
+                                .border(1.dp, if (selectedExchangeFilter != "ALL" || selectedSideFilter != "ALL") PrimaryGold else DarkCardBorder, RoundedCornerShape(8.dp))
+                        ) {
+                            Icon(
+                                Icons.Default.Tune,
+                                contentDescription = "Filter & Sort",
+                                tint = if (selectedExchangeFilter != "ALL" || selectedSideFilter != "ALL") SecondaryGold else TextWhite
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                if (filteredOrders.isNotEmpty()) {
+                    items(filteredOrders, key = { if (it.orderId.isNotBlank()) it.orderId else "${it.symbol}_${it.time}_${it.id}" }) { order ->
+                        val liveLtp = calculateLiveLtp(order, watchlist)
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                            DetailedOrderCardItem(
+                                order = order,
+                                liveLtp = liveLtp,
+                                onCancelOrder = onCancelOrder,
+                                onOpenModify = { selectedOrderForModify = it },
+                                onSendToTelegram = onSendToTelegram
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp)
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+                                if (orders.isEmpty()) {
+                                    Text(
+                                        text = "No Orders Found",
+                                        fontSize = 15.sp,
+                                        color = TextWhite,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "No orders are available in your connected broker account.",
+                                        fontSize = 11.sp,
+                                        color = TextGray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                } else {
+                                    Text(
+                                        text = "No Matching Orders",
+                                        fontSize = 14.sp,
+                                        color = TextWhite,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "No orders match your filter criteria. Try clearing search or status filter.",
+                                        fontSize = 10.sp,
+                                        color = TextGray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Pull down to refresh from broker", fontSize = 10.sp, color = PrimaryGold.copy(alpha = 0.8f))
                             }
                         }
                     }
                 }
             }
         }
-
-        // Active Broker Banner / Disconnected Warning Screen
-        if (!isBrokerConnected) {
-            GoldCard(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                borderColor = LossRed.copy(alpha = 0.6f)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(LossRedBg, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = LossRed, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Broker Disconnected", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                            Text("Operating in Local State. Connect Dhan for real orders.", fontSize = 9.sp, color = TextGray)
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("Available Margin", fontSize = 8.sp, color = TextGray)
-                        Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                    }
-                }
-            }
-        } else {
-            GoldCard(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                borderColor = DarkCardBorder
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(ProfitGreenBg, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.FlashOn, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Connected • $activeBrokerName", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                            Text("NSE • BSE • MCX Live Orders & Positions", fontSize = 9.sp, color = TextGray)
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("Available Margin", fontSize = 8.sp, color = TextGray)
-                        Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Main Mode Switcher: "📋 ORDERS" vs "💼 POSITIONS"
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { selectedMainMode = "POSITIONS" },
-                color = if (selectedMainMode == "POSITIONS") PrimaryGold else DarkCard,
-                border = if (selectedMainMode == "POSITIONS") null else androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Assessment,
-                        contentDescription = null,
-                        tint = if (selectedMainMode == "POSITIONS") Color.Black else SecondaryGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "POSITIONS (${openPositions.size})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selectedMainMode == "POSITIONS") Color.Black else TextWhite
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { selectedMainMode = "ORDERS" },
-                color = if (selectedMainMode == "ORDERS") PrimaryGold else DarkCard,
-                border = if (selectedMainMode == "ORDERS") null else androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.ReceiptLong,
-                        contentDescription = null,
-                        tint = if (selectedMainMode == "ORDERS") Color.Black else SecondaryGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "ORDERS (${orders.size})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selectedMainMode == "ORDERS") Color.Black else TextWhite
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // ==========================================
-        // CONTENT BLOCK 1: POSITIONS VIEW
-        // ==========================================
-        if (selectedMainMode == "POSITIONS") {
-            // Summary Banner Metrics
-            GoldCard(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                borderColor = DarkCardBorder
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Today's P&L", fontSize = 10.sp, color = TextGray)
-                            val isPos = todayPnl >= 0
-                            Text(
-                                text = String.format("%s₹%,.2f", if (isPos) "+" else "", todayPnl),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Black,
-                                color = if (isPos) ProfitGreen else LossRed
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Overall P&L", fontSize = 10.sp, color = TextGray)
-                            val isOvPos = overallPnl >= 0
-                            Text(
-                                text = String.format("%s₹%,.2f", if (isOvPos) "+" else "", overallPnl),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isOvPos) ProfitGreen else LossRed
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Divider(color = DarkCardBorder, thickness = 0.5.dp)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Unrealized MTM", fontSize = 9.sp, color = TextGray)
-                            Text(
-                                String.format("%s₹%,.2f", if (mtmVal >= 0) "+" else "", mtmVal),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (mtmVal >= 0) ProfitGreen else LossRed
-                            )
-                        }
-
-                        Column {
-                            Text("Realized P&L", fontSize = 9.sp, color = TextGray)
-                            Text(
-                                String.format("%s₹%,.2f", if (realizedPnl >= 0) "+" else "", realizedPnl),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (realizedPnl >= 0) ProfitGreen else LossRed
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Open Positions", fontSize = 9.sp, color = TextGray)
-                            Text("${openPositions.size} Active", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Sub-tabs: Open Positions vs Closed Positions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val openCount = if (useHoldings) openHoldingPositions.size else openPositions.size
-                val closedCount = if (useHoldings) closedHoldingPositions.size else closedPositions.size
-
-                listOf("OPEN" to openCount, "CLOSED" to closedCount).forEach { (tab, count) ->
-                    val isSel = selectedPositionsSubTab == tab
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { selectedPositionsSubTab = tab },
-                        color = if (isSel) DarkCardSecondary else DarkCard,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) PrimaryGold else DarkCardBorder),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = if (tab == "OPEN") "Open Positions ($count)" else "Closed Positions ($count)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSel) SecondaryGold else TextGray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 6.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (useHoldings) {
-                val holdingList = if (selectedPositionsSubTab == "OPEN") openHoldingPositions else closedHoldingPositions
-                if (holdingList.isNotEmpty()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(holdingList) { holding ->
-                            HoldingPositionCardItem(
-                                holding = holding,
-                                liveLtp = holding.ltp,
-                                isOpen = selectedPositionsSubTab == "OPEN",
-                                onSquareOff = { },
-                                onPartialExit = { }
-                            )
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Assessment, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = if (selectedPositionsSubTab == "OPEN") "No open positions currently active." else "No closed positions history today.",
-                                fontSize = 13.sp,
-                                color = TextWhite,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Real position data synchronized with broker.", fontSize = 10.sp, color = TextGray)
-                        }
-                    }
-                }
-            } else {
-                val currentPositionsList = if (selectedPositionsSubTab == "OPEN") openPositions else closedPositions
-
-                if (currentPositionsList.isNotEmpty()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(currentPositionsList) { order ->
-                            val liveLtp = calculateLiveLtp(order, watchlist)
-                            PositionCardItem(
-                                order = order,
-                                liveLtp = liveLtp,
-                                isOpen = selectedPositionsSubTab == "OPEN",
-                                onSquareOff = { selectedOrderForSquareOff = order to liveLtp },
-                                onPartialExit = { selectedOrderForPartialExit = order to liveLtp },
-                                onOpenModifySlTarget = { selectedOrderForModify = order }
-                            )
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Assessment, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = if (selectedPositionsSubTab == "OPEN") "No open positions currently active." else "No closed positions history today.",
-                                fontSize = 13.sp,
-                                color = TextWhite,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Use BUY / SELL in Market or Option Chain to enter trades.", fontSize = 10.sp, color = TextGray)
-                        }
-                    }
-                }
-            }
-        }
-
-        // ==========================================
-        // CONTENT BLOCK 2: ORDERS VIEW
-        // ==========================================
-        else {
-            // Status Filter Chips (ALL, PENDING, OPEN, EXECUTED, CANCELLED, REJECTED)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val statusList = listOf("ALL", "PENDING", "OPEN", "EXECUTED", "CANCELLED", "REJECTED")
-                statusList.forEach { status ->
-                    val isSelected = selectedOrderStatusFilter == status
-                    val count = when (status) {
-                        "ALL" -> orders.size
-                        "PENDING" -> orders.count { it.status.equals("PENDING", ignoreCase = true) }
-                        "OPEN" -> orders.count { it.status.equals("OPEN", ignoreCase = true) }
-                        "EXECUTED" -> orders.count { it.status.equals("EXECUTED", ignoreCase = true) || it.status.equals("TRADED", ignoreCase = true) }
-                        "CANCELLED" -> orders.count { it.status.equals("CANCELLED", ignoreCase = true) }
-                        "REJECTED" -> orders.count { it.status.equals("REJECTED", ignoreCase = true) }
-                        else -> 0
-                    }
-
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedOrderStatusFilter = status },
-                        label = {
-                            Text(
-                                "$status ($count)",
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryGold,
-                            selectedLabelColor = Color.Black,
-                            containerColor = DarkCard,
-                            labelColor = TextGray
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = DarkCardBorder,
-                            selectedBorderColor = PrimaryGold
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Search Bar & Filter Button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search Symbol, Order ID...", fontSize = 11.sp, color = TextGray) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp)) },
-                    trailingIcon = if (searchQuery.isNotEmpty()) {
-                        { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = null, tint = TextGray, modifier = Modifier.size(16.dp)) } }
-                    } else null,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryGold,
-                        unfocusedBorderColor = DarkCardBorder,
-                        focusedContainerColor = DarkCard,
-                        unfocusedContainerColor = DarkCard
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
-                IconButton(
-                    onClick = { showFilterDialog = true },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(DarkCard, RoundedCornerShape(8.dp))
-                        .border(1.dp, if (selectedExchangeFilter != "ALL" || selectedSideFilter != "ALL") PrimaryGold else DarkCardBorder, RoundedCornerShape(8.dp))
-                ) {
-                    Icon(
-                        Icons.Default.Tune,
-                        contentDescription = "Filter & Sort",
-                        tint = if (selectedExchangeFilter != "ALL" || selectedSideFilter != "ALL") SecondaryGold else TextWhite
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (filteredOrders.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredOrders) { order ->
-                        val liveLtp = calculateLiveLtp(order, watchlist)
-                        DetailedOrderCardItem(
-                            order = order,
-                            liveLtp = liveLtp,
-                            onCancelOrder = onCancelOrder,
-                            onOpenModify = { selectedOrderForModify = it },
-                            onSendToTelegram = onSendToTelegram
-                        )
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = SecondaryGold.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        if (orders.isEmpty()) {
-                            Text(
-                                text = "No Orders Found",
-                                fontSize = 15.sp,
-                                color = TextWhite,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "No orders are available in your connected broker account.",
-                                fontSize = 11.sp,
-                                color = TextGray,
-                                textAlign = TextAlign.Center
-                            )
-                        } else {
-                            Text(
-                                text = "No Matching Orders",
-                                fontSize = 14.sp,
-                                color = TextWhite,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "No orders match your filter criteria. Try clearing search or status filter.",
-                                fontSize = 10.sp,
-                                color = TextGray,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-
-    }
     }
 
     // Modal Dialog 1: Full Order Modify Dialog

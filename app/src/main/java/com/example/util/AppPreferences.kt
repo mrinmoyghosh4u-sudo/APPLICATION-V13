@@ -588,14 +588,29 @@ class AppPreferences(private val context: Context) {
                 upper.contains("NIFTY") -> 65
                 upper.contains("BANKEX") -> 30
                 upper.contains("SENSEX") -> 20
-                upper.contains("CRUDEOILM") || upper.contains("CRUDE OIL M") -> 10
+                upper.contains("CRUDEOILM") || upper.contains("CRUDEOIL M") || upper.contains("CRUDE OIL M") -> 10
                 upper.contains("CRUDEOIL") || upper.contains("CRUDE OIL") -> 100
+                upper.contains("NATURALGASM") || upper.contains("NATURALGAS M") || upper.contains("NATURAL GAS M") -> 250
+                upper.contains("NATURALGAS") || upper.contains("NATURAL GAS") -> 1250
+                upper.contains("GOLD GUINEA") -> 1
+                upper.contains("GOLD PETAL") -> 1
                 upper.contains("GOLDM") || upper.contains("GOLD M") -> 10
-                upper.contains("GOLD") -> 1
+                upper.contains("GOLD") -> 100
+                upper.contains("SILVER MIC") -> 1
                 upper.contains("SILVERM") || upper.contains("SILVER M") -> 5
                 upper.contains("SILVER") -> 30
                 upper.contains("COPPERM") || upper.contains("COPPER M") -> 250
                 upper.contains("COPPER") -> 2500
+                upper.contains("ZINCM") || upper.contains("ZINC M") -> 1000
+                upper.contains("ZINC") -> 5000
+                upper.contains("ALUMINIUMM") || upper.contains("ALUMINIUM M") -> 1000
+                upper.contains("ALUMINIUM") -> 5000
+                upper.contains("LEADM") || upper.contains("LEAD M") -> 1000
+                upper.contains("LEAD") -> 5000
+                upper.contains("NICKEL") -> 1500
+                upper.contains("BULLDEX") -> 50
+                upper.contains("METLDEX") -> 50
+                upper.contains("ENRGDEX") -> 125
                 else -> 1
             }
         }

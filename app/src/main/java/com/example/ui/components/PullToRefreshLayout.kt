@@ -43,19 +43,19 @@ fun PullToRefreshLayout(
         }
     }
 
-    val pullProgress = (offsetY / 140f).coerceIn(0f, 1f)
+    val pullProgress = (offsetY / 90f).coerceIn(0f, 1f)
     val isBusy = isRefreshing || refreshingInternal
 
     val animatedOffsetY by animateFloatAsState(
-        targetValue = if (isBusy && offsetY > 0f) 64f else offsetY,
+        targetValue = if (isBusy) 56f else offsetY.coerceAtMost(90f),
         animationSpec = tween(durationMillis = 200),
         label = "pullToRefreshOffset"
     )
 
     fun triggerRefreshIfThreshold() {
-        if (offsetY >= 110f && !isBusy) {
+        if (offsetY >= 65f && !isBusy) {
             refreshingInternal = true
-            offsetY = 110f
+            offsetY = 65f
             onRefresh()
             coroutineScope.launch {
                 delay(1200)
@@ -86,7 +86,7 @@ fun PullToRefreshLayout(
                 source: NestedScrollSource
             ): Offset {
                 return if (available.y > 0 && !isBusy && source == NestedScrollSource.UserInput) {
-                    offsetY = (offsetY + available.y * 0.35f).coerceAtMost(180f)
+                    offsetY = (offsetY + available.y * 0.5f).coerceAtMost(120f)
                     Offset(0f, available.y)
                 } else {
                     Offset.Zero

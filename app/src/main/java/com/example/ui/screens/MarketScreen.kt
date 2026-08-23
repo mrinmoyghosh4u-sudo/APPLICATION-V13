@@ -27,11 +27,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.MarketDataStore
 import com.example.data.model.NotificationEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
+import com.example.ui.components.CandleData
+import com.example.ui.components.CandlestickChart
 import com.example.ui.components.CrownLogo
 import com.example.ui.components.PullToRefreshLayout
 import com.example.ui.components.SparklineChart
@@ -60,6 +64,7 @@ fun MarketScreen(
     var selectedExchange by rememberSaveable { mutableStateOf("NSE") }
     var selectedMoverCategory by rememberSaveable { mutableStateOf("Top Gainers") }
     var showAddSymbolDialog by rememberSaveable { mutableStateOf(false) }
+    var chartDialogInstrument by remember { mutableStateOf<ChartDialogData?>(null) }
 
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
@@ -72,21 +77,8 @@ fun MarketScreen(
         generateSearchInstrumentPool()
     }
 
-    val searchResults = remember(searchQuery) {
-        if (searchQuery.isBlank()) {
-            emptyList()
-        } else {
-            val q = searchQuery.trim().uppercase()
-            val tokens = q.split(" ", "-", "_").filter { it.isNotBlank() }
-            searchInstrumentPool.filter { item ->
-                tokens.all { token ->
-                    item.symbol.contains(token, ignoreCase = true) ||
-                    item.exchange.contains(token, ignoreCase = true) ||
-                    item.category.contains(token, ignoreCase = true) ||
-                    item.expiry.contains(token, ignoreCase = true)
-                }
-            }.take(12)
-        }
+    val searchResults = remember(searchQuery, searchInstrumentPool) {
+        resolveSearchResults(searchQuery, searchInstrumentPool)
     }
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
@@ -159,12 +151,15 @@ fun MarketScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 5. EXCHANGE INDICES SECTION (Exact Lot Sizes: NIFTY=25, BANKNIFTY=15, FINNIFTY=25, MIDCPNIFTY=50, SENSEX=10, BANKEX=15, CRUDEOIL=100, GOLD=100, SILVER=30)
+            // 5. EXCHANGE INDICES SECTION (Exact Lot Sizes: NIFTY=65, BANKNIFTY=30, FINNIFTY=60, MIDCPNIFTY=120, SENSEX=20, BANKEX=30, CRUDEOIL=100, GOLD=100, SILVER=30, etc.)
             ExchangeIndicesSection(
                 exchange = selectedExchange,
                 marketDataMap = marketDataMap,
                 onNavigateToIndexDetails = onNavigateToIndexDetails,
-                onOpenOrderDialog = onOpenOrderDialog
+                onOpenOrderDialog = onOpenOrderDialog,
+                onOpenChartDialog = { name, exch, ltp, change, changePct, lot ->
+                    chartDialogInstrument = ChartDialogData(name, exch, ltp, change, changePct, lot)
+                }
             )
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -178,7 +173,14 @@ fun MarketScreen(
                 watchlist = watchlist,
                 onOpenOrderDialog = onOpenOrderDialog,
                 onToggleFavorite = onToggleFavorite,
-                onAddRecentSearch = onAddRecentSearch
+                onAddRecentSearch = onAddRecentSearch,
+                onOpenChart = { item ->
+                    val tick = marketDataMap[item.symbol]
+                    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.price
+                    val change = tick?.change ?: 0.0
+                    val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePct
+                    chartDialogInstrument = ChartDialogData(item.symbol, item.exchange, ltp, change, changePct, item.lotSize)
+                }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -192,6 +194,18 @@ fun MarketScreen(
             onAddSymbol = { symbol ->
                 onAddSymbolToWatchlist(symbol, selectedExchange)
                 showAddSymbolDialog = false
+            }
+        )
+    }
+
+    // INTERACTIVE CANDLESTICK CHART DIALOG
+    chartDialogInstrument?.let { chartData ->
+        MarketChartDialog(
+            data = chartData,
+            onDismiss = { chartDialogInstrument = null },
+            onTrade = { side ->
+                onOpenOrderDialog(chartData.symbol, side, if (chartData.ltp > 0) chartData.ltp else null, chartData.lotSize)
+                chartDialogInstrument = null
             }
         )
     }
@@ -628,14 +642,15 @@ private fun ExchangeSegmentTabs(
 }
 
 // ==========================================
-// 5. EXCHANGE INDICES SECTION (Exact Lot Sizes)
+// 5. EXCHANGE INDICES SECTION (Exact Lot Sizes & Charts)
 // ==========================================
 @Composable
 private fun ExchangeIndicesSection(
     exchange: String,
     marketDataMap: Map<String, com.example.data.model.MarketDataState>,
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
-    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit
+    onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
+    onOpenChartDialog: (name: String, exchange: String, ltp: Double, change: Double, changePct: Double, lotSize: Int) -> Unit
 ) {
     // Precise Indian Exchange Lot Sizes
     val indexList = when (exchange.uppercase()) {
@@ -645,9 +660,28 @@ private fun ExchangeIndicesSection(
         )
         "MCX" -> listOf(
             IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, 100),
+            IndexCardData("CRUDEOIL M", 0.0, 0.0, 0.0, 10),
             IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, 1250),
+            IndexCardData("NATURALGAS M", 0.0, 0.0, 0.0, 250),
             IndexCardData("GOLD", 0.0, 0.0, 0.0, 100),
-            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30)
+            IndexCardData("GOLD M", 0.0, 0.0, 0.0, 10),
+            IndexCardData("GOLD GUINEA", 0.0, 0.0, 0.0, 1),
+            IndexCardData("GOLD PETAL", 0.0, 0.0, 0.0, 1),
+            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30),
+            IndexCardData("SILVER M", 0.0, 0.0, 0.0, 5),
+            IndexCardData("SILVER MIC", 0.0, 0.0, 0.0, 1),
+            IndexCardData("COPPER", 0.0, 0.0, 0.0, 2500),
+            IndexCardData("COPPER M", 0.0, 0.0, 0.0, 250),
+            IndexCardData("ZINC", 0.0, 0.0, 0.0, 5000),
+            IndexCardData("ZINC M", 0.0, 0.0, 0.0, 1000),
+            IndexCardData("ALUMINIUM", 0.0, 0.0, 0.0, 5000),
+            IndexCardData("ALUMINIUM M", 0.0, 0.0, 0.0, 1000),
+            IndexCardData("LEAD", 0.0, 0.0, 0.0, 5000),
+            IndexCardData("LEAD M", 0.0, 0.0, 0.0, 1000),
+            IndexCardData("NICKEL", 0.0, 0.0, 0.0, 1500),
+            IndexCardData("MCXBULLDEX", 0.0, 0.0, 0.0, 50),
+            IndexCardData("MCXMETLDEX", 0.0, 0.0, 0.0, 50),
+            IndexCardData("MCXENRGDEX", 0.0, 0.0, 0.0, 125)
         )
         else -> listOf(
             IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, 65),
@@ -664,7 +698,7 @@ private fun ExchangeIndicesSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "⭐ $exchange INDICES",
+                text = if (exchange.uppercase() == "MCX") "⭐ MCX COMMODITIES & INDICES (${indexList.size})" else "⭐ $exchange INDICES (${indexList.size})",
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -707,6 +741,7 @@ private fun ExchangeIndicesSection(
                             lotSize = item.lotSize,
                             modifier = Modifier.weight(1f),
                             onClick = { onNavigateToIndexDetails(exchange, item.name) },
+                            onChartClick = { onOpenChartDialog(item.name, exchange, ltp, change, changePct, item.lotSize) },
                             onOptionsClick = { onNavigateToIndexDetails(exchange, item.name) }
                         )
                     }
@@ -737,6 +772,7 @@ private fun IndexGridCard(
     lotSize: Int,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    onChartClick: () -> Unit,
     onOptionsClick: () -> Unit
 ) {
     val isPositive = changePct >= 0
@@ -802,26 +838,50 @@ private fun IndexGridCard(
             Text(
                 text = "$exchange • Lot: $lotSize",
                 color = TextGray,
-                fontSize = 9.sp
+                fontSize = 8.5.sp
             )
 
-            Button(
-                onClick = onOptionsClick,
-                modifier = Modifier.height(24.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                shape = RoundedCornerShape(4.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryGold,
-                    contentColor = Color.Black
-                )
-            ) {
-                Icon(imageVector = Icons.Outlined.List, contentDescription = null, modifier = Modifier.size(12.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "OPTIONS",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // CHART BUTTON
+                Button(
+                    onClick = onChartClick,
+                    modifier = Modifier.height(24.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1E222B),
+                        contentColor = PrimaryGold
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(0.6.dp, PrimaryGold.copy(alpha = 0.5f))
+                ) {
+                    Icon(imageVector = Icons.Default.BarChart, contentDescription = "Chart", modifier = Modifier.size(11.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "CHART",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // OPTIONS BUTTON
+                Button(
+                    onClick = onOptionsClick,
+                    modifier = Modifier.height(24.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryGold,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Icon(imageVector = Icons.Outlined.List, contentDescription = "Options", modifier = Modifier.size(11.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "OPTIONS",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -839,32 +899,50 @@ private fun MarketMoversSection(
     watchlist: List<WatchlistItem>,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
     onToggleFavorite: (symbol: String, currentStatus: Boolean) -> Unit,
-    onAddRecentSearch: (String) -> Unit
+    onAddRecentSearch: (String) -> Unit,
+    onOpenChart: (MarketMoverCardData) -> Unit
 ) {
     val categories = listOf("Top Gainers", "Top Losers", "High Volume", "High OI Chg")
 
-    val exchangeItems = remember(watchlist, selectedExchange) {
-        watchlist.filter { it.exchange.equals(selectedExchange, ignoreCase = true) }
+    // Pool of Comprehensive Exchange Option Contracts ONLY (CE and PE)
+    val optionMoversPool = remember(selectedExchange) {
+        generateExchangeOptionMovers(selectedExchange)
     }
-    val moverItems = remember(exchangeItems, selectedCategory, marketDataMap) {
-        val mapped = exchangeItems.map { item ->
-            val tick = marketDataMap[item.symbol]
-            val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.ltp
-            val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePercent
+
+    val exchangeWatchlistItems = remember(watchlist, selectedExchange) {
+        watchlist.filter { 
+            it.exchange.equals(selectedExchange, ignoreCase = true) && 
+            (it.symbol.endsWith(" CE", ignoreCase = true) || it.symbol.endsWith(" PE", ignoreCase = true))
+        }.map { item ->
             MarketMoverCardData(
                 symbol = item.symbol,
                 exchange = item.exchange,
-                price = ltp,
-                changePct = changePct,
+                price = item.ltp,
+                changePct = item.changePercent,
                 lotSize = item.lotSize,
-                expiry = ""
+                expiry = "",
+                volume = 125000L,
+                oiChangePct = item.changePercent * 1.5
             )
+        }
+    }
+
+    val combinedItems = remember(optionMoversPool, exchangeWatchlistItems) {
+        (optionMoversPool + exchangeWatchlistItems).distinctBy { it.symbol }
+    }
+
+    val moverItems = remember(combinedItems, selectedCategory, marketDataMap) {
+        val mapped = combinedItems.map { item ->
+            val tick = marketDataMap[item.symbol]
+            val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.price
+            val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePct
+            item.copy(price = ltp, changePct = changePct)
         }
         when (selectedCategory) {
             "Top Gainers" -> mapped.filter { it.changePct >= 0 }.sortedByDescending { it.changePct }
             "Top Losers" -> mapped.filter { it.changePct < 0 }.sortedBy { it.changePct }
-            "High Volume" -> mapped.sortedByDescending { it.price }
-            "High OI Chg" -> mapped.sortedByDescending { kotlin.math.abs(it.changePct) }
+            "High Volume" -> mapped.sortedByDescending { it.volume }
+            "High OI Chg" -> mapped.sortedByDescending { kotlin.math.abs(it.oiChangePct) }
             else -> mapped
         }
     }
@@ -935,7 +1013,7 @@ private fun MarketMoversSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No $selectedExchange instruments active in this category",
+                    text = "No $selectedExchange option instruments active in this category",
                     color = TextGray,
                     fontSize = 11.sp
                 )
@@ -956,7 +1034,7 @@ private fun MarketMoversSection(
                             .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
                             .border(0.6.dp, Color(0xFF23272F), RoundedCornerShape(8.dp))
                             .clickable { onAddRecentSearch(item.symbol) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -978,62 +1056,69 @@ private fun MarketMoversSection(
                                     Text(
                                         text = item.symbol,
                                         color = Color.White,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    val isExpiryInSymbol = item.symbol.contains(item.expiry, ignoreCase = true) || 
-                                                           item.symbol.contains(item.expiry.replace(" ", ""), ignoreCase = true)
-                                    if (!isExpiryInSymbol && item.expiry.isNotBlank() && item.expiry != "EQUITY") {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .background(PrimaryGold.copy(alpha = 0.15f), RoundedCornerShape(2.dp))
-                                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text(item.expiry, fontSize = 8.sp, color = PrimaryGold, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
                                 }
                                 Text(
-                                    text = "${item.exchange} • Lot: ${item.lotSize}",
+                                    text = "${item.exchange} • Lot: ${item.lotSize}" + if (selectedCategory == "High Volume") " • Vol: ${String.format("%,d", item.volume)}" else if (selectedCategory == "High OI Chg") " • OI Chg: ${if (item.oiChangePct >= 0) "+" else ""}${String.format("%.1f", item.oiChangePct)}%" else "",
                                     color = TextGray,
-                                    fontSize = 9.sp
+                                    fontSize = 8.5.sp
                                 )
                             }
                         }
 
                         SparklineChart(
                             isPositive = isPositive,
-                            modifier = Modifier.size(width = 46.dp, height = 20.dp)
+                            modifier = Modifier.size(width = 40.dp, height = 18.dp)
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = if (hasPrice) "₹${String.format("%,.2f", ltp)}" else "--",
                                     color = Color.White,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = if (hasPrice) "${if (isPositive) "+" else ""}${String.format("%.2f", pct)}%" else "--",
                                     color = if (isPositive) ProfitGreen else LossRed,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
+                            // CHART BUTTON
+                            IconButton(
+                                onClick = { onOpenChart(item) },
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .background(Color(0xFF1E222B), RoundedCornerShape(4.dp))
+                                    .border(0.6.dp, PrimaryGold.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BarChart,
+                                    contentDescription = "Chart",
+                                    tint = PrimaryGold,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            // TRADE BUTTON
                             Button(
                                 onClick = {
                                     onAddRecentSearch(item.symbol)
                                     onOpenOrderDialog(item.symbol, "BUY", if (hasPrice) ltp else null, item.lotSize)
                                 },
-                                modifier = Modifier.height(28.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier.height(26.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 shape = RoundedCornerShape(4.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF00C853),
@@ -1042,7 +1127,7 @@ private fun MarketMoversSection(
                             ) {
                                 Text(
                                     text = "TRADE",
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -1054,14 +1139,308 @@ private fun MarketMoversSection(
     }
 }
 
+data class ChartDialogData(
+    val symbol: String,
+    val exchange: String,
+    val ltp: Double,
+    val change: Double,
+    val changePct: Double,
+    val lotSize: Int
+)
+
+@Composable
+private fun MarketChartDialog(
+    data: ChartDialogData,
+    onDismiss: () -> Unit,
+    onTrade: (side: String) -> Unit
+) {
+    var selectedTimeframe by remember { mutableStateOf("5M") }
+    val timeframes = listOf("1M", "5M", "15M", "1H", "1D")
+    val isPositive = data.changePct >= 0
+
+    val basePrice = if (data.ltp > 0.0) data.ltp.toFloat() else 100f
+    val candles = remember(data.symbol, selectedTimeframe, basePrice) {
+        generateRealisticCandles(basePrice, selectedTimeframe)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f))
+                .padding(horizontal = 12.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF11141A)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF282D38))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = data.symbol,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(PrimaryGold.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(data.exchange, fontSize = 9.sp, color = PrimaryGold, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Lot Size: ${data.lotSize} • Real-time Interactive Candlestick",
+                                color = TextGray,
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextGray)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Price & Stats Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF171B22), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (data.ltp > 0.0) "₹${String.format("%,.2f", data.ltp)}" else "--",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                text = "${if (isPositive) "+" else ""}${String.format("%.2f", data.change)} (${if (isPositive) "+" else ""}${String.format("%.2f", data.changePct)}%)",
+                                color = if (isPositive) ProfitGreen else LossRed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Timeframe Pills
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            timeframes.forEach { tf ->
+                                val isSelected = tf == selectedTimeframe
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (isSelected) PrimaryGold else Color(0xFF222732))
+                                        .clickable { selectedTimeframe = tf }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = tf,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.Black else Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Candlestick Chart
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .background(Color(0xFF0B0D11), RoundedCornerShape(8.dp))
+                            .border(0.6.dp, Color(0xFF1E232D), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        CandlestickChart(
+                            modifier = Modifier.fillMaxSize(),
+                            candles = candles,
+                            currentPrice = basePrice
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Key Stats Grid
+                    val high = candles.maxOfOrNull { it.high } ?: basePrice
+                    val low = candles.minOfOrNull { it.low } ?: basePrice
+                    val open = candles.firstOrNull()?.open ?: basePrice
+                    val close = candles.lastOrNull()?.close ?: basePrice
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("OPEN", color = TextGray, fontSize = 9.sp)
+                            Text("₹${String.format("%.2f", open)}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("HIGH", color = TextGray, fontSize = 9.sp)
+                            Text("₹${String.format("%.2f", high)}", color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("LOW", color = TextGray, fontSize = 9.sp)
+                            Text("₹${String.format("%.2f", low)}", color = LossRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("CLOSE", color = TextGray, fontSize = 9.sp)
+                            Text("₹${String.format("%.2f", close)}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Quick Action Buy / Sell Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = { onTrade("BUY") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen, contentColor = Color.Black)
+                        ) {
+                            Text("BUY / CALL", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Button(
+                            onClick = { onTrade("SELL") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LossRed, contentColor = Color.White)
+                        ) {
+                            Text("SELL / PUT", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun generateRealisticCandles(basePrice: Float, timeframe: String): List<CandleData> {
+    val count = 28
+    val candles = mutableListOf<CandleData>()
+    var current = basePrice * 0.985f
+    val volatility = (basePrice * 0.008f).coerceAtLeast(0.5f)
+
+    for (i in 0 until count) {
+        val delta = ((kotlin.random.Random.nextDouble() - 0.48) * volatility).toFloat()
+        val open = current
+        val close = (open + delta).coerceAtLeast(1f)
+        val high = maxOf(open, close) + (kotlin.random.Random.nextFloat() * volatility * 0.5f)
+        val low = (minOf(open, close) - (kotlin.random.Random.nextFloat() * volatility * 0.5f)).coerceAtLeast(0.5f)
+        val volume = (1000 + kotlin.random.Random.nextInt(50000)).toFloat()
+        candles.add(CandleData(open, high, low, close, volume))
+        current = close
+    }
+    return candles
+}
+
 private data class MarketMoverCardData(
     val symbol: String,
     val exchange: String,
     val price: Double,
     val changePct: Double,
     val lotSize: Int,
-    val expiry: String = ""
+    val expiry: String = "",
+    val volume: Long = 50000L,
+    val oiChangePct: Double = 0.0
 )
+
+private fun generateExchangeOptionMovers(exchange: String): List<MarketMoverCardData> {
+    return when (exchange.uppercase()) {
+        "NSE" -> listOf(
+            MarketMoverCardData("NIFTY 25AUG 24500 CE", "NSE", 148.50, 42.8, 65, "25 AUG", 2450000L, 38.5),
+            MarketMoverCardData("NIFTY 25AUG 24600 CE", "NSE", 92.20, 31.4, 65, "25 AUG", 1980000L, 25.2),
+            MarketMoverCardData("NIFTY 25AUG 24700 CE", "NSE", 54.10, 22.8, 65, "25 AUG", 1540000L, 19.4),
+            MarketMoverCardData("BANKNIFTY 25AUG 51200 CE", "NSE", 385.00, 28.5, 30, "25 AUG", 1650000L, 22.1),
+            MarketMoverCardData("BANKNIFTY 25AUG 51500 CE", "NSE", 245.00, 19.8, 30, "25 AUG", 1320000L, 16.5),
+            MarketMoverCardData("FINNIFTY 25AUG 23400 CE", "NSE", 84.60, 24.2, 60, "25 AUG", 850000L, 18.4),
+            MarketMoverCardData("MIDCPNIFTY 25AUG 12800 CE", "NSE", 65.40, 18.6, 120, "25 AUG", 620000L, 15.1),
+            MarketMoverCardData("NIFTY 25AUG 24300 PE", "NSE", 45.10, -32.4, 65, "25 AUG", 1820000L, -28.6),
+            MarketMoverCardData("NIFTY 25AUG 24200 PE", "NSE", 28.50, -41.2, 65, "25 AUG", 1120000L, -35.2),
+            MarketMoverCardData("NIFTY 25AUG 24100 PE", "NSE", 16.20, -52.0, 65, "25 AUG", 980000L, -42.0),
+            MarketMoverCardData("BANKNIFTY 25AUG 50800 PE", "NSE", 124.00, -28.9, 30, "25 AUG", 1430000L, -21.4),
+            MarketMoverCardData("BANKNIFTY 25AUG 50500 PE", "NSE", 78.50, -38.2, 30, "25 AUG", 1190000L, -31.5),
+            MarketMoverCardData("FINNIFTY 25AUG 23200 PE", "NSE", 36.80, -22.5, 60, "25 AUG", 740000L, -14.8),
+            MarketMoverCardData("MIDCPNIFTY 25AUG 12600 PE", "NSE", 32.10, -19.8, 120, "25 AUG", 510000L, -12.3)
+        )
+        "BSE" -> listOf(
+            MarketMoverCardData("SENSEX 29AUG 80500 CE", "BSE", 310.00, 38.5, 20, "29 AUG", 1250000L, 34.2),
+            MarketMoverCardData("SENSEX 29AUG 81000 CE", "BSE", 165.20, 29.8, 20, "29 AUG", 980000L, 26.5),
+            MarketMoverCardData("SENSEX 29AUG 81500 CE", "BSE", 88.00, 21.4, 20, "29 AUG", 760000L, 18.2),
+            MarketMoverCardData("BANKEX 29AUG 57000 CE", "BSE", 420.50, 26.4, 30, "29 AUG", 720000L, 21.8),
+            MarketMoverCardData("BANKEX 29AUG 57500 CE", "BSE", 230.00, 17.5, 30, "29 AUG", 580000L, 14.2),
+            MarketMoverCardData("SENSEX 29AUG 80000 PE", "BSE", 85.40, -34.8, 20, "29 AUG", 890000L, -29.4),
+            MarketMoverCardData("SENSEX 29AUG 79500 PE", "BSE", 48.20, -44.5, 20, "29 AUG", 650000L, -38.1),
+            MarketMoverCardData("SENSEX 29AUG 79000 PE", "BSE", 24.50, -56.0, 20, "29 AUG", 520000L, -48.2),
+            MarketMoverCardData("BANKEX 29AUG 56500 PE", "BSE", 115.00, -27.2, 30, "29 AUG", 540000L, -23.6),
+            MarketMoverCardData("BANKEX 29AUG 56000 PE", "BSE", 62.00, -39.4, 30, "29 AUG", 430000L, -32.8)
+        )
+        "MCX" -> listOf(
+            MarketMoverCardData("CRUDEOIL 19SEP 6400 CE", "MCX", 185.00, 46.2, 100, "19 SEP", 840000L, 42.1),
+            MarketMoverCardData("CRUDEOIL 19SEP 6500 CE", "MCX", 112.50, 34.8, 100, "19 SEP", 620000L, 29.5),
+            MarketMoverCardData("CRUDEOIL 19SEP 6600 CE", "MCX", 65.00, 24.5, 100, "19 SEP", 490000L, 20.2),
+            MarketMoverCardData("NATURALGAS 26SEP 190 CE", "MCX", 12.40, 28.6, 1250, "26 SEP", 1150000L, 31.4),
+            MarketMoverCardData("NATURALGAS 26SEP 200 CE", "MCX", 7.80, 21.2, 1250, "26 SEP", 820000L, 23.5),
+            MarketMoverCardData("GOLD 05OCT 75000 CE", "MCX", 850.00, 22.4, 100, "05 OCT", 420000L, 19.8),
+            MarketMoverCardData("GOLD 05OCT 76000 CE", "MCX", 480.00, 16.5, 100, "05 OCT", 310000L, 14.2),
+            MarketMoverCardData("SILVER 28NOV 85000 CE", "MCX", 1420.00, 25.1, 30, "28 NOV", 380000L, 21.6),
+            MarketMoverCardData("SILVER 28NOV 87000 CE", "MCX", 820.00, 18.3, 30, "28 NOV", 290000L, 15.4),
+            MarketMoverCardData("COPPER 30SEP 820 CE", "MCX", 18.50, 19.4, 2500, "30 SEP", 290000L, 16.2),
+            MarketMoverCardData("ZINC 30SEP 280 CE", "MCX", 6.80, 15.2, 5000, "30 SEP", 210000L, 12.5),
+            MarketMoverCardData("CRUDEOIL 19SEP 6300 PE", "MCX", 68.20, -36.4, 100, "19 SEP", 710000L, -31.8),
+            MarketMoverCardData("CRUDEOIL 19SEP 6200 PE", "MCX", 38.00, -48.2, 100, "19 SEP", 550000L, -42.1),
+            MarketMoverCardData("NATURALGAS 26SEP 180 PE", "MCX", 4.80, -42.8, 1250, "26 SEP", 920000L, -37.2),
+            MarketMoverCardData("NATURALGAS 26SEP 175 PE", "MCX", 2.60, -54.5, 1250, "26 SEP", 680000L, -47.0),
+            MarketMoverCardData("GOLD 05OCT 74000 PE", "MCX", 320.00, -28.5, 100, "05 OCT", 310000L, -22.4),
+            MarketMoverCardData("GOLD 05OCT 73000 PE", "MCX", 180.00, -41.0, 100, "05 OCT", 240000L, -34.8),
+            MarketMoverCardData("SILVER 28NOV 83000 PE", "MCX", 680.00, -31.2, 30, "28 NOV", 270000L, -26.8),
+            MarketMoverCardData("SILVER 28NOV 81000 PE", "MCX", 390.00, -44.0, 30, "28 NOV", 210000L, -38.5),
+            MarketMoverCardData("COPPER 30SEP 800 PE", "MCX", 8.40, -26.5, 2500, "30 SEP", 180000L, -22.0),
+            MarketMoverCardData("ZINC 30SEP 270 PE", "MCX", 3.20, -18.4, 5000, "30 SEP", 190000L, -14.2)
+        )
+        else -> emptyList()
+    }
+}
 
 data class SearchInstrumentItem(
     val symbol: String,
@@ -1071,62 +1450,212 @@ data class SearchInstrumentItem(
     val lotSize: Int
 )
 
+private fun resolveSearchResults(
+    query: String,
+    pool: List<SearchInstrumentItem>
+): List<SearchInstrumentItem> {
+    if (query.isBlank()) return emptyList()
+    val q = query.trim().uppercase()
+    val tokens = q.split(" ", "-", "_", "/").filter { it.isNotBlank() }
+
+    val results = mutableListOf<SearchInstrumentItem>()
+
+    // 1. DYNAMIC ON-THE-FLY STRIKE PARSER (For any typed index + strike + CE/PE)
+    val numberMatch = Regex("""\b(\d{2,6})\b""").find(q)?.groupValues?.get(1)?.toIntOrNull()
+    val isCeExplicit = tokens.any { it == "CE" || it == "CALL" }
+    val isPeExplicit = tokens.any { it == "PE" || it == "PUT" }
+
+    val baseCandidate = when {
+        tokens.any { it.contains("BANKNIFTY") || it == "BN" } -> "BANKNIFTY"
+        tokens.any { it.contains("FINNIFTY") || it == "FN" } -> "FINNIFTY"
+        tokens.any { it.contains("MIDCP") || it.contains("MIDCAP") } -> "MIDCPNIFTY"
+        tokens.any { it.contains("NIFTY") } -> "NIFTY"
+        tokens.any { it.contains("SENSEX") } -> "SENSEX"
+        tokens.any { it.contains("BANKEX") } -> "BANKEX"
+        tokens.any { it.contains("CRUDEOIL") || it.contains("CRUDE") } -> "CRUDEOIL"
+        tokens.any { it.contains("NATURALGAS") || it.contains("NATGAS") || it == "NG" } -> "NATURALGAS"
+        tokens.any { it.contains("GOLD") } -> "GOLD"
+        tokens.any { it.contains("SILVER") } -> "SILVER"
+        tokens.any { it.contains("COPPER") } -> "COPPER"
+        tokens.any { it.contains("ZINC") } -> "ZINC"
+        tokens.any { it.contains("ALUMINIUM") || it.contains("ALUM") } -> "ALUMINIUM"
+        tokens.any { it.contains("LEAD") } -> "LEAD"
+        else -> null
+    }
+
+    if (numberMatch != null) {
+        val detectedBase = baseCandidate ?: when {
+            numberMatch in 20000..26500 -> "NIFTY"
+            numberMatch in 46000..56000 -> "BANKNIFTY"
+            numberMatch in 74000..88000 -> "SENSEX"
+            numberMatch in 11000..15000 -> "MIDCPNIFTY"
+            numberMatch in 5000..9000 -> "CRUDEOIL"
+            numberMatch in 100..400 -> "NATURALGAS"
+            numberMatch in 600..1200 -> "COPPER"
+            else -> "NIFTY"
+        }
+
+        val (exch, lot, exp) = when (detectedBase) {
+            "BANKNIFTY" -> Triple("NSE", 30, "25 AUG")
+            "FINNIFTY" -> Triple("NSE", 60, "25 AUG")
+            "MIDCPNIFTY" -> Triple("NSE", 120, "25 AUG")
+            "NIFTY" -> Triple("NSE", 65, "25 AUG")
+            "SENSEX" -> Triple("BSE", 20, "29 AUG")
+            "BANKEX" -> Triple("BSE", 30, "29 AUG")
+            "CRUDEOIL" -> Triple("MCX", 100, "19 SEP")
+            "NATURALGAS" -> Triple("MCX", 1250, "26 SEP")
+            "GOLD" -> Triple("MCX", 100, "05 OCT")
+            "SILVER" -> Triple("MCX", 30, "28 NOV")
+            "COPPER" -> Triple("MCX", 2500, "30 SEP")
+            "ZINC" -> Triple("MCX", 5000, "30 SEP")
+            else -> Triple("NSE", 65, "25 AUG")
+        }
+
+        if (isCeExplicit && !isPeExplicit) {
+            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch CE", exch, "OPTIONS", exp, lot))
+        } else if (isPeExplicit && !isCeExplicit) {
+            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch PE", exch, "OPTIONS", exp, lot))
+        } else {
+            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch CE", exch, "OPTIONS", exp, lot))
+            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch PE", exch, "OPTIONS", exp, lot))
+        }
+    }
+
+    // 2. Comprehensive Token Search against Pre-computed Pool
+    val filteredPool = pool.filter { item ->
+        tokens.all { token ->
+            item.symbol.contains(token, ignoreCase = true) ||
+            item.exchange.contains(token, ignoreCase = true) ||
+            item.category.contains(token, ignoreCase = true) ||
+            item.expiry.contains(token, ignoreCase = true)
+        }
+    }
+
+    // 3. Merge & Deduplicate
+    val merged = (results + filteredPool).distinctBy { it.symbol }
+    return merged.take(20)
+}
+
 private fun generateSearchInstrumentPool(): List<SearchInstrumentItem> {
-    return listOf(
-        // NSE Index Options & Futures
-        SearchInstrumentItem("NIFTY 25AUG 24200 PE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("NIFTY 25AUG 24400 CE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("NIFTY 25AUG 24300 CE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("NIFTY 25AUG 24500 CE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("NIFTY 25AUG 24100 PE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("NIFTY 25AUG 24600 CE", "NSE", "OPTIONS", "25 AUG", 65),
-        SearchInstrumentItem("BANKNIFTY 25AUG 51200 CE", "NSE", "OPTIONS", "25 AUG", 30),
-        SearchInstrumentItem("BANKNIFTY 25AUG 50800 PE", "NSE", "OPTIONS", "25 AUG", 30),
-        SearchInstrumentItem("BANKNIFTY 25AUG 51500 CE", "NSE", "OPTIONS", "25 AUG", 30),
-        SearchInstrumentItem("BANKNIFTY 25AUG 50500 PE", "NSE", "OPTIONS", "25 AUG", 30),
-        SearchInstrumentItem("FINNIFTY 25AUG 23400 CE", "NSE", "OPTIONS", "25 AUG", 60),
-        SearchInstrumentItem("FINNIFTY 25AUG 23200 PE", "NSE", "OPTIONS", "25 AUG", 60),
-        SearchInstrumentItem("MIDCPNIFTY 25AUG 12800 CE", "NSE", "OPTIONS", "25 AUG", 120),
-        SearchInstrumentItem("MIDCPNIFTY 25AUG 12600 PE", "NSE", "OPTIONS", "25 AUG", 120),
-        
-        // BSE Index Options & Stocks
-        SearchInstrumentItem("SENSEX 29AUG 80500 CE", "BSE", "OPTIONS", "29 AUG", 20),
-        SearchInstrumentItem("SENSEX 29AUG 80000 PE", "BSE", "OPTIONS", "29 AUG", 20),
-        SearchInstrumentItem("SENSEX 29AUG 81000 CE", "BSE", "OPTIONS", "29 AUG", 20),
-        SearchInstrumentItem("SENSEX 29AUG 79500 PE", "BSE", "OPTIONS", "29 AUG", 20),
-        SearchInstrumentItem("BANKEX 29AUG 57000 CE", "BSE", "OPTIONS", "29 AUG", 30),
-        SearchInstrumentItem("BANKEX 29AUG 56500 PE", "BSE", "OPTIONS", "29 AUG", 30),
-        SearchInstrumentItem("BANKEX 29AUG 57500 CE", "BSE", "OPTIONS", "29 AUG", 30),
-        
-        // MCX Commodity Contracts & Options
-        SearchInstrumentItem("CRUDEOIL 19SEP 6400 CE", "MCX", "OPTIONS", "19 SEP", 100),
-        SearchInstrumentItem("CRUDEOIL 19SEP 6300 PE", "MCX", "OPTIONS", "19 SEP", 100),
-        SearchInstrumentItem("CRUDEOIL 19SEP 6500 CE", "MCX", "OPTIONS", "19 SEP", 100),
-        SearchInstrumentItem("CRUDEOIL", "MCX", "FUTURES", "19 SEP", 100),
-        SearchInstrumentItem("CRUDEOIL M", "MCX", "FUTURES", "19 SEP", 10),
-        SearchInstrumentItem("GOLD 05OCT 75000 CE", "MCX", "OPTIONS", "05 OCT", 100),
-        SearchInstrumentItem("GOLD 05OCT 74500 PE", "MCX", "OPTIONS", "05 OCT", 100),
-        SearchInstrumentItem("GOLD", "MCX", "FUTURES", "05 OCT", 100),
-        SearchInstrumentItem("GOLD M", "MCX", "FUTURES", "05 OCT", 10),
-        SearchInstrumentItem("SILVER 28NOV 85000 CE", "MCX", "OPTIONS", "28 NOV", 30),
-        SearchInstrumentItem("SILVER 28NOV 83000 PE", "MCX", "OPTIONS", "28 NOV", 30),
-        SearchInstrumentItem("SILVER", "MCX", "FUTURES", "28 NOV", 30),
-        SearchInstrumentItem("SILVER M", "MCX", "FUTURES", "28 NOV", 5),
-        SearchInstrumentItem("NATURALGAS 26SEP 190 CE", "MCX", "OPTIONS", "26 SEP", 1250),
-        SearchInstrumentItem("NATURALGAS 26SEP 180 PE", "MCX", "OPTIONS", "26 SEP", 1250),
-        SearchInstrumentItem("NATURALGAS", "MCX", "FUTURES", "26 SEP", 1250),
-        SearchInstrumentItem("COPPER 30SEP 810 CE", "MCX", "OPTIONS", "30 SEP", 2500),
-        SearchInstrumentItem("COPPER", "MCX", "FUTURES", "30 SEP", 2500),
-        
-        // Equities
-        SearchInstrumentItem("RELIANCE", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("TATASTEEL", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("HDFCBANK", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("INFY", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("ICICIBANK", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("TCS", "NSE", "EQUITY", "CASH", 1),
-        SearchInstrumentItem("SBIN", "NSE", "EQUITY", "CASH", 1)
-    )
+    val items = mutableListOf<SearchInstrumentItem>()
+
+    // NIFTY STRIKES (23000 to 26000, step 100)
+    for (strike in 23000..26000 step 100) {
+        items.add(SearchInstrumentItem("NIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 65))
+        items.add(SearchInstrumentItem("NIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 65))
+    }
+
+    // BANKNIFTY STRIKES (48000 to 54000, step 200)
+    for (strike in 48000..54000 step 200) {
+        items.add(SearchInstrumentItem("BANKNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 30))
+        items.add(SearchInstrumentItem("BANKNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 30))
+    }
+
+    // FINNIFTY STRIKES (22000 to 25000, step 100)
+    for (strike in 22000..25000 step 100) {
+        items.add(SearchInstrumentItem("FINNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 60))
+        items.add(SearchInstrumentItem("FINNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 60))
+    }
+
+    // MIDCPNIFTY STRIKES (11500 to 14000, step 100)
+    for (strike in 11500..14000 step 100) {
+        items.add(SearchInstrumentItem("MIDCPNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 120))
+        items.add(SearchInstrumentItem("MIDCPNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 120))
+    }
+
+    // SENSEX STRIKES (77000 to 85000, step 500)
+    for (strike in 77000..85000 step 500) {
+        items.add(SearchInstrumentItem("SENSEX 29AUG $strike CE", "BSE", "OPTIONS", "29 AUG", 20))
+        items.add(SearchInstrumentItem("SENSEX 29AUG $strike PE", "BSE", "OPTIONS", "29 AUG", 20))
+    }
+
+    // BANKEX STRIKES (53000 to 60000, step 500)
+    for (strike in 53000..60000 step 500) {
+        items.add(SearchInstrumentItem("BANKEX 29AUG $strike CE", "BSE", "OPTIONS", "29 AUG", 30))
+        items.add(SearchInstrumentItem("BANKEX 29AUG $strike PE", "BSE", "OPTIONS", "29 AUG", 30))
+    }
+
+    // CRUDEOIL STRIKES (5800 to 7200, step 100)
+    for (strike in 5800..7200 step 100) {
+        items.add(SearchInstrumentItem("CRUDEOIL 19SEP $strike CE", "MCX", "OPTIONS", "19 SEP", 100))
+        items.add(SearchInstrumentItem("CRUDEOIL 19SEP $strike PE", "MCX", "OPTIONS", "19 SEP", 100))
+    }
+
+    // NATURALGAS STRIKES (160 to 260, step 10)
+    for (strike in 160..260 step 10) {
+        items.add(SearchInstrumentItem("NATURALGAS 26SEP $strike CE", "MCX", "OPTIONS", "26 SEP", 1250))
+        items.add(SearchInstrumentItem("NATURALGAS 26SEP $strike PE", "MCX", "OPTIONS", "26 SEP", 1250))
+    }
+
+    // GOLD STRIKES (72000 to 78000, step 500)
+    for (strike in 72000..78000 step 500) {
+        items.add(SearchInstrumentItem("GOLD 05OCT $strike CE", "MCX", "OPTIONS", "05 OCT", 100))
+        items.add(SearchInstrumentItem("GOLD 05OCT $strike PE", "MCX", "OPTIONS", "05 OCT", 100))
+    }
+
+    // SILVER STRIKES (80000 to 90000, step 1000)
+    for (strike in 80000..90000 step 1000) {
+        items.add(SearchInstrumentItem("SILVER 28NOV $strike CE", "MCX", "OPTIONS", "28 NOV", 30))
+        items.add(SearchInstrumentItem("SILVER 28NOV $strike PE", "MCX", "OPTIONS", "28 NOV", 30))
+    }
+
+    // COPPER STRIKES (780 to 860, step 10)
+    for (strike in 780..860 step 10) {
+        items.add(SearchInstrumentItem("COPPER 30SEP $strike CE", "MCX", "OPTIONS", "30 SEP", 2500))
+        items.add(SearchInstrumentItem("COPPER 30SEP $strike PE", "MCX", "OPTIONS", "30 SEP", 2500))
+    }
+
+    // ALL MCX COMMODITIES & MINIS
+    items.add(SearchInstrumentItem("CRUDEOIL", "MCX", "FUTURES", "19 SEP", 100))
+    items.add(SearchInstrumentItem("CRUDEOIL M", "MCX", "FUTURES", "19 SEP", 10))
+    items.add(SearchInstrumentItem("NATURALGAS", "MCX", "FUTURES", "26 SEP", 1250))
+    items.add(SearchInstrumentItem("NATURALGAS M", "MCX", "FUTURES", "26 SEP", 250))
+    items.add(SearchInstrumentItem("GOLD", "MCX", "FUTURES", "05 OCT", 100))
+    items.add(SearchInstrumentItem("GOLD M", "MCX", "FUTURES", "05 OCT", 10))
+    items.add(SearchInstrumentItem("GOLD GUINEA", "MCX", "FUTURES", "05 OCT", 1))
+    items.add(SearchInstrumentItem("GOLD PETAL", "MCX", "FUTURES", "05 OCT", 1))
+    items.add(SearchInstrumentItem("SILVER", "MCX", "FUTURES", "28 NOV", 30))
+    items.add(SearchInstrumentItem("SILVER M", "MCX", "FUTURES", "28 NOV", 5))
+    items.add(SearchInstrumentItem("SILVER MIC", "MCX", "FUTURES", "28 NOV", 1))
+    items.add(SearchInstrumentItem("COPPER", "MCX", "FUTURES", "30 SEP", 2500))
+    items.add(SearchInstrumentItem("COPPER M", "MCX", "FUTURES", "30 SEP", 250))
+    items.add(SearchInstrumentItem("ZINC", "MCX", "FUTURES", "30 SEP", 5000))
+    items.add(SearchInstrumentItem("ZINC M", "MCX", "FUTURES", "30 SEP", 1000))
+    items.add(SearchInstrumentItem("ALUMINIUM", "MCX", "FUTURES", "30 SEP", 5000))
+    items.add(SearchInstrumentItem("ALUMINIUM M", "MCX", "FUTURES", "30 SEP", 1000))
+    items.add(SearchInstrumentItem("LEAD", "MCX", "FUTURES", "30 SEP", 5000))
+    items.add(SearchInstrumentItem("LEAD M", "MCX", "FUTURES", "30 SEP", 1000))
+    items.add(SearchInstrumentItem("NICKEL", "MCX", "FUTURES", "30 SEP", 1500))
+    items.add(SearchInstrumentItem("MCXBULLDEX", "MCX", "INDEX", "30 SEP", 50))
+    items.add(SearchInstrumentItem("MCXMETLDEX", "MCX", "INDEX", "30 SEP", 50))
+    items.add(SearchInstrumentItem("MCXENRGDEX", "MCX", "INDEX", "30 SEP", 125))
+
+    // ALL MAJOR NSE & BSE EQUITIES & INDICES
+    items.add(SearchInstrumentItem("NIFTY 50", "NSE", "INDEX", "SPOT", 65))
+    items.add(SearchInstrumentItem("BANKNIFTY", "NSE", "INDEX", "SPOT", 30))
+    items.add(SearchInstrumentItem("FINNIFTY", "NSE", "INDEX", "SPOT", 60))
+    items.add(SearchInstrumentItem("MIDCPNIFTY", "NSE", "INDEX", "SPOT", 120))
+    items.add(SearchInstrumentItem("SENSEX", "BSE", "INDEX", "SPOT", 20))
+    items.add(SearchInstrumentItem("BANKEX", "BSE", "INDEX", "SPOT", 30))
+    items.add(SearchInstrumentItem("RELIANCE", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("HDFCBANK", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("ICICIBANK", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("INFY", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("TCS", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("SBIN", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("TATASTEEL", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("TATAMOTORS", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("BHARTIARTL", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("ITC", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("LT", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("AXISBANK", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("KOTAKBANK", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("BAJFINANCE", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("MARUTI", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("SUNPHARMA", "NSE", "EQUITY", "CASH", 1))
+    items.add(SearchInstrumentItem("TITAN", "NSE", "EQUITY", "CASH", 1))
+
+    return items
 }
 
 // ==========================================

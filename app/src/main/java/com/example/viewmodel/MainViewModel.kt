@@ -317,6 +317,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
+            brokerManager.brokerAuthManager.statuses.collectLatest { statuses ->
+                val actualDhanStatus = statuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                val currentProfile = _userProfile.value
+                if (currentProfile.isDhanConnected != actualDhanStatus) {
+                    _userProfile.value = currentProfile.copy(isDhanConnected = actualDhanStatus)
+                }
+            }
+        }
+        viewModelScope.launch {
             kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
                 dbList.map { item ->
                     val dbSymbol = item.symbol.uppercase().trim()
@@ -606,6 +615,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnectBroker(brokerName: String) {
         viewModelScope.launch {
             brokerAuthManager.disconnectBroker(brokerName)
+            val current = _userProfile.value
+            val updated = when (brokerName) {
+                "Dhan" -> current.copy(
+                    isDhanConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Dhan") "" else current.connectedBroker
+                )
+                "Angel One" -> current.copy(
+                    isAngelConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
+                )
+                else -> current.copy(
+                    connectedBroker = if (current.connectedBroker == brokerName) "" else current.connectedBroker
+                )
+            }
+            _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
+            repository.updateProfile(updated)
             alertService.notifyBrokerDisconnected(brokerName)
         }
     }
@@ -613,6 +638,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeAccountBroker(brokerName: String) {
         viewModelScope.launch {
             brokerAuthManager.removeAccount(brokerName)
+            val current = _userProfile.value
+            val updated = when (brokerName) {
+                "Dhan" -> current.copy(
+                    isDhanConnected = false,
+                    dhanClientId = "",
+                    connectedBroker = if (current.connectedBroker == "Dhan") "" else current.connectedBroker
+                )
+                "Angel One" -> current.copy(
+                    isAngelConnected = false,
+                    angelClientId = "",
+                    connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
+                )
+                else -> current.copy(
+                    connectedBroker = if (current.connectedBroker == brokerName) "" else current.connectedBroker
+                )
+            }
+            _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
+            repository.updateProfile(updated)
             repository.addNotification("Account Removed", "$brokerName credentials and tokens cleared", "WARNING")
         }
     }

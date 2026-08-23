@@ -98,7 +98,7 @@ fun HomeScreen(
                 }
             }
 
-            val isDhanConnected = userProfile.isDhanConnected || (viewModel?.sessionManager?.isDhanConnected == true)
+            val isDhanConnected = userProfile.isDhanConnected
 
             // 1. TOP HEADER (Logo, App Title, Dhan Live Badge, Notifications Badge)
             HomeHeaderSection(

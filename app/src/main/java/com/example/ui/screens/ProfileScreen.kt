@@ -874,17 +874,17 @@ fun ProfileScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
-                            icon = Icons.Default.Info,
-                            title = "ABOUT KING KHAN",
-                            subtitle = "v${com.example.BuildConfig.VERSION_NAME} Official",
-                            onClick = { showAboutDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                        SettingMenuGridCard(
                             icon = Icons.Default.SystemUpdate,
                             title = "CHECK FOR UPDATES",
                             subtitle = "Latest stable version",
                             onClick = { showUpdateDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingMenuGridCard(
+                            icon = Icons.Default.Info,
+                            title = "ABOUT KING KHAN",
+                            subtitle = "v${com.example.BuildConfig.VERSION_NAME} Official",
+                            onClick = { showAboutDialog = true },
                             modifier = Modifier.weight(1f)
                         )
                     }

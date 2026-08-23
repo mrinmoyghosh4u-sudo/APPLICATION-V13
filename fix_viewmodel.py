@@ -1,37 +1,38 @@
-import re
+import os
 
-with open('app/src/main/java/com/example/viewmodel/MainViewModel.kt', 'r') as f:
+filepath = "app/src/main/java/com/example/viewmodel/MainViewModel.kt"
+with open(filepath, 'r') as f:
     content = f.read()
 
-text_to_replace = """        viewModelScope.launch {
-            repository.watchlistAll.collectLatest { list ->
-                _watchlist.value = list
-            }
-        }"""
+target = """            repository.userProfile.collectLatest { prof ->
+                prof?.let { _userProfile.value = it }
+            }"""
 
-new_text = """        viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
-                dbList.map { item ->
-                    // For index we use the name to map
-                    val symbolToMatch = item.symbol.replace(" 50", "") // "NIFTY 50" -> "NIFTY"
-                    val live = liveData[symbolToMatch]
-                    if (live != null && live.ltp > 0) {
-                        item.copy(
-                            ltp = live.ltp,
-                            change = live.change,
-                            changePercent = live.changePercent,
-                            isPositive = live.change >= 0
-                        )
-                    } else {
-                        item
-                    }
+replacement = """            repository.userProfile.collectLatest { prof ->
+                prof?.let { 
+                    // Ensure isDhanConnected reflects actual auth status
+                    val actualDhanStatus = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                    _userProfile.value = it.copy(isDhanConnected = actualDhanStatus) 
                 }
-            }.collectLatest { combinedList ->
-                _watchlist.value = combinedList
-            }
-        }"""
+            }"""
 
-content = content.replace(text_to_replace, new_text)
+if target in content:
+    with open(filepath, 'w') as f:
+        f.write(content.replace(target, replacement))
+    print("Replaced collectLatest block 1")
+else:
+    print("Could not find collectLatest block 1")
 
-with open('app/src/main/java/com/example/viewmodel/MainViewModel.kt', 'w') as f:
-    f.write(content)
+target2 = """            _userProfile.value = updated
+            repository.updateProfile(updated)"""
+
+replacement2 = """            _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
+            repository.updateProfile(updated)"""
+
+if target2 in content:
+    with open(filepath, 'w') as f:
+        f.write(content.replace(target2, replacement2))
+    print("Replaced collectLatest block 2")
+else:
+    print("Could not find collectLatest block 2")
+
