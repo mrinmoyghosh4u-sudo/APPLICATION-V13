@@ -81,6 +81,7 @@ class MainActivity : FragmentActivity() {
 
                 val telegramBotToken by viewModel.telegramBotToken.collectAsStateWithLifecycle()
                 val telegramChatId by viewModel.telegramChatId.collectAsStateWithLifecycle()
+                val telegramChannelId by viewModel.telegramChannelId.collectAsStateWithLifecycle()
                 val isTelegramAlertsEnabled by viewModel.isTelegramAlertsEnabled.collectAsStateWithLifecycle()
                 val isTelegramTesting by viewModel.isTelegramTesting.collectAsStateWithLifecycle()
                 val telegramResponseInfo by viewModel.telegramResponseInfo.collectAsStateWithLifecycle()
@@ -612,6 +613,7 @@ class MainActivity : FragmentActivity() {
                                 TelegramSettingsScreen(
                                     botToken = telegramBotToken,
                                     chatId = telegramChatId,
+                                    channelId = telegramChannelId,
                                     isAlertsEnabled = isTelegramAlertsEnabled,
                                     isTesting = isTelegramTesting,
                                     telegramResponseInfo = telegramResponseInfo,
@@ -620,14 +622,14 @@ class MainActivity : FragmentActivity() {
                                             navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
                                         }
                                     },
-                                    onSaveSettings = { token, chatId, enabled ->
-                                        viewModel.saveTelegramSettings(token, chatId, enabled)
+                                    onSaveSettings = { token, chatId, enabled, channelId ->
+                                        viewModel.saveTelegramSettings(token, chatId, enabled, channelId)
                                         coroutineScope.launch {
                                             snackbarHostState.showSnackbar("Telegram settings saved successfully")
                                         }
                                     },
-                                    onTestTelegramBot = { token, chatId ->
-                                        viewModel.testTelegramBot(token, chatId)
+                                    onTestTelegramBot = { token, chatId, channelId ->
+                                        viewModel.testTelegramBot(token, chatId, channelId)
                                     },
                                     onTestAlert = { alertType, symbol, details ->
                                         viewModel.testSpecificTelegramAlert(alertType, symbol, details)

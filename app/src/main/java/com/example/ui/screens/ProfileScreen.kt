@@ -400,28 +400,12 @@ fun ProfileScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
                                 Text("AVAILABLE TRADING CAPITAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextGray)
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(availableBalanceStr, fontSize = 20.sp, fontWeight = FontWeight.Black, color = ProfitGreen)
-                            }
-
-                            Button(
-                                onClick = { showResetWalletDialog = true },
-                                shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2838)),
-                                border = BorderStroke(1.dp, Color(0xFF29B6F6)),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFF29B6F6), modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Set Capital", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
-                                }
                             }
                         }
                     }
@@ -663,135 +647,88 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 5. TELEGRAM ALERTS & BOT INTEGRATION
-            GoldCard(borderColor = DarkCardBorder, borderWidth = 1.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // 5. TELEGRAM ALERTS & BOT INTEGRATION (Self-Contained Option)
+            GoldCard(
+                borderColor = DarkCardBorder,
+                borderWidth = 1.dp
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToTelegramSettings() },
+                    color = Color.Transparent
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(Color(0xFF2A200B), CircleShape)
-                                .border(1.dp, PrimaryGold, CircleShape),
-                            contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = PrimaryGold, modifier = Modifier.size(13.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF2A200B), CircleShape)
+                                    .border(1.dp, PrimaryGold, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = null,
+                                    tint = PrimaryGold,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "TELEGRAM ALERTS & BOT ENGINE",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PrimaryGold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    if (isTelegramEnabled) "Active • Instant alerts & optional channel broadcast" else "Configure bot token, chat ID & channel ID",
+                                    fontSize = 10.sp,
+                                    color = TextGray
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("TELEGRAM ALERTS & BOT ENGINE", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryGold)
-                    }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (isTelegramEnabled) "Enabled" else "Disabled", fontSize = 11.sp, color = TextWhite)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Switch(
-                            checked = isTelegramEnabled,
-                            onCheckedChange = {
-                                isTelegramEnabled = it
-                                appPreferences.setTelegramEnabled(it)
-                                Toast.makeText(context, if (it) "Telegram Alerts Enabled" else "Telegram Alerts Disabled", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = ProfitGreen
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isTelegramEnabled) ProfitGreen.copy(alpha = 0.15f) else TextGray.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, if (isTelegramEnabled) ProfitGreen else TextGray.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(if (isTelegramEnabled) ProfitGreen else TextGray, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        if (isTelegramEnabled) "LIVE" else "SETUP",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isTelegramEnabled) ProfitGreen else TextGray
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = "Open Telegram Engine",
+                                tint = PrimaryGold,
+                                modifier = Modifier.size(20.dp)
                             )
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 2x2 Status Pills
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatusPillCard(
-                        icon = Icons.Default.SmartToy,
-                        title = "Bot Status",
-                        value = if (isTelegramEnabled) "Connected" else "Paused",
-                        isSuccess = isTelegramEnabled,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatusPillCard(
-                        icon = Icons.Default.ChatBubbleOutline,
-                        title = "Chat Target",
-                        value = if (isTelegramEnabled) "Authorized" else "Inactive",
-                        isSuccess = isTelegramEnabled,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatusPillCard(
-                        icon = Icons.Default.FlashOn,
-                        title = "Alert Latency",
-                        value = "< 150 ms",
-                        isSuccess = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatusPillCard(
-                        icon = Icons.Default.NotificationsActive,
-                        title = "Notification Mode",
-                        value = "Instant Real-Time",
-                        isSuccess = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 2 Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onNavigateToTelegramSettings,
-                        modifier = Modifier.weight(1f).height(40.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, PrimaryGold),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF131722))
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = PrimaryGold, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("CONFIGURE BOT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-                        }
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                isTestSending = true
-                                Toast.makeText(context, "Sending test signal to Telegram...", Toast.LENGTH_SHORT).show()
-                                kotlinx.coroutines.delay(800)
-                                isTestSending = false
-                                Toast.makeText(context, "✅ Test alert transmitted successfully to Telegram!", Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(40.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, if (isTelegramEnabled) ProfitGreen else TextGray),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF131722)),
-                        enabled = !isTestSending
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isTestSending) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = ProfitGreen, strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Bolt, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(15.dp))
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (isTestSending) "SENDING..." else "SEND TEST ALERT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
                         }
                     }
                 }
@@ -932,17 +869,17 @@ fun ProfileScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
-                            icon = Icons.Default.SystemUpdate,
-                            title = "CHECK FOR UPDATES",
-                            subtitle = "Latest stable version",
-                            onClick = { showUpdateDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                        SettingMenuGridCard(
                             icon = Icons.Default.Info,
                             title = "ABOUT KING KHAN",
                             subtitle = "v${com.example.BuildConfig.VERSION_NAME} Official",
                             onClick = { showAboutDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingMenuGridCard(
+                            icon = Icons.Default.SystemUpdate,
+                            title = "CHECK FOR UPDATES",
+                            subtitle = "Latest stable version",
+                            onClick = { showUpdateDialog = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -1570,8 +1507,8 @@ private fun BrokerStatusRow(
     onRemoveAccount: (() -> Unit)? = null
 ) {
     val statusText = when (status) {
-        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 LIVE"
-        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟢 LIVE (STANDBY)"
+        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Live"
+        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟢 Live"
         com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> "🟠 Re-auth Required"
         com.example.data.network.BrokerAuthStatus.OFFLINE -> "⚪ Not Connected"
         com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Connected"

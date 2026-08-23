@@ -33,17 +33,19 @@ import com.example.ui.theme.*
 fun TelegramSettingsScreen(
     botToken: String,
     chatId: String,
+    channelId: String = "",
     isAlertsEnabled: Boolean,
     isTesting: Boolean,
     telegramResponseInfo: TelegramApiResponseInfo?,
     onBack: () -> Unit,
-    onSaveSettings: (token: String, chatId: String, isEnabled: Boolean) -> Unit,
-    onTestTelegramBot: (token: String, chatId: String) -> Unit,
+    onSaveSettings: (token: String, chatId: String, isEnabled: Boolean, channelId: String) -> Unit,
+    onTestTelegramBot: (token: String, chatId: String, channelId: String) -> Unit,
     onTestAlert: (alertType: String, symbol: String, details: String) -> Unit,
     onClearResponse: () -> Unit
 ) {
     var tokenInput by remember(botToken) { mutableStateOf(botToken) }
     var chatIdInput by remember(chatId) { mutableStateOf(chatId) }
+    var channelIdInput by remember(channelId) { mutableStateOf(channelId) }
     var alertsEnabledState by remember(isAlertsEnabled) { mutableStateOf(isAlertsEnabled) }
     var isTokenVisible by remember { mutableStateOf(false) }
 
@@ -155,7 +157,7 @@ fun TelegramSettingsScreen(
                         checked = alertsEnabledState,
                         onCheckedChange = {
                             alertsEnabledState = it
-                            onSaveSettings(tokenInput, chatIdInput, it)
+                            onSaveSettings(tokenInput, chatIdInput, it, channelIdInput)
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.Black,
@@ -218,13 +220,13 @@ fun TelegramSettingsScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Chat ID Field
-                    Text("Telegram Chat ID / Channel Username", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextWhite)
+                    Text("Telegram Chat ID / User ID", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextWhite)
                     Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = chatIdInput,
                         onValueChange = { chatIdInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. 987654321 or @MyTradingChannel", fontSize = 11.sp, color = TextGray) },
+                        placeholder = { Text("e.g. 987654321", fontSize = 11.sp, color = TextGray) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryGold,
                             unfocusedBorderColor = DarkCardBorder,
@@ -236,7 +238,50 @@ fun TelegramSettingsScreen(
                         singleLine = true
                     )
                     Text(
-                        text = "💡 Find your Chat ID via @userinfobot or use your @channel_username",
+                        text = "💡 Find your Chat ID via @userinfobot (direct private alerts)",
+                        fontSize = 10.sp,
+                        color = TextGray,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Optional Channel ID Field
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Telegram Channel ID / Username", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextWhite)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = PrimaryGold.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, PrimaryGold)
+                        ) {
+                            Text(
+                                "OPTIONAL",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryGold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = channelIdInput,
+                        onValueChange = { channelIdInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. @MyTradingChannel or -1001234567890", fontSize = 11.sp, color = TextGray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGold,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite,
+                            focusedContainerColor = DarkCardSecondary,
+                            unfocusedContainerColor = DarkCardSecondary
+                        ),
+                        singleLine = true
+                    )
+                    Text(
+                        text = "📢 Broadcasts simultaneously to both Chat and Channel when configured (Add bot as Admin)",
                         fontSize = 10.sp,
                         color = TextGray,
                         modifier = Modifier.padding(top = 2.dp)
@@ -252,7 +297,7 @@ fun TelegramSettingsScreen(
                         // Save Settings Button
                         Button(
                             onClick = {
-                                onSaveSettings(tokenInput, chatIdInput, alertsEnabledState)
+                                onSaveSettings(tokenInput, chatIdInput, alertsEnabledState, channelIdInput)
                             },
                             modifier = Modifier
                                 .weight(1f)
@@ -270,9 +315,9 @@ fun TelegramSettingsScreen(
                         // Test Telegram Button
                         OutlinedButton(
                             onClick = {
-                                onTestTelegramBot(tokenInput, chatIdInput)
+                                onTestTelegramBot(tokenInput, chatIdInput, channelIdInput)
                             },
-                            enabled = !isTesting && tokenInput.isNotBlank() && chatIdInput.isNotBlank(),
+                            enabled = !isTesting && tokenInput.isNotBlank() && (chatIdInput.isNotBlank() || channelIdInput.isNotBlank()),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(44.dp),

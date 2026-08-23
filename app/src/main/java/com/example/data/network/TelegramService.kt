@@ -27,8 +27,62 @@ class TelegramService(private val sessionManager: SessionManager) {
 
     private val sentEventIds = Collections.synchronizedSet(HashSet<String>())
 
-    suspend fun sendAlert(text: String, botToken: String, chatId: String): TelegramApiResponseInfo {
-        return sendRawMessage(botToken, chatId, text)
+    suspend fun sendAlert(
+        text: String,
+        botToken: String,
+        chatId: String,
+        channelId: String = sessionManager.telegramChannelId
+    ): TelegramApiResponseInfo = withContext(Dispatchers.IO) {
+        val cleanChatId = chatId.trim().removeSuffix(",").trim()
+        val cleanChannelId = channelId.trim().removeSuffix(",").trim()
+
+        if (cleanChatId.isBlank() && cleanChannelId.isBlank()) {
+            return@withContext TelegramApiResponseInfo(
+                isSuccess = false,
+                httpCode = 400,
+                okFlag = false,
+                description = "Validation Error: At least one Telegram Chat ID or Channel ID is required.",
+                rawJson = "{\"ok\": false, \"error_code\": 400, \"description\": \"Client Validation: Missing Chat ID and Channel ID\"}"
+            )
+        }
+
+        var primaryResponse: TelegramApiResponseInfo? = null
+        if (cleanChatId.isNotBlank()) {
+            primaryResponse = sendRawMessage(botToken, cleanChatId, text)
+        }
+
+        var channelResponse: TelegramApiResponseInfo? = null
+        if (cleanChannelId.isNotBlank()) {
+            channelResponse = sendRawMessage(botToken, cleanChannelId, text)
+        }
+
+        if (primaryResponse != null && channelResponse != null) {
+            val bothOk = primaryResponse.isSuccess && channelResponse.isSuccess
+            val statusDesc = if (bothOk) {
+                "✅ Alert successfully sent to both Chat ($cleanChatId) & Channel ($cleanChannelId)"
+            } else if (primaryResponse.isSuccess) {
+                "⚠️ Chat sent ($cleanChatId), but Channel failed: ${channelResponse.description}"
+            } else if (channelResponse.isSuccess) {
+                "⚠️ Channel sent ($cleanChannelId), but Chat failed: ${primaryResponse.description}"
+            } else {
+                "❌ Failed to send to both Chat ($cleanChatId) and Channel ($cleanChannelId)"
+            }
+            TelegramApiResponseInfo(
+                isSuccess = primaryResponse.isSuccess || channelResponse.isSuccess,
+                httpCode = if (bothOk) 200 else (if (primaryResponse.httpCode != 0) primaryResponse.httpCode else channelResponse.httpCode),
+                okFlag = primaryResponse.okFlag || channelResponse.okFlag,
+                description = statusDesc,
+                rawJson = "{\"chat_response\": ${primaryResponse.rawJson}, \"channel_response\": ${channelResponse.rawJson}}"
+            )
+        } else {
+            primaryResponse ?: channelResponse ?: TelegramApiResponseInfo(
+                isSuccess = false,
+                httpCode = 400,
+                okFlag = false,
+                description = "No target specified",
+                rawJson = "{}"
+            )
+        }
     }
 
     private val moshi: Moshi = Moshi.Builder()
@@ -166,13 +220,14 @@ class TelegramService(private val sessionManager: SessionManager) {
     }
 
     /**
-     * Dispatch event notification with duplicate protection.
+     * Dispatch event notification with duplicate protection and dual-target delivery.
      */
     suspend fun sendFormattedEvent(eventId: String, messageText: String): TelegramApiResponseInfo? {
         if (!sessionManager.isTelegramAlertsEnabled) return null
         val token = sessionManager.telegramBotToken
         val chatId = sessionManager.telegramChatId
-        if (token.isBlank() || chatId.isBlank()) return null
+        val channelId = sessionManager.telegramChannelId
+        if (token.isBlank() || (chatId.isBlank() && channelId.isBlank())) return null
 
         if (eventId.isNotBlank()) {
             if (sentEventIds.contains(eventId)) {
@@ -185,7 +240,7 @@ class TelegramService(private val sessionManager: SessionManager) {
             sentEventIds.add(eventId)
         }
 
-        return sendRawMessage(token, chatId, messageText)
+        return sendAlert(text = messageText, botToken = token, chatId = chatId, channelId = channelId)
     }
 
     /**

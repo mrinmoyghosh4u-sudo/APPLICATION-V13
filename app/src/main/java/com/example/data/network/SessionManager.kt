@@ -61,6 +61,7 @@ class SessionManager(context: Context) {
         private const val KEY_DHAN_TOKEN_TIME = "dhan_token_time"
         private const val KEY_TELEGRAM_BOT_TOKEN = "telegram_bot_token"
         private const val KEY_TELEGRAM_CHAT_ID = "telegram_chat_id"
+        private const val KEY_TELEGRAM_CHANNEL_ID = "telegram_channel_id"
         private const val KEY_TELEGRAM_ALERTS_ENABLED = "telegram_alerts_enabled"
     }
 
@@ -278,6 +279,12 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_TELEGRAM_CHAT_ID, "") ?: ""
         set(value) {
             prefs.edit().putString(KEY_TELEGRAM_CHAT_ID, value).commit()
+        }
+
+    var telegramChannelId: String
+        get() = prefs.getString(KEY_TELEGRAM_CHANNEL_ID, "") ?: ""
+        set(value) {
+            prefs.edit().putString(KEY_TELEGRAM_CHANNEL_ID, value).commit()
         }
 
     var isTelegramAlertsEnabled: Boolean

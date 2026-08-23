@@ -81,6 +81,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _telegramChatId = MutableStateFlow(sessionManager.telegramChatId)
     val telegramChatId: StateFlow<String> = _telegramChatId.asStateFlow()
 
+    private val _telegramChannelId = MutableStateFlow(sessionManager.telegramChannelId)
+    val telegramChannelId: StateFlow<String> = _telegramChannelId.asStateFlow()
+
     private val _isTelegramAlertsEnabled = MutableStateFlow(sessionManager.isTelegramAlertsEnabled)
     val isTelegramAlertsEnabled: StateFlow<Boolean> = _isTelegramAlertsEnabled.asStateFlow()
 
@@ -1141,22 +1144,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveTelegramSettings(token: String, chatId: String, isEnabled: Boolean) {
+    fun saveTelegramSettings(token: String, chatId: String, isEnabled: Boolean, channelId: String = "") {
         val cleanToken = token.trim()
         val cleanChatId = chatId.trim()
+        val cleanChannelId = channelId.trim()
         sessionManager.telegramBotToken = cleanToken
         sessionManager.telegramChatId = cleanChatId
+        sessionManager.telegramChannelId = cleanChannelId
         sessionManager.isTelegramAlertsEnabled = isEnabled
         _telegramBotToken.value = cleanToken
         _telegramChatId.value = cleanChatId
+        _telegramChannelId.value = cleanChannelId
         _isTelegramAlertsEnabled.value = isEnabled
     }
 
-    fun testTelegramBot(token: String, chatId: String) {
+    fun testTelegramBot(token: String, chatId: String, channelId: String = "") {
         viewModelScope.launch {
             _isTelegramTesting.value = true
             val msg = com.example.data.network.TelegramMessageFormatter.formatTestMessage()
-            val res = telegramService.sendAlert(msg, token, chatId)
+            val res = telegramService.sendAlert(
+                text = msg,
+                botToken = token,
+                chatId = chatId,
+                channelId = channelId.ifBlank { sessionManager.telegramChannelId }
+            )
             _telegramResponseInfo.value = res
             _isTelegramTesting.value = false
         }
