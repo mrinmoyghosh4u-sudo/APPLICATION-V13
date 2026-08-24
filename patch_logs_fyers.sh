@@ -1,0 +1,3 @@
+sed -i 's/val redirectUri = sessionManager.fyersRedirectUri.takeIf/android.util.Log.d("FyersAuth", "[1] Credentials: PASS")\n                                val redirectUri = sessionManager.fyersRedirectUri.takeIf/g' app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt
+
+sed -i '/android.util.Log.d("UpstoxAuth", "\[2\] Authorization URL generated/! s/val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))/android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")\n                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))/g' app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt

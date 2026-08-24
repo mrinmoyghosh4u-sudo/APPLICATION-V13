@@ -221,7 +221,19 @@ fun BrokerConnectDialog(
                                 }
                                 sessionManager.upstoxApiKey = upstoxApiKey
                                 sessionManager.upstoxApiSecret = upstoxApiSecret
-                                showUpstoxWebView = true
+                                android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
+                                val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri, state = "upstox")
+                                try {
+                                    android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
+                                    android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                    context.startActivity(intent)
+                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
+                                    onDismiss()
+                                } catch (e: Exception) {
+                                    localErrorMsg = "Failed to open browser"
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isAuthInProgress,
@@ -388,7 +400,19 @@ fun BrokerConnectDialog(
                                 }
                                 sessionManager.fyersAppId = fyersAppId
                                 sessionManager.fyersSecretId = fyersSecretId
-                                showFyersWebView = true
+                                android.util.Log.d("FyersAuth", "[1] Credentials: PASS")
+                                val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+                                val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, redirectUri, state = "fyers")
+                                try {
+                                    android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
+                                    android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                    context.startActivity(intent)
+                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
+                                    onDismiss()
+                                } catch (e: Exception) {
+                                    localErrorMsg = "Failed to open browser"
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isAuthInProgress,
@@ -575,6 +599,7 @@ fun BrokerConnectDialog(
                                             try {
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                                 context.startActivity(intent)
+                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
                                             } catch (e: Exception) {
                                                 android.util.Log.e("DhanAuth", "Failed to launch browser: ${e.message}", e)
                                                 localErrorMsg = "Unable to open browser: ${e.localizedMessage}"
@@ -675,7 +700,8 @@ fun BrokerConnectDialog(
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                         url?.let {
-                                            val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                            android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
+                                val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                             if (it.startsWith(redirectUri) || it.contains("code=")) {
                                                 val uri = android.net.Uri.parse(it)
                                                 val authCode = uri.getQueryParameter("code")
@@ -691,7 +717,8 @@ fun BrokerConnectDialog(
 
                                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                         val url = request?.url.toString()
-                                        val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                        android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
+                                val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                         if (url.startsWith(redirectUri) || url.contains("code=")) {
                                             val authCode = request?.url?.getQueryParameter("code")
                                             if (!authCode.isNullOrBlank()) {

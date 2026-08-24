@@ -30,6 +30,7 @@ class UpstoxAuthManager(
 
             Log.d(TAG, "Exchanging Upstox authorization code...")
 
+            android.util.Log.d("UpstoxAuth", "[7] Token exchange initiated...")
             val response = upstoxApi.getAccessToken(
                 code = authCode.trim(),
                 clientId = apiKey,
@@ -45,6 +46,7 @@ class UpstoxAuthManager(
 
             val body = response.body() ?: throw Exception("Empty response body from Upstox")
 
+            android.util.Log.d("UpstoxAuth", "[8] Token validated: PASS")
             val accessToken = body.accessToken
             if (accessToken.isNullOrBlank()) {
                 _authStatus.value = BrokerAuthStatus.ERROR
@@ -62,7 +64,9 @@ class UpstoxAuthManager(
             // Validate with user profile check
             validateUserProfile(accessToken)
 
-            _authStatus.value = BrokerAuthStatus.CONNECTED
+            android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
+                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
+                _authStatus.value = BrokerAuthStatus.CONNECTED
             Log.d(TAG, "Upstox authenticated successfully")
             accessToken
         }
@@ -101,18 +105,24 @@ class UpstoxAuthManager(
             val authHeader = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
             val profileRes = upstoxApi.getUserProfile(authHeader)
             if (profileRes.isSuccessful) {
+                android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
+                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 true
             } else if (profileRes.code() == 401 || profileRes.code() == 403) {
                 _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
                 false
             } else {
+                android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
+                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 true
             }
         } catch (e: Exception) {
             // Network failure during validation - don't invalidate session if token looks valid
-            _authStatus.value = BrokerAuthStatus.CONNECTED
+            android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
+                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
+                _authStatus.value = BrokerAuthStatus.CONNECTED
             true
         }
     }

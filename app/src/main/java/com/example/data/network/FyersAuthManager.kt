@@ -29,17 +29,21 @@ class FyersAuthManager(
                 code = authCode
             )
 
+            android.util.Log.d("FyersAuth", "[7] Token exchange initiated...")
             val response = fyersApi.validateAuthCode(request)
             if (!response.isSuccessful) {
                 throw Exception("HTTP ${response.code()}")
             }
 
             val body = response.body() ?: throw Exception("Empty response body")
+            android.util.Log.d("FyersAuth", "[8] Token validated: PASS")
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
                 sessionManager.fyersAccessToken = body.access_token
                 sessionManager.fyersRefreshToken = body.refresh_token
                 sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isFyersConnected = true
+                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
+                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 body.access_token
             } else {
@@ -57,7 +61,9 @@ class FyersAuthManager(
 
     fun validateSession(): Boolean {
         return if (!sessionManager.fyersAccessToken.isNullOrBlank()) {
-            _authStatus.value = BrokerAuthStatus.CONNECTED
+            android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
+                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
+                _authStatus.value = BrokerAuthStatus.CONNECTED
             true
         } else {
             _authStatus.value = BrokerAuthStatus.CONFIGURE
@@ -90,10 +96,13 @@ class FyersAuthManager(
             }
 
             val body = response.body() ?: throw Exception("Empty response body")
+            android.util.Log.d("FyersAuth", "[8] Token validated: PASS")
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
                 sessionManager.fyersAccessToken = body.access_token
                 sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isFyersConnected = true
+                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
+                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 body.access_token
             } else {

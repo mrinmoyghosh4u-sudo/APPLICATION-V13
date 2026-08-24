@@ -674,6 +674,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val path = uri.path ?: ""
             val fullUrl = uri.toString()
 
+            android.util.Log.d("Auth", "[4] Login completed: PASS")
+            android.util.Log.d("Auth", "[5] Callback received: PASS")
             android.util.Log.d("DhanAuth", "redirect received")
             android.util.Log.d("DhanAuth", "redirect URI host/path: scheme=$scheme, host=$host, path=$path")
 
@@ -700,6 +702,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val state = uri.getQueryParameter("state") ?: ""
+            android.util.Log.d("Auth", "[6] Authorization code received: PASS (hidden)")
             val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true)
             val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true)
 
