@@ -78,7 +78,7 @@ class TradeSmartMarketDataService(
         if (!isConfigured()) {
             Log.d(TAG, "TradeSmart credentials not configured. Connection skipped.")
             _connectionState.value = "OFFLINE"
-            MarketDataStore.setSourceHealth(MarketDataSourceNames.TRADESMART, "OFFLINE")
+            MarketDataStore.setSourceHealth("TradeSmart", "OFFLINE")
             return
         }
 
@@ -114,7 +114,7 @@ class TradeSmartMarketDataService(
                 webSocket.send(authPayload.toString())
 
                 _connectionState.value = "LIVE"
-                MarketDataStore.setSourceHealth(MarketDataSourceNames.TRADESMART, "LIVE")
+                MarketDataStore.setSourceHealth("TradeSmart", "LIVE")
 
                 startHeartbeat()
                 startStaleChecker()
@@ -175,7 +175,7 @@ class TradeSmartMarketDataService(
 
                     if (ltp > 0.0) {
                         MarketDataStore.updateTick(
-                            source = MarketDataSourceNames.TRADESMART,
+                            source = "TradeSmart",
                             symbol = symbol,
                             token = token,
                             exchange = exch,
@@ -247,7 +247,7 @@ class TradeSmartMarketDataService(
 
                 if (ltp > 0.0) {
                     MarketDataStore.updateTick(
-                        source = MarketDataSourceNames.TRADESMART,
+                        source = "TradeSmart",
                         symbol = symbol,
                         token = token,
                         exchange = exchange,
@@ -305,7 +305,7 @@ class TradeSmartMarketDataService(
                 val now = System.currentTimeMillis()
                 if (lastTickReceivedTime > 0 && now - lastTickReceivedTime > STALE_THRESHOLD_MS) {
                     _connectionState.value = "STALE"
-                    MarketDataStore.setSourceHealth(MarketDataSourceNames.TRADESMART, "STALE")
+                    MarketDataStore.setSourceHealth("TradeSmart", "STALE")
                 }
             }
         }
@@ -317,7 +317,7 @@ class TradeSmartMarketDataService(
         heartbeatJob?.cancel()
         staleCheckJob?.cancel()
         _connectionState.value = "OFFLINE"
-        MarketDataStore.setSourceHealth(MarketDataSourceNames.TRADESMART, "OFFLINE")
+        MarketDataStore.setSourceHealth("TradeSmart", "OFFLINE")
     }
 
     private fun scheduleReconnect() {

@@ -151,13 +151,20 @@ class MarketDataEngine(
     // =========================================================================
     
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        val res = angelMarketDataService.getOptionExpiries(symbol)
-        if (res.isSuccess) return res
-        
-        if (mStockMarketDataService.isConfigured()) {
-            return Result.failure(Exception("Expiries unavailable"))
+        // Priority 1: Fyers
+        if (fyersMarketDataService?.isConfigured() == true) {
+            val fyersRes = fyersMarketDataService!!.getOptionExpiries(symbol)
+            if (fyersRes.isSuccess) return fyersRes
         }
-        return Result.failure(Exception("Expiries unavailable"))
+        
+        // Priority 2: Angel One
+        val angelRes = angelMarketDataService.getOptionExpiries(symbol)
+        if (angelRes.isSuccess) return angelRes
+        
+        // Priority 3: m.Stock
+        // (mStock missing direct expiries method, handled gracefully)
+        
+        return Result.failure(Exception("REAL EXPIRIES UNAVAILABLE"))
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {

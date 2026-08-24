@@ -485,15 +485,20 @@ class SessionManager(context: Context) {
         get() = safeGetToken("fyers_app_id_enc") ?: ""
         set(value) {
             safeSetToken("fyers_app_id_enc", value)
-            prefs.edit().putString("fyers_app_id_enc", value).apply() // Keep compatibility if needed, but safeSetToken is better
+            
         }
 
     var fyersSecretId: String
         get() = safeGetToken("fyers_secret_id_enc") ?: ""
         set(value) {
             safeSetToken("fyers_secret_id_enc", value)
-            prefs.edit().putString("fyers_secret_id_enc", value).apply()
+            
         }
+
+    
+    var fyersPin: String
+        get() = safeGetToken("fyers_pin_enc") ?: ""
+        set(value) = safeSetToken("fyers_pin_enc", value)
 
     var fyersAccessToken: String?
         get() = safeGetToken("fyers_access_token_enc")

@@ -192,7 +192,7 @@ fun DiagnosticsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        SectionHeader("REFERENCE / BACKUP: NSE INDIA & YAHOO FINANCE")
+        
 
         Spacer(modifier = Modifier.height(8.dp))
 

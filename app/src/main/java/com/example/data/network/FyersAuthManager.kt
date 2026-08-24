@@ -64,7 +64,7 @@ class FyersAuthManager(
             false
         }
     }
-    suspend fun refreshSession(pin: String = "1234"): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun refreshSession(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val appId = sessionManager.fyersAppId
             val secret = sessionManager.fyersSecretId
@@ -80,7 +80,7 @@ class FyersAuthManager(
                 grant_type = "refresh_token",
                 appIdHash = appIdHash,
                 refresh_token = refreshToken,
-                pin = pin
+                pin = sessionManager.fyersPin
             )
 
             val response = fyersApi.validateRefreshToken(request)

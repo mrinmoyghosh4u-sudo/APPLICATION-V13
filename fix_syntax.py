@@ -1,15 +1,13 @@
 import os
+import re
 
-filepath = "app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt"
+filepath = "/app/applet/app/src/main/java/com/example/ui/screens/MarketScreen.kt"
 with open(filepath, "r") as f:
-    lines = f.readlines()
+    content = f.read()
 
-new_lines = []
-for i, line in enumerate(lines):
-    if line.strip() == "}}":
-        new_lines.append("}\n")
-    else:
-        new_lines.append(line)
+# Let's find out what function was mangled
+start = content.find("val detectedBase = baseCandidate ?: when {")
+end = content.find("private fun generateSearchInstrumentPool")
 
-with open(filepath, "w") as f:
-    f.writelines(new_lines)
+print(content[start-200:start+200])
+

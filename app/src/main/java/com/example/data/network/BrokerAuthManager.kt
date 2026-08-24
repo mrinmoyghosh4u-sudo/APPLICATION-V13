@@ -68,7 +68,7 @@ class BrokerAuthManager(
             "m.Stock" to BrokerConnectionState("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.CONFIGURE),
             "TradeSmart" to BrokerConnectionState("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE),
             "NSE" to BrokerConnectionState("NSE", "Reference Only", BrokerAuthStatus.STANDBY),
-            "Yahoo" to BrokerConnectionState("Yahoo", "Reference Only", BrokerAuthStatus.STANDBY)
+            
         )
     )
     val statuses: StateFlow<Map<String, BrokerConnectionState>> = _statuses.asStateFlow()
@@ -737,7 +737,7 @@ class BrokerAuthManager(
             "m.Stock" -> if (sessionManager.primaryMarketDataProvider == "m.Stock") "Primary Market Data" else "Secondary Data Fallback"
             "TradeSmart" -> "Tertiary Data Fallback"
             "NSE" -> "Reference Only"
-            "Yahoo" -> "Reference Only"
+           
             else -> "Market Provider"
         }
     }

@@ -78,7 +78,7 @@ fun MarketScreen(
     }
 
     val searchResults = remember(searchQuery, searchInstrumentPool) {
-        resolveSearchResults(searchQuery, searchInstrumentPool)
+        searchInstruments(searchQuery, searchInstrumentPool)
     }
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
@@ -905,45 +905,33 @@ private fun MarketMoversSection(
     val categories = listOf("Top Gainers", "Top Losers", "High Volume", "High OI Chg")
 
     // Pool of Comprehensive Exchange Option Contracts ONLY (CE and PE)
-    val optionMoversPool = remember(selectedExchange) {
-        generateExchangeOptionMovers(selectedExchange)
-    }
-
-    val exchangeWatchlistItems = remember(watchlist, selectedExchange) {
-        watchlist.filter { 
-            it.exchange.equals(selectedExchange, ignoreCase = true) && 
-            (it.symbol.endsWith(" CE", ignoreCase = true) || it.symbol.endsWith(" PE", ignoreCase = true))
-        }.map { item ->
+    
+    // We only use REAL live market data from the map, no synthetic pools.
+    val combinedItems = remember(marketDataMap, selectedExchange) {
+        marketDataMap.values.filter { 
+            it.exchange.equals(selectedExchange, ignoreCase = true) 
+        }.map { tick ->
             MarketMoverCardData(
-                symbol = item.symbol,
-                exchange = item.exchange,
-                price = item.ltp,
-                changePct = item.changePercent,
-                lotSize = item.lotSize,
+                symbol = tick.symbol,
+                exchange = tick.exchange,
+                price = tick.ltp,
+                changePct = tick.changePercent,
+                lotSize = 1, // Need real lot size mapping if available
                 expiry = "",
-                volume = 125000L,
-                oiChangePct = item.changePercent * 1.5
+                volume = tick.volume,
+                oiChangePct = 0.0
             )
         }
     }
 
-    val combinedItems = remember(optionMoversPool, exchangeWatchlistItems) {
-        (optionMoversPool + exchangeWatchlistItems).distinctBy { it.symbol }
-    }
-
-    val moverItems = remember(combinedItems, selectedCategory, marketDataMap) {
-        val mapped = combinedItems.map { item ->
-            val tick = marketDataMap[item.symbol]
-            val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.price
-            val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePct
-            item.copy(price = ltp, changePct = changePct)
-        }
+    val moverItems = remember(combinedItems, selectedCategory) {
         when (selectedCategory) {
-            "Top Gainers" -> mapped.filter { it.changePct >= 0 }.sortedByDescending { it.changePct }
-            "Top Losers" -> mapped.filter { it.changePct < 0 }.sortedBy { it.changePct }
-            "High Volume" -> mapped.sortedByDescending { it.volume }
-            "High OI Chg" -> mapped.sortedByDescending { kotlin.math.abs(it.oiChangePct) }
-            else -> mapped
+
+            "Top Gainers" -> combinedItems.filter { it.changePct >= 0 }.sortedByDescending { it.changePct }
+            "Top Losers" -> combinedItems.filter { it.changePct < 0 }.sortedBy { it.changePct }
+            "High Volume" -> combinedItems.sortedByDescending { it.volume }
+            "High OI Chg" -> combinedItems.sortedByDescending { kotlin.math.abs(it.oiChangePct) }
+            else -> combinedItems
         }
     }
 
@@ -1160,7 +1148,7 @@ private fun MarketChartDialog(
 
     val basePrice = if (data.ltp > 0.0) data.ltp.toFloat() else 100f
     val candles = remember(data.symbol, selectedTimeframe, basePrice) {
-        generateRealisticCandles(basePrice, selectedTimeframe)
+        emptyList<com.example.ui.components.CandleData>() // Replaced fake candles with empty list
     }
 
     Dialog(
@@ -1283,11 +1271,17 @@ private fun MarketChartDialog(
                             .border(0.6.dp, Color(0xFF1E232D), RoundedCornerShape(8.dp))
                             .padding(8.dp)
                     ) {
-                        CandlestickChart(
-                            modifier = Modifier.fillMaxSize(),
-                            candles = candles,
-                            currentPrice = basePrice
-                        )
+                        if (candles.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("CHART DATA UNAVAILABLE", color = TextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            CandlestickChart(
+                                modifier = Modifier.fillMaxSize(),
+                                candles = candles,
+                                currentPrice = basePrice
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1355,25 +1349,6 @@ private fun MarketChartDialog(
     }
 }
 
-private fun generateRealisticCandles(basePrice: Float, timeframe: String): List<CandleData> {
-    val count = 28
-    val candles = mutableListOf<CandleData>()
-    var current = basePrice * 0.985f
-    val volatility = (basePrice * 0.008f).coerceAtLeast(0.5f)
-
-    for (i in 0 until count) {
-        val delta = ((kotlin.random.Random.nextDouble() - 0.48) * volatility).toFloat()
-        val open = current
-        val close = (open + delta).coerceAtLeast(1f)
-        val high = maxOf(open, close) + (kotlin.random.Random.nextFloat() * volatility * 0.5f)
-        val low = (minOf(open, close) - (kotlin.random.Random.nextFloat() * volatility * 0.5f)).coerceAtLeast(0.5f)
-        val volume = (1000 + kotlin.random.Random.nextInt(50000)).toFloat()
-        candles.add(CandleData(open, high, low, close, volume))
-        current = close
-    }
-    return candles
-}
-
 private data class MarketMoverCardData(
     val symbol: String,
     val exchange: String,
@@ -1385,62 +1360,11 @@ private data class MarketMoverCardData(
     val oiChangePct: Double = 0.0
 )
 
-private fun generateExchangeOptionMovers(exchange: String): List<MarketMoverCardData> {
-    return when (exchange.uppercase()) {
-        "NSE" -> listOf(
-            MarketMoverCardData("NIFTY 25AUG 24500 CE", "NSE", 148.50, 42.8, 65, "25 AUG", 2450000L, 38.5),
-            MarketMoverCardData("NIFTY 25AUG 24600 CE", "NSE", 92.20, 31.4, 65, "25 AUG", 1980000L, 25.2),
-            MarketMoverCardData("NIFTY 25AUG 24700 CE", "NSE", 54.10, 22.8, 65, "25 AUG", 1540000L, 19.4),
-            MarketMoverCardData("BANKNIFTY 25AUG 51200 CE", "NSE", 385.00, 28.5, 30, "25 AUG", 1650000L, 22.1),
-            MarketMoverCardData("BANKNIFTY 25AUG 51500 CE", "NSE", 245.00, 19.8, 30, "25 AUG", 1320000L, 16.5),
-            MarketMoverCardData("FINNIFTY 25AUG 23400 CE", "NSE", 84.60, 24.2, 60, "25 AUG", 850000L, 18.4),
-            MarketMoverCardData("MIDCPNIFTY 25AUG 12800 CE", "NSE", 65.40, 18.6, 120, "25 AUG", 620000L, 15.1),
-            MarketMoverCardData("NIFTY 25AUG 24300 PE", "NSE", 45.10, -32.4, 65, "25 AUG", 1820000L, -28.6),
-            MarketMoverCardData("NIFTY 25AUG 24200 PE", "NSE", 28.50, -41.2, 65, "25 AUG", 1120000L, -35.2),
-            MarketMoverCardData("NIFTY 25AUG 24100 PE", "NSE", 16.20, -52.0, 65, "25 AUG", 980000L, -42.0),
-            MarketMoverCardData("BANKNIFTY 25AUG 50800 PE", "NSE", 124.00, -28.9, 30, "25 AUG", 1430000L, -21.4),
-            MarketMoverCardData("BANKNIFTY 25AUG 50500 PE", "NSE", 78.50, -38.2, 30, "25 AUG", 1190000L, -31.5),
-            MarketMoverCardData("FINNIFTY 25AUG 23200 PE", "NSE", 36.80, -22.5, 60, "25 AUG", 740000L, -14.8),
-            MarketMoverCardData("MIDCPNIFTY 25AUG 12600 PE", "NSE", 32.10, -19.8, 120, "25 AUG", 510000L, -12.3)
-        )
-        "BSE" -> listOf(
-            MarketMoverCardData("SENSEX 29AUG 80500 CE", "BSE", 310.00, 38.5, 20, "29 AUG", 1250000L, 34.2),
-            MarketMoverCardData("SENSEX 29AUG 81000 CE", "BSE", 165.20, 29.8, 20, "29 AUG", 980000L, 26.5),
-            MarketMoverCardData("SENSEX 29AUG 81500 CE", "BSE", 88.00, 21.4, 20, "29 AUG", 760000L, 18.2),
-            MarketMoverCardData("BANKEX 29AUG 57000 CE", "BSE", 420.50, 26.4, 30, "29 AUG", 720000L, 21.8),
-            MarketMoverCardData("BANKEX 29AUG 57500 CE", "BSE", 230.00, 17.5, 30, "29 AUG", 580000L, 14.2),
-            MarketMoverCardData("SENSEX 29AUG 80000 PE", "BSE", 85.40, -34.8, 20, "29 AUG", 890000L, -29.4),
-            MarketMoverCardData("SENSEX 29AUG 79500 PE", "BSE", 48.20, -44.5, 20, "29 AUG", 650000L, -38.1),
-            MarketMoverCardData("SENSEX 29AUG 79000 PE", "BSE", 24.50, -56.0, 20, "29 AUG", 520000L, -48.2),
-            MarketMoverCardData("BANKEX 29AUG 56500 PE", "BSE", 115.00, -27.2, 30, "29 AUG", 540000L, -23.6),
-            MarketMoverCardData("BANKEX 29AUG 56000 PE", "BSE", 62.00, -39.4, 30, "29 AUG", 430000L, -32.8)
-        )
-        "MCX" -> listOf(
-            MarketMoverCardData("CRUDEOIL 19SEP 6400 CE", "MCX", 185.00, 46.2, 100, "19 SEP", 840000L, 42.1),
-            MarketMoverCardData("CRUDEOIL 19SEP 6500 CE", "MCX", 112.50, 34.8, 100, "19 SEP", 620000L, 29.5),
-            MarketMoverCardData("CRUDEOIL 19SEP 6600 CE", "MCX", 65.00, 24.5, 100, "19 SEP", 490000L, 20.2),
-            MarketMoverCardData("NATURALGAS 26SEP 190 CE", "MCX", 12.40, 28.6, 1250, "26 SEP", 1150000L, 31.4),
-            MarketMoverCardData("NATURALGAS 26SEP 200 CE", "MCX", 7.80, 21.2, 1250, "26 SEP", 820000L, 23.5),
-            MarketMoverCardData("GOLD 05OCT 75000 CE", "MCX", 850.00, 22.4, 100, "05 OCT", 420000L, 19.8),
-            MarketMoverCardData("GOLD 05OCT 76000 CE", "MCX", 480.00, 16.5, 100, "05 OCT", 310000L, 14.2),
-            MarketMoverCardData("SILVER 28NOV 85000 CE", "MCX", 1420.00, 25.1, 30, "28 NOV", 380000L, 21.6),
-            MarketMoverCardData("SILVER 28NOV 87000 CE", "MCX", 820.00, 18.3, 30, "28 NOV", 290000L, 15.4),
-            MarketMoverCardData("COPPER 30SEP 820 CE", "MCX", 18.50, 19.4, 2500, "30 SEP", 290000L, 16.2),
-            MarketMoverCardData("ZINC 30SEP 280 CE", "MCX", 6.80, 15.2, 5000, "30 SEP", 210000L, 12.5),
-            MarketMoverCardData("CRUDEOIL 19SEP 6300 PE", "MCX", 68.20, -36.4, 100, "19 SEP", 710000L, -31.8),
-            MarketMoverCardData("CRUDEOIL 19SEP 6200 PE", "MCX", 38.00, -48.2, 100, "19 SEP", 550000L, -42.1),
-            MarketMoverCardData("NATURALGAS 26SEP 180 PE", "MCX", 4.80, -42.8, 1250, "26 SEP", 920000L, -37.2),
-            MarketMoverCardData("NATURALGAS 26SEP 175 PE", "MCX", 2.60, -54.5, 1250, "26 SEP", 680000L, -47.0),
-            MarketMoverCardData("GOLD 05OCT 74000 PE", "MCX", 320.00, -28.5, 100, "05 OCT", 310000L, -22.4),
-            MarketMoverCardData("GOLD 05OCT 73000 PE", "MCX", 180.00, -41.0, 100, "05 OCT", 240000L, -34.8),
-            MarketMoverCardData("SILVER 28NOV 83000 PE", "MCX", 680.00, -31.2, 30, "28 NOV", 270000L, -26.8),
-            MarketMoverCardData("SILVER 28NOV 81000 PE", "MCX", 390.00, -44.0, 30, "28 NOV", 210000L, -38.5),
-            MarketMoverCardData("COPPER 30SEP 800 PE", "MCX", 8.40, -26.5, 2500, "30 SEP", 180000L, -22.0),
-            MarketMoverCardData("ZINC 30SEP 270 PE", "MCX", 3.20, -18.4, 5000, "30 SEP", 190000L, -14.2)
-        )
-        else -> emptyList()
-    }
-}
+
+
+
+
+
 
 data class SearchInstrumentItem(
     val symbol: String,
@@ -1450,14 +1374,10 @@ data class SearchInstrumentItem(
     val lotSize: Int
 )
 
-private fun resolveSearchResults(
-    query: String,
-    pool: List<SearchInstrumentItem>
-): List<SearchInstrumentItem> {
-    if (query.isBlank()) return emptyList()
+private fun searchInstruments(query: String, pool: List<SearchInstrumentItem>): List<SearchInstrumentItem> {
     val q = query.trim().uppercase()
-    val tokens = q.split(" ", "-", "_", "/").filter { it.isNotBlank() }
-
+    if (q.isBlank()) return emptyList()
+    val tokens = q.split(" ").filter { it.isNotBlank() }
     val results = mutableListOf<SearchInstrumentItem>()
 
     // 1. DYNAMIC ON-THE-FLY STRIKE PARSER (For any typed index + strike + CE/PE)
@@ -1709,3 +1629,7 @@ private fun AddSymbolDialog(
         containerColor = Color(0xFF13161C)
     )
 }
+
+
+
+

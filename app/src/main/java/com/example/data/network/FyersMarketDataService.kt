@@ -192,23 +192,161 @@ class FyersMarketDataService(
         }
     }
 
+    private val topicToSymbolMap = mutableMapOf<Int, String>()
+    private val topicToMultiplierMap = mutableMapOf<Int, Int>()
+
     private fun handleBinaryMessage(bytes: ByteArray) {
-        // Custom binary parser for Fyers tick if required, but prompt says "robust FYERS tick parser" 
-        // We will try to parse if it's text embedded or specific binary format.
-        // Fyers sends 24 byte or 48 byte packets depending on type.
-        // As we don't have the exact unpacking code provided by the prompt, 
-        // we'll safely try to extract what we can, or just convert string if it's JSON over binary.
         try {
-            val str = String(bytes)
-            if (str.startsWith("{")) {
-                val json = JSONObject(str)
-                parseJsonTick(json)
+            val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.BIG_ENDIAN)
+            if (buffer.remaining() < 3) return
+            val length = buffer.short.toInt()
+            val respType = buffer.get().toInt()
+
+            when (respType) {
+                6 -> parseTopicInit(buffer)
+                85 -> parseFullMode(buffer)
+                76 -> parseLiteMode(buffer)
+                else -> {
+                    // Try JSON fallback for other types
+                    val str = String(bytes)
+                    if (str.startsWith("{")) {
+                        val json = JSONObject(str)
+                        parseJsonTick(json)
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse binary message")
+            Log.w(TAG, "Error parsing FYERS binary message: ${e.message}")
         }
     }
-    
+
+    private fun parseTopicInit(buffer: java.nio.ByteBuffer) {
+        if (buffer.remaining() < 6) return
+        val messageNum = buffer.int
+        val scripCount = buffer.short.toInt()
+        
+        for (i in 0 until scripCount) {
+            if (buffer.remaining() < 1) break
+            val dataType = buffer.get().toInt()
+            if (dataType == 83) { // Snapshot
+                if (buffer.remaining() < 3) break
+                val topicId = buffer.short.toInt()
+                val topicNameLen = buffer.get().toInt()
+                if (buffer.remaining() < topicNameLen) break
+                val topicNameBytes = ByteArray(topicNameLen)
+                buffer.get(topicNameBytes)
+                
+                if (buffer.remaining() < 1) break
+                val fieldCount = buffer.get().toInt()
+                
+                // Fields
+                for (j in 0 until fieldCount) {
+                    if (buffer.remaining() < 4) break
+                    buffer.int
+                }
+                
+                if (buffer.remaining() < 3) break
+                val multiplier = buffer.short.toInt()
+                topicToMultiplierMap[topicId] = multiplier
+                buffer.get() // precision
+                
+                // exchange
+                if (buffer.remaining() < 1) break
+                val exLen = buffer.get().toInt()
+                if (buffer.remaining() < exLen) break
+                buffer.position(buffer.position() + exLen)
+                
+                // exchange_token
+                if (buffer.remaining() < 1) break
+                val extLen = buffer.get().toInt()
+                if (buffer.remaining() < extLen) break
+                buffer.position(buffer.position() + extLen)
+                
+                // symbol
+                if (buffer.remaining() < 1) break
+                val symLen = buffer.get().toInt()
+                if (buffer.remaining() < symLen) break
+                val symBytes = ByteArray(symLen)
+                buffer.get(symBytes)
+                val symbol = String(symBytes)
+                
+                topicToSymbolMap[topicId] = symbol
+                Log.d(TAG, "FYERS Mapping: Topic $topicId -> $symbol (Multiplier $multiplier)")
+            }
+        }
+    }
+
+    private fun parseFullMode(buffer: java.nio.ByteBuffer) {
+        if (buffer.remaining() < 3) return
+        val topicId = buffer.short.toInt()
+        val fieldCount = buffer.get().toInt()
+        
+        val symbol = topicToSymbolMap[topicId] ?: return
+        val multiplier = topicToMultiplierMap[topicId]?.toDouble() ?: 100.0
+        
+        var ltp = Double.NaN
+        var vol = 0L
+        var open = Double.NaN
+        var high = Double.NaN
+        var low = Double.NaN
+        var close = Double.NaN
+        
+        for (i in 0 until fieldCount) {
+            if (buffer.remaining() < 4) break
+            val value = buffer.int
+            if (value != -2147483648) {
+                val realValue = value / multiplier
+                when (i) {
+                    0 -> ltp = realValue
+                    1 -> vol = realValue.toLong()
+                    12 -> low = realValue
+                    13 -> high = realValue
+                    16 -> open = realValue
+                    17 -> close = realValue
+                }
+            }
+        }
+        
+        if (!ltp.isNaN()) {
+            val tick = MarketTick(
+                symbol = symbol,
+                ltp = ltp,
+                open = if (open.isNaN()) ltp else open,
+                high = if (high.isNaN()) ltp else high,
+                low = if (low.isNaN()) ltp else low,
+                close = if (close.isNaN()) ltp else close,
+                volume = vol,
+                timestamp = System.currentTimeMillis(),
+                exchange = "NSE"
+            )
+            scope.launch { marketDataEngine.updateFyersTick(tick) }
+        }
+    }
+
+    private fun parseLiteMode(buffer: java.nio.ByteBuffer) {
+        if (buffer.remaining() < 6) return
+        val topicId = buffer.short.toInt()
+        val ltpVal = buffer.int
+        
+        val symbol = topicToSymbolMap[topicId] ?: return
+        val multiplier = topicToMultiplierMap[topicId]?.toDouble() ?: 100.0
+        
+        if (ltpVal != -2147483648) {
+            val tick = MarketTick(
+                symbol = symbol,
+                ltp = ltpVal / multiplier,
+                open = ltpVal / multiplier,
+                high = ltpVal / multiplier,
+                low = ltpVal / multiplier,
+                close = ltpVal / multiplier,
+                volume = 0L,
+                timestamp = System.currentTimeMillis(),
+                exchange = "NSE"
+            )
+            scope.launch { marketDataEngine.updateFyersTick(tick) }
+        }
+    }
+
     private fun parseJsonTick(json: JSONObject) {
         // If they send JSON ticks
         try {
@@ -244,7 +382,7 @@ class FyersMarketDataService(
 
 
     private fun getFyersSymbol(symbol: String): String {
-        return if (symbol.contains(":")) symbol else "NSE:$symbol-EQ" // Simplistic mapping
+        return FyersSymbolMapper.toFyersSymbol(symbol)
     }
 
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -311,7 +449,75 @@ class FyersMarketDataService(
         }
     }
     
-    suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> = Result.failure(Exception("Not implemented"))
-    suspend fun getOptionExpiries(symbol: String): Result<List<String>> = Result.failure(Exception("Not implemented"))
+    suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        runCatching {
+            val fyersAppId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
+            val token = sessionManager.fyersAccessToken ?: throw Exception("Token missing")
+            val auth = "$fyersAppId:$token"
+            
+            val fyersSymbol = FyersSymbolMapper.toFyersSymbol(symbol)
+            val response = fyersApi.getOptionChain(auth, fyersSymbol, strikecount = 20)
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code()}")
+            val body = response.body() ?: throw Exception("Empty response")
+            if (body.s != "ok" || body.data?.expiryData == null) throw Exception("Fyers API Error")
+            
+            val expiryDataList = body.data.expiryData
+            if (expiryDataList.isEmpty()) throw Exception("No option chain data")
+            
+            val targetExpiry = if (expiry.isNotBlank()) {
+                expiryDataList.find { it.expiry == expiry } ?: expiryDataList.first()
+            } else {
+                expiryDataList.first()
+            }
+            
+            val chain = targetExpiry.optionChain ?: emptyList()
+            val strikesMap = mutableMapOf<Double, OptionStrikeItem>()
+            
+            chain.forEach { contract ->
+                val strike = contract.strike_price ?: return@forEach
+                val item = strikesMap.getOrPut(strike) {
+                    OptionStrikeItem(strikePrice = strike)
+                }
+                
+                if (contract.option_type == "CE") {
+                    strikesMap[strike] = item.copy(
+                        callLtp = contract.ltp ?: 0.0,
+                        callOi = (contract.oi ?: 0.0).toString(),
+                        callVolume = (contract.volume ?: 0.0).toLong().toString(),
+                        callBid = contract.bid ?: 0.0,
+                        callAsk = contract.ask ?: 0.0,
+                        
+                        callSymbol = contract.symbol ?: ""
+                    )
+                } else if (contract.option_type == "PE") {
+                    strikesMap[strike] = item.copy(
+                        putLtp = contract.ltp ?: 0.0,
+                        putOi = (contract.oi ?: 0.0).toString(),
+                        putVolume = (contract.volume ?: 0.0).toLong().toString(),
+                        putBid = contract.bid ?: 0.0,
+                        putAsk = contract.ask ?: 0.0,
+                        
+                        putSymbol = contract.symbol ?: ""
+                    )
+                }
+            }
+            strikesMap.values.toList().sortedBy { it.strikePrice }
+        }
+    }
 
+    suspend fun getOptionExpiries(symbol: String): Result<List<String>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        runCatching {
+            val fyersAppId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
+            val token = sessionManager.fyersAccessToken ?: throw Exception("Token missing")
+            val auth = "$fyersAppId:$token"
+            
+            val fyersSymbol = FyersSymbolMapper.toFyersSymbol(symbol)
+            val response = fyersApi.getOptionChain(auth, fyersSymbol, strikecount = 2)
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code()}")
+            val body = response.body() ?: throw Exception("Empty response")
+            if (body.s != "ok" || body.data?.expiryData == null) throw Exception("Fyers API Error")
+            
+            body.data.expiryData.mapNotNull { it.expiry }
+        }
+    }
 }

@@ -351,236 +351,27 @@ object AlgoEngine {
 
         _engineStatusMessage.value = "ANALYZING REAL MARKET DATA..."
         
-        // Basic Technical Analysis on Quote Data to simulate AI processing
-        val isBullish = targetQuote.changePercent > 0.0
-        val intensity = Math.abs(targetQuote.changePercent)
-        
-        var ceScore = 0
-        var peScore = 0
-        
-        // EMA/VWAP Proxy
-        if (isBullish) ceScore += 25 else peScore += 25
-        val emaCheck = true
-        val vwapCheck = true
-        
-        // RSI Proxy
-        if (isBullish && intensity > 0.2) ceScore += 20 else if (!isBullish && intensity > 0.2) peScore += 20
-        val rsiCheck = intensity > 0.2
-        
-        // SuperTrend Proxy
-        if (isBullish && intensity > 0.4) ceScore += 30 else if (!isBullish && intensity > 0.4) peScore += 30
-        val superTrendCheck = intensity > 0.4
-        
-        // Volume/OI Proxy
-        if (intensity > 0.6) {
-            if (isBullish) ceScore += 25 else peScore += 25
-        }
-        val volumeCheck = intensity > 0.6
-        val oiCheck = intensity > 0.6
-        
-        _ceBuyScore.value = ceScore
-        _peBuyScore.value = peScore
-        
+        // Real historical data is required for technical indicators.
+        // Without real OHLCV data, we must report INDICATOR UNAVAILABLE.
+        _engineStatusMessage.value = "SIGNAL PAUSED — REAL DATA UNAVAILABLE"
+        _currentSignal.value = null
         _indicatorCheckmarks.value = mapOf(
-            "EMA" to emaCheck, "VWAP" to vwapCheck, "RSI" to rsiCheck,
-            "SUPERTREND" to superTrendCheck, "OI" to oiCheck, "VOLUME" to volumeCheck
+            "EMA 9" to false, "EMA 20" to false, "VWAP" to false, 
+            "RSI" to false, "SUPERTREND" to false, "VOLUME" to false, "OI" to false
         )
-        
-        _marketBias.value = when {
-            ceScore >= 70 -> "STRONG BULLISH"
-            ceScore > 40 -> "BULLISH"
-            peScore >= 70 -> "STRONG BEARISH"
-            peScore > 40 -> "BEARISH"
-            else -> "NEUTRAL"
-        }
-        
-        // Generate actionable signal if threshold met and real option LTP exists in MarketDataStore
-        if (ceScore >= 75 || peScore >= 75) {
-            val signalType = if (ceScore >= 75) "BUY CE" else "BUY PE"
-            val isCe = ceScore >= 75
-            val strikeInterval = when {
-                targetQuote.symbol.contains("BANKNIFTY", ignoreCase = true) -> 100
-                targetQuote.symbol.contains("SENSEX", ignoreCase = true) -> 100
-                targetQuote.symbol.contains("MIDCPNIFTY", ignoreCase = true) -> 25
-                else -> 50
-            }
-            val strikeOffset = if (isCe) strikeInterval else -strikeInterval
-            val roundedStrike = ((targetQuote.ltp / strikeInterval).roundToInt() * strikeInterval) + strikeOffset
-            val optType = if (isCe) "CE" else "PE"
-            
-            // Resolve exact option symbol using Instrument Master
-            val expiries = com.example.data.network.InstrumentMasterService.instance?.getOptionExpiries(targetQuote.symbol)
-            val nearestExpiry = expiries?.firstOrNull() ?: ""
-            val instrument = com.example.data.network.InstrumentMasterService.instance?.resolveOptionInstrument(
-                underlying = targetQuote.symbol,
-                expiry = nearestExpiry,
-                strike = roundedStrike.toDouble(),
-                optionType = optType
-            )
-            
-            val optionSymbol = instrument?.symbol ?: "${targetQuote.symbol} $roundedStrike $optType"
-            val optionExchange = instrument?.exch_seg ?: targetQuote.exchange
-
-            // Get REAL tick from MarketDataStore for the option contract
-            val optionTick = com.example.data.model.MarketDataStore.getTick(optionSymbol)
-                ?: quotes.find { it.symbol.equals(optionSymbol, ignoreCase = true) }?.let {
-                    com.example.data.model.MarketDataState(
-                        source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
-                        symbol = it.symbol,
-                        token = instrument?.token ?: "",
-                        exchange = optionExchange,
-                        ltp = it.ltp
-                    )
-                }
-
-            val realOptionLtp = optionTick?.ltp ?: 0.0
-
-            if (realOptionLtp > 0.0) {
-                val sl = (realOptionLtp * 0.75).roundToInt().toDouble()
-                val t1 = (realOptionLtp * 1.25).roundToInt().toDouble()
-                val t2 = (realOptionLtp * 1.50).roundToInt().toDouble()
-
-                _currentSignal.value = com.example.data.model.AISignalEntity(
-                    symbol = optionSymbol,
-                    exchange = com.example.data.network.InstrumentMasterService.normalizeExchange(optionExchange),
-                    side = "BUY",
-                    actionType = signalType,
-                    trend = if (isCe) "BULLISH" else "BEARISH",
-                    ltp = realOptionLtp,
-                    changePercent = intensity,
-                    entryZone = "${String.format(java.util.Locale.US, "%.1f", realOptionLtp * 0.98)} - ${String.format(java.util.Locale.US, "%.1f", realOptionLtp * 1.02)}",
-                    target1 = t1,
-                    target2 = t2,
-                    stopLoss = sl,
-                    confidence = if (isCe) ceScore else peScore,
-                    riskReward = "1:2",
-                    lotSize = targetQuote.lotSize,
-                    timeframe = "5M",
-                    timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                )
-                _engineStatusMessage.value = "SIGNAL GENERATED FROM REAL DATA"
-            } else {
-                // Do not generate fake/guessed signal if real option price is unavailable
-                _currentSignal.value = null
-                _engineStatusMessage.value = "WAITING FOR OPTION TICK"
-            }
-        } else {
-            _currentSignal.value = null
-        }
-
-        // Update active positions P&L
-        updateActivePositionsPnl(targetQuote.ltp)
+        _ceBuyScore.value = 0
+        _peBuyScore.value = 0
+        _marketBias.value = "INDICATOR UNAVAILABLE"
+        return
     }
 
-    private fun updateActivePositionsPnl(currentQuoteLtp: Double) {
+    private fun updateLivePositions(quotes: List<WatchlistItem>) {
+        if (_activePositions.value.isEmpty()) return
         val updatedList = _activePositions.value.map { pos ->
-            if (pos.status == "OPEN") {
-                val newLtp = if (currentQuoteLtp > 0.0) currentQuoteLtp else pos.currentLtp
-                val diff = newLtp - pos.entryPrice
-                val pnl = diff * pos.qty
-
-                // Evaluate Targets
-                if (newLtp >= pos.target1 && pos.target1 > 0) {
-                    coroutineScope.launch {
-                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target1 - pos.entryPrice) / pos.entryPrice) * 100) else "25.0"
-                        alertService?.notifyTargetHit(
-                            targetNumber = 1,
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            price = String.format(Locale.US, "%.2f", pos.target1),
-                            profit = String.format(Locale.US, "%.2f", (pos.target1 - pos.entryPrice) * pos.qty),
-                            returnPercent = returnPct,
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-                if (newLtp >= pos.target2 && pos.target2 > 0) {
-                    coroutineScope.launch {
-                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target2 - pos.entryPrice) / pos.entryPrice) * 100) else "50.0"
-                        alertService?.notifyTargetHit(
-                            targetNumber = 2,
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            price = String.format(Locale.US, "%.2f", pos.target2),
-                            profit = String.format(Locale.US, "%.2f", (pos.target2 - pos.entryPrice) * pos.qty),
-                            returnPercent = returnPct,
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-                if (pos.target3 > 0 && newLtp >= pos.target3) {
-                    coroutineScope.launch {
-                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target3 - pos.entryPrice) / pos.entryPrice) * 100) else "75.0"
-                        alertService?.notifyTargetHit(
-                            targetNumber = 3,
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            price = String.format(Locale.US, "%.2f", pos.target3),
-                            profit = String.format(Locale.US, "%.2f", (pos.target3 - pos.entryPrice) * pos.qty),
-                            returnPercent = returnPct,
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-                if (pos.target4 > 0 && newLtp >= pos.target4) {
-                    coroutineScope.launch {
-                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.target4 - pos.entryPrice) / pos.entryPrice) * 100) else "100.0"
-                        alertService?.notifyTargetHit(
-                            targetNumber = 4,
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            price = String.format(Locale.US, "%.2f", pos.target4),
-                            profit = String.format(Locale.US, "%.2f", (pos.target4 - pos.entryPrice) * pos.qty),
-                            returnPercent = returnPct,
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-
-                // Evaluate Stop Loss
-                if (newLtp <= pos.sl && pos.sl > 0) {
-                    coroutineScope.launch {
-                        val returnPct = if (pos.entryPrice > 0) String.format(Locale.US, "%.1f", ((pos.entryPrice - pos.sl) / pos.entryPrice) * 100) else "25.0"
-                        alertService?.notifyStopLossHit(
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            exit = String.format(Locale.US, "%.2f", pos.sl),
-                            loss = String.format(Locale.US, "%.2f", abs((pos.entryPrice - pos.sl) * pos.qty)),
-                            returnPercent = returnPct,
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-
-                // Evaluate Trailing SL
-                val tsl = pos.trailingSl
-                if (tsl != null && tsl > 0 && newLtp <= tsl && newLtp > pos.sl) {
-                    coroutineScope.launch {
-                        alertService?.notifyTrailingSlUpdated(
-                            symbol = _selectedIndex.value,
-                            contract = pos.symbol,
-                            entry = String.format(Locale.US, "%.2f", pos.entryPrice),
-                            current = String.format(Locale.US, "%.2f", newLtp),
-                            oldSL = String.format(Locale.US, "%.2f", pos.sl),
-                            newSL = String.format(Locale.US, "%.2f", tsl),
-                            nextTarget = String.format(Locale.US, "%.2f", pos.target1),
-                            pnl = if (pnl >= 0) "+${String.format(Locale.US, "%.2f", pnl)}" else String.format(Locale.US, "%.2f", pnl),
-                            orderId = pos.id,
-                            positionId = pos.id
-                        )
-                    }
-                }
-
+            val quote = quotes.find { it.symbol.equals(pos.symbol, ignoreCase = true) }
+            if (quote != null && quote.ltp > 0) {
+                val newLtp = quote.ltp
+                val pnl = if (pos.type == "CE") (newLtp - pos.entryPrice) * pos.qty else (pos.entryPrice - newLtp) * pos.qty
                 pos.copy(currentLtp = newLtp, pnl = pnl)
             } else pos
         }

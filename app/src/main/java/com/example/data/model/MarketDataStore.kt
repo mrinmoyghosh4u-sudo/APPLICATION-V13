@@ -19,11 +19,10 @@ import kotlin.math.abs
  * Valid Market Data Sources
  */
 object MarketDataSourceNames {
-    const val ANGEL_ONE = "ANGEL_ONE"
-    const val MSTOCK = "MSTOCK"
-    const val TRADESMART = "TRADESMART"
-    const val NSE = "NSE"
-    }
+    const val FYERS = "Fyers"
+    const val ANGEL_ONE = "AngelOne"
+    const val MSTOCK = "mStock"
+}
 
 @Immutable
 data class MarketDataState(
@@ -66,6 +65,8 @@ object MarketDataStore {
     private val symbolIndex = ConcurrentHashMap<String, MarketDataState>()
 
     // Source Health StateFlows
+    private val _fyersHealth = MutableStateFlow("OFFLINE")
+    val fyersHealth = _fyersHealth.asStateFlow()
     private val _angelOneHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
     val angelOneHealth: StateFlow<String> = _angelOneHealth.asStateFlow()
 
@@ -99,6 +100,7 @@ object MarketDataStore {
                 val staleThreshold = 15000L // 15 seconds
 
                 // Angel One Health
+                val lastFyers = sourceLastUpdate[MarketDataSourceNames.FYERS] ?: 0L
                 val lastAngel = sourceLastUpdate[MarketDataSourceNames.ANGEL_ONE] ?: 0L
                 if (lastAngel > 0 && now - lastAngel > staleThreshold && _angelOneHealth.value == "LIVE") {
                     _angelOneHealth.value = "STALE"
@@ -110,34 +112,17 @@ object MarketDataStore {
                     _mStockHealth.value = "STALE"
                 }
 
-                // TradeSmart Health
-                val lastTradeSmart = sourceLastUpdate[MarketDataSourceNames.TRADESMART] ?: 0L
-                if (lastTradeSmart > 0 && now - lastTradeSmart > staleThreshold && _tradeSmartHealth.value == "LIVE") {
-                    _tradeSmartHealth.value = "STALE"
-                }
-
-                // NSE Health
-                val lastNse = sourceLastUpdate[MarketDataSourceNames.NSE] ?: 0L
-                if (lastNse > 0 && now - lastNse > staleThreshold && _nseHealth.value == "LIVE") {
-                    _nseHealth.value = "STALE"
-                }
-
-                // Yahoo Health
-                val lastYahoo = sourceLastUpdate["REFERENCE"] ?: 0L
-                if (lastYahoo > 0 && now - lastYahoo > 60000L && _unusedHealth.value == "REFERENCE") {
-                    _unusedHealth.value = "DELAYED"
-                }
+                
             }
         }
     }
 
     fun setSourceHealth(source: String, health: String) {
         when (source) {
+            MarketDataSourceNames.FYERS -> _fyersHealth.value = health
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = health
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = health
-            MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = health
-            MarketDataSourceNames.NSE -> _nseHealth.value = health
-            "REFERENCE" -> _unusedHealth.value = health
+                                    "REFERENCE" -> _unusedHealth.value = health
         }
     }
 
@@ -213,7 +198,7 @@ object MarketDataStore {
         }
 
         // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / TRADESMART / NSE) with reference data (YAHOO)
-        if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.TRADESMART || existing.source == MarketDataSourceNames.NSE)) {
+        if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.FYERS)) {
             if (source == "REFERENCE") {
                 sourceLastUpdate[source] = receivedTimestamp
                 if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
@@ -242,11 +227,10 @@ object MarketDataStore {
 
         // 6. Update Source Health
         when (source) {
+            MarketDataSourceNames.FYERS -> _fyersHealth.value = "LIVE"
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = "LIVE"
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
-            MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = "LIVE"
-            MarketDataSourceNames.NSE -> _nseHealth.value = "LIVE"
-            "REFERENCE" -> if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
+                                    "REFERENCE" -> if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
         }
 
         // 7. Calculate Change and Change %
