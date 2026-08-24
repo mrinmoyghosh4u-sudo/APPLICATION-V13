@@ -28,7 +28,8 @@ import java.nio.ByteOrder
 class FyersMarketDataService(
     private val sessionManager: SessionManager,
     private val marketDataEngine: MarketDataEngine,
-    private val fyersApi: FyersApi
+    private val fyersApi: FyersApi,
+    private val healthManager: ProviderHealthManager? = null
 ) {
 
     private val TAG = "FyersMarketDataService"
@@ -40,7 +41,7 @@ class FyersMarketDataService(
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
-    private val _connectionState = MutableStateFlow("DISCONNECTED")
+    private val _connectionState = MutableStateFlow("NOT_CONFIGURED")
     val connectionState: StateFlow<String> = _connectionState
 
     private val subscribedSymbols = mutableSetOf<String>()
@@ -75,8 +76,9 @@ class FyersMarketDataService(
 
     suspend fun connect() {
         if (!isConfigured()) {
-            _connectionState.value = "ERROR"
-            Log.e(TAG, "Cannot connect: Fyers credentials missing")
+            _connectionState.value = "NOT_CONFIGURED"
+            healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, false)
+            Log.e(TAG, "[FYERS_AUTH_FAILED] Cannot connect: Fyers credentials missing")
             return
         }
         reconnectJob?.cancel()
@@ -85,13 +87,20 @@ class FyersMarketDataService(
 
     private fun connectWebSocket() {
         if (isConnected) return
+        Log.d(TAG, "[FYERS_AUTH_START] Initiating FYERS WebSocket connection...")
         _connectionState.value = "CONNECTING"
+        healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_FYERS)
         
-        val appId = sessionManager.fyersAppId ?: return
-        val token = sessionManager.fyersAccessToken ?: return
+        val appId = sessionManager.fyersAppId
+        val token = sessionManager.fyersAccessToken
+        if (appId.isNullOrBlank() || token.isNullOrBlank()) {
+            _connectionState.value = "AUTH_FAILED"
+            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, "Credentials missing")
+            Log.e(TAG, "[FYERS_AUTH_FAILED] Fyers appId or token missing")
+            return
+        }
         
         val fyersToken = "$appId:$token"
-        
         val url = "wss://api.fyers.in/socket/v2/data/"
         
         val request = Request.Builder()
@@ -101,14 +110,29 @@ class FyersMarketDataService(
             
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "FYERS WebSocket connected")
+                Log.i(TAG, "[FYERS_WS_CONNECTED] FYERS WebSocket connected")
                 isConnected = true
                 _connectionState.value = "CONNECTED"
+                healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
+                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+
+                _connectionState.value = "SUBSCRIBING"
+                healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
                 
                 // Resubscribe symbols
                 if (subscribedSymbols.isNotEmpty()) {
                     subscribeSymbols(subscribedSymbols.toList(), "symbolUpdate")
+                    Log.d(TAG, "[FYERS_SUBSCRIPTION_SENT] Subscribed to ${subscribedSymbols.size} symbols")
+                } else {
+                    // Subscribe to default symbols
+                    val defaultSymbols = listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "BSE:SENSEX-INDEX")
+                    subscribedSymbols.addAll(defaultSymbols)
+                    subscribeSymbols(defaultSymbols, "symbolUpdate")
+                    Log.d(TAG, "[FYERS_SUBSCRIPTION_SENT] Subscribed to default FYERS symbols")
                 }
+
+                _connectionState.value = "WAITING_FOR_FIRST_TICK"
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -116,20 +140,21 @@ class FyersMarketDataService(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
-                // FYERS sends binary data typically for ticks
                 handleBinaryMessage(bytes.toByteArray())
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: $reason")
+                Log.w(TAG, "[FYERS_DISCONNECTED] WebSocket closed: $code / $reason")
                 isConnected = false
                 _connectionState.value = "DISCONNECTED"
+                healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}")
+                Log.e(TAG, "[FYERS_DISCONNECTED] WebSocket failure: ${t.message}")
                 isConnected = false
                 _connectionState.value = "ERROR"
+                healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS, t.message ?: "WebSocket failure")
                 scheduleReconnect()
             }
         })
@@ -313,10 +338,17 @@ class FyersMarketDataService(
             }
         }
         
-        if (!ltp.isNaN()) {
+        if (!ltp.isNaN() && ltp > 0.0) {
+            val now = System.currentTimeMillis()
+            if (!hasFirstTick) {
+                Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
+            }
             hasFirstTick = true
-            lastTickReceivedTime = System.currentTimeMillis()
+            lastTickReceivedTime = now
             _connectionState.value = "LIVE"
+            healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
+
+            val exch = detectExchange(symbol)
             val tick = MarketTick(
                 symbol = symbol,
                 ltp = ltp,
@@ -325,10 +357,18 @@ class FyersMarketDataService(
                 low = if (low.isNaN()) ltp else low,
                 close = if (close.isNaN()) ltp else close,
                 volume = vol,
-                timestamp = System.currentTimeMillis(),
-                exchange = "NSE"
+                timestamp = now,
+                exchange = exch
             )
             scope.launch { marketDataEngine.updateFyersTick(tick) }
+        }
+    }
+
+    private fun detectExchange(symbol: String): String {
+        return when {
+            symbol.startsWith("BSE:", ignoreCase = true) -> "BSE"
+            symbol.startsWith("MCX:", ignoreCase = true) -> "MCX"
+            else -> "NSE"
         }
     }
 
@@ -340,20 +380,28 @@ class FyersMarketDataService(
         val symbol = topicToSymbolMap[topicId] ?: return
         val multiplier = topicToMultiplierMap[topicId]?.toDouble() ?: 100.0
         
-        if (ltpVal != -2147483648) {
+        if (ltpVal != -2147483648 && ltpVal > 0) {
+            val now = System.currentTimeMillis()
+            val ltp = ltpVal / multiplier
+            if (!hasFirstTick) {
+                Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
+            }
             hasFirstTick = true
-            lastTickReceivedTime = System.currentTimeMillis()
+            lastTickReceivedTime = now
             _connectionState.value = "LIVE"
+            healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
+
+            val exch = detectExchange(symbol)
             val tick = MarketTick(
                 symbol = symbol,
-                ltp = ltpVal / multiplier,
-                open = ltpVal / multiplier,
-                high = ltpVal / multiplier,
-                low = ltpVal / multiplier,
-                close = ltpVal / multiplier,
+                ltp = ltp,
+                open = ltp,
+                high = ltp,
+                low = ltp,
+                close = ltp,
                 volume = 0L,
-                timestamp = System.currentTimeMillis(),
-                exchange = "NSE"
+                timestamp = now,
+                exchange = exch
             )
             scope.launch { marketDataEngine.updateFyersTick(tick) }
         }
@@ -371,10 +419,17 @@ class FyersMarketDataService(
             val volume = json.optLong("volume", -1).takeIf { it != -1L }
             val ts = json.optLong("timestamp", System.currentTimeMillis())
             
-            if (symbol.isNotEmpty() && !ltp.isNaN()) {
+            if (symbol.isNotEmpty() && !ltp.isNaN() && ltp > 0.0) {
+                val now = System.currentTimeMillis()
+                if (!hasFirstTick) {
+                    Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
+                }
                 hasFirstTick = true
-                lastTickReceivedTime = System.currentTimeMillis()
+                lastTickReceivedTime = now
                 _connectionState.value = "LIVE"
+                healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
+
+                val exch = detectExchange(symbol)
                 val tick = MarketTick(
                     symbol = symbol,
                     ltp = ltp,
@@ -382,9 +437,9 @@ class FyersMarketDataService(
                     high = high ?: ltp,
                     low = low ?: ltp,
                     close = close ?: ltp,
-                    timestamp = ts,
+                    timestamp = if (ts > 0L) ts else now,
                     volume = volume ?: 0L,
-                    exchange = "NSE"
+                    exchange = exch
                 )
                 scope.launch {
                     marketDataEngine.updateFyersTick(tick)

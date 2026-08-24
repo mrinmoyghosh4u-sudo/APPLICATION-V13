@@ -422,13 +422,15 @@ fun BrokerCard(
     name: String,
     hasCredentials: Boolean,
     isAuthenticated: Boolean,
+    callbackStatus: String = "N/A",
     wsState: String,
     isActiveSubscription: Boolean,
     hasRealTick: Boolean,
     lastTickTime: String,
     tickAgeMs: Long,
     health: String,
-    sourceName: String
+    sourceName: String,
+    lastError: String = ""
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -439,18 +441,44 @@ fun BrokerCard(
             Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             
             DiagnosticItem("API Credentials", if (hasCredentials) "CONFIGURED" else "NOT CONFIGURED")
-            DiagnosticItem("Authentication", if (isAuthenticated) "AUTHENTICATED" else "UNAUTHENTICATED")
+            DiagnosticItem("Authentication", if (isAuthenticated) "AUTHENTICATED" else if (hasCredentials && lastError.isNotBlank()) "FAILED" else "NOT STARTED")
+            DiagnosticItem("Callback", callbackStatus)
             DiagnosticItem("WebSocket", wsState)
             DiagnosticItem("Subscription", if (isActiveSubscription) "ACTIVE" else "INACTIVE")
             DiagnosticItem("Real Tick", if (hasRealTick) "YES" else "NO")
             DiagnosticItem("Last Tick", if (hasRealTick) lastTickTime else "N/A")
             DiagnosticItem("Tick Age", if (tickAgeMs >= 0) "${tickAgeMs} ms" else "N/A")
             
+            val statusText = when {
+                !hasCredentials -> "NOT CONFIGURED"
+                hasRealTick && health == "LIVE" && tickAgeMs <= 15000L -> "LIVE"
+                tickAgeMs > 15000L && hasRealTick -> "STALE"
+                wsState == "CONNECTED" || wsState == "SUBSCRIBED" || wsState.contains("WAITING") -> "WAITING FOR REAL TICK"
+                wsState == "DISCONNECTED" || wsState == "OFFLINE" -> "DISCONNECTED"
+                else -> wsState
+            }
+            DiagnosticItem("Status", statusText)
+            
             val activeInstruments = MarketDataStore.marketData.value.values.count { it.source == sourceName }
             DiagnosticItem("Subscribed Instruments", activeInstruments.toString())
             
             val feedHealth = if (hasRealTick && health == "LIVE") "LIVE" else "NONE"
             DiagnosticItem("Data Source", feedHealth)
+
+            val failureStage = when {
+                !hasCredentials -> "CREDENTIALS_MISSING"
+                !isAuthenticated && lastError.isNotBlank() -> "AUTHENTICATION_FAILED"
+                !isAuthenticated -> "NOT_AUTHENTICATED"
+                wsState == "DISCONNECTED" || wsState == "OFFLINE" -> "WEBSOCKET_DISCONNECTED"
+                !isActiveSubscription -> "SUBSCRIPTION_FAILED"
+                !hasRealTick -> "WAITING_FOR_FIRST_TICK"
+                tickAgeMs > 15000L -> "TICK_STALE"
+                else -> "NONE"
+            }
+            DiagnosticItem("Failure Stage", failureStage)
+            if (lastError.isNotBlank()) {
+                DiagnosticItem("Last Error", lastError.take(80))
+            }
         }
     }
 }

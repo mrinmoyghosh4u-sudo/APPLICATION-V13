@@ -26,10 +26,10 @@ class BrokerManager(
     val dhanService: DhanBrokerService,
     val instrumentMasterService: InstrumentMasterService
 ) {
+    val healthManager = ProviderHealthManager()
     val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService)
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
-    val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService)
-    val healthManager = ProviderHealthManager()
+    val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService, healthManager)
 
     // Unified Market Data Engine with Hidden Failover Router
     val marketDataEngine = MarketDataEngine(
@@ -41,9 +41,9 @@ class BrokerManager(
 
     val networkClient = BrokerNetworkClient(sessionManager)
     val upstoxAuthManager = UpstoxAuthManager(sessionManager, networkClient.upstoxApi)
-    val upstoxMarketDataService = UpstoxMarketDataService(sessionManager, marketDataEngine, networkClient.upstoxApi).apply { marketDataEngine.upstoxMarketDataService = this }
+    val upstoxMarketDataService = UpstoxMarketDataService(sessionManager, marketDataEngine, networkClient.upstoxApi, healthManager).apply { marketDataEngine.upstoxMarketDataService = this }
     val fyersAuthManager = FyersAuthManager(sessionManager, networkClient.fyersApi)
-    val fyersMarketDataService = FyersMarketDataService(sessionManager, marketDataEngine, networkClient.fyersApi).apply { marketDataEngine.fyersMarketDataService = this }
+    val fyersMarketDataService = FyersMarketDataService(sessionManager, marketDataEngine, networkClient.fyersApi, healthManager).apply { marketDataEngine.fyersMarketDataService = this }
 
     // Central Order Execution Manager (Dhan-only)
     val orderManager = OrderManager(

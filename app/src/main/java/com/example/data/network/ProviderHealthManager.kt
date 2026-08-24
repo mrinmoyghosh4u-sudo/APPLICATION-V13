@@ -23,10 +23,11 @@ import java.util.concurrent.ConcurrentHashMap
  */
 data class ProviderHealthState(
     val provider: String,
+    val status: String = "NOT_CONFIGURED",
     val exchange: String = "ALL",
     val connected: Boolean = false,
     val authenticated: Boolean = false,
-    val authenticationState: String = "UNAUTHENTICATED",
+    val authenticationState: String = "NOT_CONFIGURED",
     val webSocketState: String = "DISCONNECTED",
     val subscriptionState: String = "UNSUBSCRIBED",
     val firstTickReceived: Boolean = false,
@@ -54,6 +55,22 @@ class ProviderHealthManager {
         const val PROVIDER_ANGEL_ONE = "Angel One"
         const val PROVIDER_MSTOCK = "m.Stock"
         const val PROVIDER_NONE = "NONE"
+
+        // Required Phase 1 States
+        const val STATE_NOT_CONFIGURED = "NOT_CONFIGURED"
+        const val STATE_CONFIGURED = "CONFIGURED"
+        const val STATE_AUTHENTICATING = "AUTHENTICATING"
+        const val STATE_AUTHENTICATED = "AUTHENTICATED"
+        const val STATE_AUTH_FAILED = "AUTH_FAILED"
+        const val STATE_CONNECTING = "CONNECTING"
+        const val STATE_CONNECTED = "CONNECTED"
+        const val STATE_SUBSCRIBING = "SUBSCRIBING"
+        const val STATE_SUBSCRIBED = "SUBSCRIBED"
+        const val STATE_WAITING_FOR_FIRST_TICK = "WAITING_FOR_FIRST_TICK"
+        const val STATE_LIVE = "LIVE"
+        const val STATE_STALE = "STALE"
+        const val STATE_DISCONNECTED = "DISCONNECTED"
+        const val STATE_ERROR = "ERROR"
     }
 
     private val healthMap = ConcurrentHashMap<String, ProviderHealthState>()
@@ -68,24 +85,100 @@ class ProviderHealthManager {
         _providerHealthFlow.value = HashMap(healthMap)
     }
 
-    fun reportConnection(provider: String, isConnected: Boolean) {
+    fun reportConfigured(provider: String, isConfigured: Boolean) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val newStatus = if (isConfigured) STATE_CONFIGURED else STATE_NOT_CONFIGURED
+        val updated = current.copy(
+            status = newStatus,
+            authenticationState = if (isConfigured) STATE_CONFIGURED else STATE_NOT_CONFIGURED
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportAuthenticating(provider: String) {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val updated = current.copy(
+            status = STATE_AUTHENTICATING,
+            authenticationState = STATE_AUTHENTICATING
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportAuthentication(provider: String, isAuthenticated: Boolean, errorMessage: String = "") {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val authState = if (isAuthenticated) STATE_AUTHENTICATED else STATE_AUTH_FAILED
+        val newStatus = if (isAuthenticated) {
+            if (current.firstTickReceived) STATE_LIVE else STATE_AUTHENTICATED
+        } else {
+            STATE_AUTH_FAILED
+        }
+        val updated = current.copy(
+            authenticated = isAuthenticated,
+            authenticationState = authState,
+            status = newStatus,
+            lastError = if (errorMessage.isNotBlank()) errorMessage else current.lastError,
+            healthy = current.connected && isAuthenticated && current.firstTickReceived && !current.stale
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportConnecting(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_CONNECTING,
+            webSocketState = STATE_CONNECTING
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportConnection(provider: String, isConnected: Boolean) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val wsState = if (isConnected) STATE_CONNECTED else STATE_DISCONNECTED
+        val newStatus = if (isConnected) {
+            if (current.firstTickReceived) STATE_LIVE else STATE_CONNECTED
+        } else {
+            STATE_DISCONNECTED
+        }
+        val updated = current.copy(
             connected = isConnected,
-            webSocketState = if (isConnected) "CONNECTED" else "DISCONNECTED",
+            webSocketState = wsState,
+            status = newStatus,
             healthy = isConnected && current.authenticated && current.firstTickReceived && !current.stale
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
     }
 
-    fun reportAuthentication(provider: String, isAuthenticated: Boolean) {
+    fun reportSubscribing(provider: String) {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val updated = current.copy(
-            authenticated = isAuthenticated,
-            authenticationState = if (isAuthenticated) "AUTHENTICATED" else "AUTHENTICATION_FAILED",
-            healthy = current.connected && isAuthenticated && current.firstTickReceived && !current.stale
+            subscriptionState = STATE_SUBSCRIBING,
+            status = STATE_SUBSCRIBING
         )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportSubscribed(provider: String, activeCount: Int = 0) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val newStatus = if (current.firstTickReceived) STATE_LIVE else STATE_WAITING_FOR_FIRST_TICK
+        val updated = current.copy(
+            subscriptionState = STATE_SUBSCRIBED,
+            activeSubscriptionCount = activeCount,
+            status = newStatus
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportWaitingForTick(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val newStatus = if (current.firstTickReceived) STATE_LIVE else STATE_WAITING_FOR_FIRST_TICK
+        val updated = current.copy(status = newStatus)
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
     }
@@ -98,9 +191,9 @@ class ProviderHealthManager {
         val updated = current.copy(
             connected = true,
             authenticated = true,
-            authenticationState = "AUTHENTICATED",
-            webSocketState = "CONNECTED",
-            subscriptionState = "SUBSCRIBED",
+            authenticationState = STATE_AUTHENTICATED,
+            webSocketState = STATE_CONNECTED,
+            subscriptionState = STATE_SUBSCRIBED,
             firstTickReceived = true,
             lastTickTimestamp = timestamp,
             lastSuccessfulRequest = timestamp,
@@ -108,6 +201,7 @@ class ProviderHealthManager {
             latency = if (latencyMs > 0) latencyMs else current.latency,
             stale = false,
             errorCount = 0,
+            status = STATE_LIVE,
             healthy = true
         )
         healthMap[provider] = updated
@@ -116,6 +210,18 @@ class ProviderHealthManager {
         if (!wasHealthy && updated.healthy) {
             try { Log.i(TAG, "DATA PROVIDER: $provider → HEALTHY (FIRST REAL TICK RECEIVED)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → HEALTHY") }
         }
+    }
+
+    fun reportDisconnected(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            connected = false,
+            webSocketState = STATE_DISCONNECTED,
+            status = STATE_DISCONNECTED,
+            healthy = false
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
     }
 
     fun reportSuccessfulRequest(provider: String, latencyMs: Long = 0L) {
@@ -137,6 +243,7 @@ class ProviderHealthManager {
         val updated = current.copy(
             errorCount = newErrors,
             lastError = if (errorMessage.isNotBlank()) errorMessage else current.lastError,
+            status = STATE_ERROR,
             healthy = isHealthy
         )
         healthMap[provider] = updated
@@ -148,7 +255,7 @@ class ProviderHealthManager {
         healthMap.forEach { (provider, state) ->
             if (state.lastTickTimestamp > 0 && (now - state.lastTickTimestamp > STALE_TIMEOUT_MS)) {
                 if (!state.stale) {
-                    val updated = state.copy(stale = true, healthy = false)
+                    val updated = state.copy(stale = true, status = STATE_STALE, healthy = false)
                     healthMap[provider] = updated
                     try { Log.w(TAG, "DATA PROVIDER: $provider → STALE (no ticks for >15s)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → STALE") }
                 }
@@ -166,7 +273,7 @@ class ProviderHealthManager {
 
     fun isProviderAvailableForRest(provider: String): Boolean {
         val state = healthMap[provider] ?: return false
-        return state.errorCount < 3 && (state.authenticated )
+        return state.errorCount < 3 && (state.authenticated)
     }
 
     fun getHealthState(provider: String): ProviderHealthState {
