@@ -203,4 +203,28 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
             .build()
             .create(FyersApi::class.java)
     }
+
+    // =========================================
+    // UPSTOX (PRIMARY MARKET DATA)
+    // =========================================
+    private val upstoxClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .addInterceptor(errorLoggingInterceptor)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val requestBuilder = original.newBuilder()
+                .header("Accept", "application/json")
+            chain.proceed(requestBuilder.build())
+        }
+        .build()
+
+    val upstoxApi: UpstoxApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://api.upstox.com/")
+            .client(upstoxClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(UpstoxApi::class.java)
+    }
 }

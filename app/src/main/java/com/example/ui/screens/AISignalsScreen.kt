@@ -77,6 +77,7 @@ fun AISignalsScreen(
     val bseStatus = remember { MarketStatusUtil.getDetailedMarketStatus("BSE") }
     val mcxStatus = remember { MarketStatusUtil.getDetailedMarketStatus("MCX") }
     val isAnyMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
+    val isLiveFeedActive = marketDataSource.startsWith("LIVE", ignoreCase = true)
 
     // Real signals directly from database & live engine
     val resolvedSignals = remember(signals) {
@@ -435,6 +436,8 @@ King Khan Royal Algo Suite • Auto Trade
                 } else {
                     item {
                         EmptySignalsCard(
+                            isLiveFeedActive = isLiveFeedActive,
+                            marketDataSource = marketDataSource,
                             isAnyMarketOpen = isAnyMarketOpen,
                             selectedIndexFilter = selectedIndexFilter,
                             selectedDirectionFilter = selectedDirectionFilter,
@@ -1057,16 +1060,21 @@ private fun TradeLevelColumn(title: String, value: String, valueColor: Color) {
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun EmptySignalsCard(
+    isLiveFeedActive: Boolean,
+    marketDataSource: String,
     isAnyMarketOpen: Boolean,
     selectedIndexFilter: String,
     selectedDirectionFilter: String,
     onResetFilter: () -> Unit
 ) {
+    val isStale = marketDataSource.contains("STALE", ignoreCase = true)
+    val isUnavailable = !isLiveFeedActive && !isStale
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         color = DarkCard,
-        border = BorderStroke(1.dp, DarkCardBorder)
+        border = BorderStroke(1.dp, if (!isLiveFeedActive) LossRed.copy(alpha = 0.5f) else DarkCardBorder)
     ) {
         Column(
             modifier = Modifier
@@ -1077,14 +1085,14 @@ private fun EmptySignalsCard(
             Box(
                 modifier = Modifier
                     .size(54.dp)
-                    .background(Color(0xFF2A200B), CircleShape)
-                    .border(1.dp, PrimaryGold, CircleShape),
+                    .background(if (!isLiveFeedActive) LossRed.copy(alpha = 0.15f) else Color(0xFF2A200B), CircleShape)
+                    .border(1.dp, if (!isLiveFeedActive) LossRed else PrimaryGold, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isAnyMarketOpen) Icons.Default.FilterListOff else Icons.Default.AccessTime,
+                    imageVector = if (!isLiveFeedActive) Icons.Default.SignalCellularConnectedNoInternet0Bar else if (isAnyMarketOpen) Icons.Default.FilterListOff else Icons.Default.AccessTime,
                     contentDescription = null,
-                    tint = PrimaryGold,
+                    tint = if (!isLiveFeedActive) LossRed else PrimaryGold,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -1092,7 +1100,9 @@ private fun EmptySignalsCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
+                text = if (!isLiveFeedActive) {
+                    if (isStale) "SIGNAL PAUSED • STALE DATA" else "SIGNAL PAUSED • REAL MARKET DATA UNAVAILABLE"
+                } else if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
                     "No Signals Match Filter ($selectedIndexFilter • $selectedDirectionFilter)"
                 } else if (isAnyMarketOpen) {
                     "Scanning for High-Probability Option Setups..."
@@ -1101,14 +1111,16 @@ private fun EmptySignalsCard(
                 },
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = if (!isLiveFeedActive) LossRed else TextWhite,
                 textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
+                text = if (!isLiveFeedActive) {
+                    "AI option signals are strictly gated by verified market data ticks. Waiting for active feed from FYERS (Primary), ANGEL ONE (Fallback #1), or m.STOCK (Fallback #2)."
+                } else if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
                     "Try resetting your filter parameters to view all active quantitative setups across Nifty, BankNifty and FinNifty."
                 } else {
                     "AI Algo engine continuously scans multi-timeframe EMA 9/21, VWAP, Supertrend, Put/Call OI concentration, and Volume surges."
@@ -1120,13 +1132,15 @@ private fun EmptySignalsCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            OutlinedButton(
-                onClick = onResetFilter,
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, PrimaryGold),
-                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF131722))
-            ) {
-                Text("RESET FILTERS TO ALL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+            if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
+                OutlinedButton(
+                    onClick = onResetFilter,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, PrimaryGold),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF131722))
+                ) {
+                    Text("RESET FILTERS TO ALL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+                }
             }
         }
     }

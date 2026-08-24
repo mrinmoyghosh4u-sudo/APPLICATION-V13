@@ -724,7 +724,8 @@ class MainActivity : FragmentActivity() {
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
                                 onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },
-                                onFyersLogin = { appId, secretId, authCode -> viewModel.connectFyers(appId, secretId, authCode) }
+                                onFyersLogin = { appId, secretId, authCode -> viewModel.connectFyers(appId, secretId, authCode) },
+                                onUpstoxLogin = { apiKey, apiSecret, authCode -> viewModel.connectUpstox(apiKey, apiSecret, authCode) }
                             )
                         }
 

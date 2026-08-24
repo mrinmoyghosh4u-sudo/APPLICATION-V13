@@ -43,7 +43,8 @@ fun BrokerConnectDialog(
     onDismiss: () -> Unit,
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
     onMStockLogin: ((String, String, String) -> Unit)? = null,
-    onFyersLogin: ((String, String, String) -> Unit)? = null
+    onFyersLogin: ((String, String, String) -> Unit)? = null,
+    onUpstoxLogin: ((String, String, String) -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
     var localErrorMsg by remember { mutableStateOf<String?>(null) }
@@ -66,6 +67,10 @@ fun BrokerConnectDialog(
     var fyersAuthCode by remember { mutableStateOf("") }
     var showFyersWebView by remember { mutableStateOf(false) }
 
+    var upstoxApiKey by remember { mutableStateOf(sessionManager.upstoxApiKey ?: "") }
+    var upstoxApiSecret by remember { mutableStateOf(sessionManager.upstoxApiSecret ?: "") }
+    var showUpstoxWebView by remember { mutableStateOf(false) }
+
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
             localErrorMsg = errorMessage
@@ -82,6 +87,9 @@ fun BrokerConnectDialog(
             if (mstockClientId.isBlank()) mstockClientId = sessionManager.mstockClientId
             if (mstockApiKey.isBlank()) mstockApiKey = sessionManager.mstockApiKey
             if (mstockTotpSecret.isBlank()) mstockTotpSecret = sessionManager.mstockTotpSecret
+        } else if (selectedBroker == "Upstox") {
+            if (upstoxApiKey.isBlank()) upstoxApiKey = sessionManager.upstoxApiKey ?: ""
+            if (upstoxApiSecret.isBlank()) upstoxApiSecret = sessionManager.upstoxApiSecret ?: ""
         }
     }
 
@@ -115,7 +123,7 @@ fun BrokerConnectDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // 4 Broker Tabs
+                // 5 Broker Tabs
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -126,6 +134,15 @@ fun BrokerConnectDialog(
                         isSelected = selectedBroker == "Dhan",
                         onClick = { 
                             selectedBroker = "Dhan" 
+                            localErrorMsg = null
+                        }
+                    )
+                    BrokerTab(
+                        name = "Upstox",
+                        letter = "U",
+                        isSelected = selectedBroker == "Upstox",
+                        onClick = { 
+                            selectedBroker = "Upstox"
                             localErrorMsg = null
                         }
                     )
@@ -161,6 +178,62 @@ fun BrokerConnectDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 when (selectedBroker) {
+                    "Upstox" -> {
+                        Text("Connect Upstox (Primary Market Data)", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Provides Live Quotes and Historical Data (API V2/V3)", color = TextGray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = upstoxApiKey,
+                            onValueChange = { upstoxApiKey = it },
+                            label = { Text("API Key / Client ID", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = upstoxApiSecret,
+                            onValueChange = { upstoxApiSecret = it },
+                            label = { Text("API Secret", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = {
+                                if (upstoxApiKey.isBlank() || upstoxApiSecret.isBlank()) {
+                                    localErrorMsg = "API Key and API Secret are required"
+                                    return@Button
+                                }
+                                sessionManager.upstoxApiKey = upstoxApiKey
+                                sessionManager.upstoxApiSecret = upstoxApiSecret
+                                showUpstoxWebView = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isAuthInProgress,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
+                        ) {
+                            if (isAuthInProgress) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                            } else {
+                                Text("LOGIN & CONNECT UPSTOX", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                     "m.Stock" -> {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -577,6 +650,55 @@ fun BrokerConnectDialog(
             }
         }
     }
+    if (showUpstoxWebView) {
+        Dialog(
+            onDismissRequest = { showUpstoxWebView = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(DarkBackground).padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Upstox Secure Login", color = TextWhite, fontWeight = FontWeight.Bold)
+                        TextButton(onClick = { showUpstoxWebView = false }) {
+                            Text("Close", color = ProfitGreen)
+                        }
+                    }
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                        val url = request?.url.toString()
+                                        val redirectUri = sessionManager.upstoxRedirectUri ?: "https://application-beige-psi.vercel.app/oauth"
+                                        if (url.startsWith(redirectUri) || url.contains("code=")) {
+                                            val authCode = request?.url?.getQueryParameter("code")
+                                            if (!authCode.isNullOrBlank()) {
+                                                showUpstoxWebView = false
+                                                onUpstoxLogin?.invoke(upstoxApiKey, upstoxApiSecret, authCode)
+                                                return true
+                                            }
+                                        }
+                                        return super.shouldOverrideUrlLoading(view, request)
+                                    }
+                                }
+                                val redirectUri = sessionManager.upstoxRedirectUri ?: "https://application-beige-psi.vercel.app/oauth"
+                                val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri)
+                                loadUrl(loginUrl)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+
     if (showFyersWebView) {
         Dialog(
             onDismissRequest = { showFyersWebView = false },
@@ -624,7 +746,6 @@ fun BrokerConnectDialog(
             }
         }
     }
-
 }
 
 @Composable

@@ -46,7 +46,9 @@ class FyersMarketDataService(
     private val subscribedSymbols = mutableSetOf<String>()
     private var isConnected = false
     private var reconnectJob: Job? = null
-    
+    private var hasFirstTick = false
+    private var lastTickReceivedTime: Long = 0L
+
     // For parsing
     data class FyersMarketTick(
         val symbol: String,
@@ -62,6 +64,10 @@ class FyersMarketDataService(
     )
 
     fun isConnectionLive(): Boolean = isConnected && _connectionState.value == "LIVE"
+    fun hasFirstTickReceived(): Boolean = hasFirstTick
+    fun hasActiveSubscription(): Boolean = subscribedSymbols.isNotEmpty() || isConfigured()
+    fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
+    fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
     fun isConfigured(): Boolean {
         return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
@@ -140,7 +146,7 @@ class FyersMarketDataService(
         }
     }
 
-    suspend fun disconnect() {
+    fun disconnect() {
         reconnectJob?.cancel()
         webSocket?.close(1000, "User disconnected")
         webSocket = null
@@ -332,6 +338,8 @@ class FyersMarketDataService(
         val multiplier = topicToMultiplierMap[topicId]?.toDouble() ?: 100.0
         
         if (ltpVal != -2147483648) {
+            hasFirstTick = true
+            lastTickReceivedTime = System.currentTimeMillis()
             val tick = MarketTick(
                 symbol = symbol,
                 ltp = ltpVal / multiplier,

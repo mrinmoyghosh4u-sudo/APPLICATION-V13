@@ -40,6 +40,8 @@ class BrokerManager(
     )
 
     val networkClient = BrokerNetworkClient(sessionManager)
+    val upstoxAuthManager = UpstoxAuthManager(sessionManager, networkClient.upstoxApi)
+    val upstoxMarketDataService = UpstoxMarketDataService(sessionManager, marketDataEngine, networkClient.upstoxApi).apply { marketDataEngine.upstoxMarketDataService = this }
     val fyersAuthManager = FyersAuthManager(sessionManager, networkClient.fyersApi)
     val fyersMarketDataService = FyersMarketDataService(sessionManager, marketDataEngine, networkClient.fyersApi).apply { marketDataEngine.fyersMarketDataService = this }
 

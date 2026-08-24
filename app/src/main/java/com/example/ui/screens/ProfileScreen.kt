@@ -94,9 +94,11 @@ fun ProfileScreen(
 
     // Stat calculations strictly from Dhan / Broker Orders
     val isDhanConnected = userProfile.isDhanConnected || brokerStatuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isUpstoxConnected = brokerStatuses["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isFyersConnected = brokerStatuses["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
     val isAngelConnected = userProfile.isAngelConnected || brokerStatuses["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
     val isMStockConnected = brokerStatuses["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-    val isAnyBrokerConnected = isDhanConnected || isAngelConnected || isMStockConnected || (userProfile.connectedBroker.isNotBlank() && (userProfile.isDhanConnected || userProfile.isAngelConnected))
+    val isAnyBrokerConnected = isDhanConnected || isUpstoxConnected || isFyersConnected || isAngelConnected || isMStockConnected || (userProfile.connectedBroker.isNotBlank() && (userProfile.isDhanConnected || userProfile.isAngelConnected))
 
     val completedOrders = remember(orders) {
         orders.filter { order ->
@@ -580,7 +582,7 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("ACTIVE ORDER BROKER: DHAN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                    Text("PRIMARY DATA: FYERS • FALLBACK: ANGEL ONE / m.STOCK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
+                    Text("DATA: UPSTOX > FYERS > ANGEL > m.STOCK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -604,12 +606,29 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 2. Fyers Row (Primary Market Data)
+                // 2. Upstox Row (Primary Market Data)
+                val upstoxInfo = brokerStatuses["Upstox"]
+                val upstoxStatus = upstoxInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Upstox",
+                    subtitle = "Primary Real Market Data Feed (API V2/V3)",
+                    letter = "U",
+                    letterBg = Color(0xFF673AB7),
+                    status = upstoxStatus,
+                    onConnect = { onSwitchBroker("Upstox") },
+                    onReconnect = { onReconnectBroker("Upstox") },
+                    onDisconnect = { onDisconnectBroker("Upstox") },
+                    onRemoveAccount = { onRemoveAccountBroker("Upstox") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3. Fyers Row (Fallback #1)
                 val fyersInfo = brokerStatuses["Fyers"]
                 val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Fyers",
-                    subtitle = "Primary Market Data Feed (API V3)",
+                    subtitle = "Fallback #1 Market Data Feed (API V3)",
                     logoRes = R.drawable.ic_dhan_logo, // Fallback icon
                     status = fyersStatus,
                     onConnect = { onSwitchBroker("Fyers") },
@@ -620,12 +639,12 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. Angel One Row (Fallback #1)
+                // 4. Angel One Row (Fallback #2)
                 val angelInfo = brokerStatuses["Angel One"]
                 val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Angel One",
-                    subtitle = "Fallback #1 Market Data Feed (SmartAPI)",
+                    subtitle = "Fallback #2 Market Data Feed (SmartAPI)",
                     logoRes = R.drawable.ic_angel_one_logo,
                     status = angelStatus,
                     onConnect = { onSwitchBroker("Angel One") },
@@ -636,12 +655,12 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 4. m.Stock Row (Fallback #2)
+                // 5. m.Stock Row (Fallback #3)
                 val mstockInfo = brokerStatuses["m.Stock"]
                 val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.STANDBY
                 BrokerStatusRow(
                     name = "m.Stock",
-                    subtitle = "Fallback #2 Market Data Feed",
+                    subtitle = "Fallback #3 Market Data Feed",
                     letter = "m",
                     letterBg = Color(0xFFE53935),
                     status = mstockStatus,

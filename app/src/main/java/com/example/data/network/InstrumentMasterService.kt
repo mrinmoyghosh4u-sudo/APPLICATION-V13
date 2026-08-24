@@ -522,6 +522,10 @@ class InstrumentMasterService(
         return resolved
     }
 
+    fun resolveUpstoxInstrumentKey(symbol: String, exchange: String = "NSE"): String {
+        return UpstoxSymbolMapper.toUpstoxInstrumentKey(symbol, exchange)
+    }
+
     fun resolveDhanSecurityId(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
         

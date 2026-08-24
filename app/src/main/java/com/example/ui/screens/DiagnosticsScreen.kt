@@ -35,14 +35,20 @@ fun DiagnosticsScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val upstoxConnectionState by viewModel.brokerManager.upstoxMarketDataService.connectionState.collectAsStateWithLifecycle()
+    val fyersConnectionState by viewModel.brokerManager.fyersMarketDataService.connectionState.collectAsStateWithLifecycle()
     val angelConnectionState by viewModel.brokerManager.angelMarketDataService.connectionState.collectAsStateWithLifecycle()
     val mStockConnectionState by viewModel.brokerManager.mStockMarketDataService.connectionState.collectAsStateWithLifecycle()
+    val upstoxHealth by MarketDataStore.upstoxHealth.collectAsStateWithLifecycle()
+    val fyersHealth by MarketDataStore.fyersHealth.collectAsStateWithLifecycle()
     val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
     val mStockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
-                val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
+    val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
     val internalActiveProvider by viewModel.brokerManager.marketDataEngine.internalActiveProvider.collectAsStateWithLifecycle()
     
     val isMasterLoaded = viewModel.brokerManager.instrumentMasterService.isLoaded
+    val upstoxAuthStatus = if (viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
+    val fyersAuthStatus = if (viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
     val angelAuthStatus = if (viewModel.sessionManager.angelJwtToken.isNullOrEmpty()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
     val angelFeedTokenStatus = if (viewModel.sessionManager.angelFeedToken.isNullOrEmpty()) "FAIL" else "PASS"
     val angelClientIdStatus = if (viewModel.sessionManager.angelClientId.isNullOrBlank()) "FAIL" else "PASS"
@@ -61,9 +67,11 @@ fun DiagnosticsScreen(
     val crudeToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL")
     val crudeMToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL M")
 
+    val hasUpstoxLiveTick = viewModel.brokerManager.upstoxMarketDataService.isConnectionLive()
+    val hasFyersLiveTick = viewModel.brokerManager.fyersMarketDataService.isConnectionLive()
     val hasAngelLiveTick = viewModel.brokerManager.angelMarketDataService.isConnectionLive()
     val hasMStockLiveTick = viewModel.brokerManager.mStockMarketDataService.isConnectionLive()
-    val hasLiveStream = hasAngelLiveTick || hasMStockLiveTick
+    val hasLiveStream = hasUpstoxLiveTick || hasFyersLiveTick || hasAngelLiveTick || hasMStockLiveTick
 
     val marketData = MarketDataStore.marketData.collectAsStateWithLifecycle().value
 
@@ -144,7 +152,37 @@ fun DiagnosticsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Section: Live Feed Providers
-        SectionHeader("PRIMARY FEED: ANGEL ONE (SmartAPI)")
+        SectionHeader("PRIMARY FEED: UPSTOX (API V2/V3)")
+        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.upstoxApiKey.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("API Secret Saved", if (viewModel.sessionManager.upstoxApiSecret.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Access Token Saved", if (!viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Authentication", upstoxAuthStatus)
+        DiagnosticItem("WebSocket State", upstoxConnectionState)
+        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.upstoxMarketDataService.hasActiveSubscription()) "PASS" else "NO")
+        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.upstoxMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
+        DiagnosticItem("Last Tick Time", viewModel.brokerManager.upstoxMarketDataService.getLastUpdatedTime())
+        DiagnosticItem("Tick Age", if (viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs()} ms" else "N/A")
+        DiagnosticItem("Feed Health Status", upstoxHealth)
+        DiagnosticItem("Status Reason", if (!hasUpstoxLiveTick) "No real tick received yet" else "Operational")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SectionHeader("FALLBACK #1: FYERS (API V3)")
+        DiagnosticItem("App ID Saved", if (viewModel.sessionManager.fyersAppId.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Secret ID Saved", if (viewModel.sessionManager.fyersSecretId.isNotBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Access Token Saved", if (!viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "PASS" else "FAIL")
+        DiagnosticItem("Authentication", fyersAuthStatus)
+        DiagnosticItem("WebSocket State", fyersConnectionState)
+        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.fyersMarketDataService.hasActiveSubscription()) "PASS" else "NO")
+        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.fyersMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
+        DiagnosticItem("Last Tick Time", viewModel.brokerManager.fyersMarketDataService.getLastUpdatedTime())
+        DiagnosticItem("Tick Age", if (viewModel.brokerManager.fyersMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.fyersMarketDataService.getTickAgeMs()} ms" else "N/A")
+        DiagnosticItem("Feed Health Status", fyersHealth)
+        DiagnosticItem("Status Reason", if (!hasFyersLiveTick) "No real tick received yet" else "Operational")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SectionHeader("FALLBACK #2: ANGEL ONE (SmartAPI)")
         DiagnosticItem("Client ID Saved", if (viewModel.sessionManager.angelClientId.isNotBlank()) "PASS" else "FAIL")
         DiagnosticItem("API Key Saved", if (viewModel.sessionManager.angelApiKey.isNotBlank()) "PASS" else "FAIL")
         DiagnosticItem("Session Token Saved", if (!viewModel.sessionManager.angelJwtToken.isNullOrBlank()) "PASS" else "FAIL")
@@ -160,7 +198,7 @@ fun DiagnosticsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        SectionHeader("SECONDARY FEED: m.STOCK (Mirae Asset)")
+        SectionHeader("FALLBACK #3: m.STOCK (Mirae Asset)")
         val mStockEndpoint by com.example.util.MStockAuthHelper.lastEndpoint.collectAsStateWithLifecycle()
         val mStockHttpStatus by com.example.util.MStockAuthHelper.lastHttpStatus.collectAsStateWithLifecycle()
         val mStockAuthStage by com.example.util.MStockAuthHelper.authStage.collectAsStateWithLifecycle()

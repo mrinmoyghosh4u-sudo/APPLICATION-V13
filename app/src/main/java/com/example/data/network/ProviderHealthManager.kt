@@ -39,6 +39,7 @@ class ProviderHealthManager {
         const val STALE_TIMEOUT_MS = 15000L // 15 seconds stale timeout
         
         // Canonical Provider Keys
+        const val PROVIDER_UPSTOX = "Upstox"
         const val PROVIDER_FYERS = "Fyers"
         const val PROVIDER_ANGEL_ONE = "Angel One"
         const val PROVIDER_MSTOCK = "m.Stock"
@@ -51,7 +52,7 @@ class ProviderHealthManager {
 
     init {
         // Initialize default health state
-        listOf(PROVIDER_FYERS, PROVIDER_ANGEL_ONE, PROVIDER_MSTOCK).forEach { name ->
+        listOf(PROVIDER_UPSTOX, PROVIDER_FYERS, PROVIDER_ANGEL_ONE, PROVIDER_MSTOCK).forEach { name ->
             healthMap[name] = ProviderHealthState(provider = name)
         }
         _providerHealthFlow.value = HashMap(healthMap)

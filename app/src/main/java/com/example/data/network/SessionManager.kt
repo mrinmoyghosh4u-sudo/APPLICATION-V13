@@ -350,6 +350,8 @@ class SessionManager(context: Context) {
 
     fun hasAngelSession(): Boolean = !angelJwtToken.isNullOrBlank()
     fun hasDhanSession(): Boolean = !dhanAccessToken.isNullOrBlank()
+    fun hasUpstoxSession(): Boolean = !upstoxAccessToken.isNullOrBlank()
+    fun hasFyersSession(): Boolean = !fyersAccessToken.isNullOrBlank()
 
     fun clearDhanSession() {
         prefs.edit()
@@ -483,5 +485,73 @@ class SessionManager(context: Context) {
         }.apply()
         safeSetToken("fyers_access_token_enc", null)
         safeSetToken("fyers_refresh_token_enc", null)
+    }
+
+    // ==========================================
+    // UPSTOX (PRIMARY MARKET DATA)
+    // ==========================================
+    var upstoxApiKey: String
+        get() = safeGetToken("upstox_api_key_enc") ?: ""
+        set(value) {
+            safeSetToken("upstox_api_key_enc", value)
+        }
+
+    var upstoxApiSecret: String
+        get() = safeGetToken("upstox_api_secret_enc") ?: ""
+        set(value) {
+            safeSetToken("upstox_api_secret_enc", value)
+        }
+
+    var upstoxRedirectUri: String
+        get() = prefs.getString("upstox_redirect_uri", "https://application-beige-psi.vercel.app/oauth") ?: "https://application-beige-psi.vercel.app/oauth"
+        set(value) {
+            prefs.edit().putString("upstox_redirect_uri", value).commit()
+        }
+
+    var upstoxAccessToken: String?
+        get() = safeGetToken("upstox_access_token_enc")
+        set(value) = safeSetToken("upstox_access_token_enc", value)
+
+    var upstoxRefreshToken: String?
+        get() = safeGetToken("upstox_refresh_token_enc")
+        set(value) = safeSetToken("upstox_refresh_token_enc", value)
+
+    var upstoxTokenTimestamp: Long
+        get() = prefs.getLong("upstox_token_time", 0L)
+        set(value) = prefs.edit().putLong("upstox_token_time", value).apply()
+
+    var isUpstoxConnected: Boolean
+        get() = prefs.getBoolean("is_upstox_connected", false) && !upstoxAccessToken.isNullOrBlank()
+        set(value) = prefs.edit().putBoolean("is_upstox_connected", value).apply()
+
+    fun isUpstoxConfigured(): Boolean {
+        return !upstoxApiKey.isBlank() && !upstoxAccessToken.isNullOrBlank()
+    }
+
+    fun saveUpstoxCredentials(apiKey: String, apiSecret: String = "", redirectUri: String = "https://application-beige-psi.vercel.app/oauth") {
+        if (apiKey.isNotBlank()) upstoxApiKey = apiKey.trim()
+        if (apiSecret.isNotBlank()) upstoxApiSecret = apiSecret.trim()
+        if (redirectUri.isNotBlank()) upstoxRedirectUri = redirectUri.trim()
+    }
+
+    fun clearUpstoxCredentials() {
+        prefs.edit().apply {
+            remove("upstox_token_time")
+            remove("upstox_redirect_uri")
+            putBoolean("is_upstox_connected", false)
+        }.commit()
+        safeSetToken("upstox_api_key_enc", null)
+        safeSetToken("upstox_api_secret_enc", null)
+        safeSetToken("upstox_access_token_enc", null)
+        safeSetToken("upstox_refresh_token_enc", null)
+    }
+
+    fun clearUpstoxSession() {
+        prefs.edit().apply {
+            remove("upstox_token_time")
+            putBoolean("is_upstox_connected", false)
+        }.apply()
+        safeSetToken("upstox_access_token_enc", null)
+        safeSetToken("upstox_refresh_token_enc", null)
     }
 }

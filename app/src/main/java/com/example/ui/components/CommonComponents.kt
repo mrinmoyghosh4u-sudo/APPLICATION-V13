@@ -107,6 +107,7 @@ fun LiveStatusBadge(
     onClick: (() -> Unit)? = null
 ) {
     val cleanSource = when {
+        dataSource.contains("UPSTOX", ignoreCase = true) -> "UPSTOX"
         dataSource.contains("FYERS", ignoreCase = true) -> "FYERS"
         dataSource.contains("ANGEL", ignoreCase = true) -> "ANGEL ONE"
         dataSource.contains("M.STOCK", ignoreCase = true) || dataSource.contains("MSTOCK", ignoreCase = true) -> "m.STOCK"

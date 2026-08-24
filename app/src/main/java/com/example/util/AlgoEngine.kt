@@ -6,6 +6,7 @@ import com.example.data.model.AlgoStrategy
 import com.example.data.model.AlgoSystemLog
 import com.example.data.model.AlgoTradeHistory
 import com.example.data.model.BacktestResult
+import com.example.data.model.MarketDataStore
 import com.example.data.model.WatchlistItem
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -301,7 +302,7 @@ object AlgoEngine {
      */
     fun processMarketFeed(
         quotes: List<WatchlistItem>, 
-        isBrokerConnected: Boolean,
+        isLiveFeedActive: Boolean = MarketDataStore.providerState.value.live && !MarketDataStore.providerState.value.stale,
         optionChain: List<com.example.data.model.OptionStrikeItem>? = null,
         indicators: Map<String, Double>? = null
     ) {
@@ -310,8 +311,9 @@ object AlgoEngine {
             return
         }
 
-        if (!isBrokerConnected) {
-            _engineStatusMessage.value = "BROKER SESSION EXPIRED"
+        val providerState = MarketDataStore.providerState.value
+        if (!isLiveFeedActive || !providerState.live || providerState.stale) {
+            _engineStatusMessage.value = if (providerState.stale) "SIGNAL PAUSED — STALE DATA" else "SIGNAL PAUSED — REAL MARKET DATA UNAVAILABLE"
             _currentSignal.value = null
             _marketBias.value = "NEUTRAL"
             _ceBuyScore.value = 0

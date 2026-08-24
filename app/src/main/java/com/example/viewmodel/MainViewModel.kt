@@ -130,10 +130,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSessionRestoring = MutableStateFlow(true)
     val isSessionRestoring: StateFlow<Boolean> = _isSessionRestoring.asStateFlow()
 
+    val marketDataProviderState: StateFlow<com.example.data.model.MarketDataProviderState> = brokerManager.marketDataEngine.providerState
+
     private val _marketDataSource = MutableStateFlow(brokerManager.currentMarketDataSource)
     val marketDataSource: StateFlow<String> = _marketDataSource.asStateFlow()
-    val isLiveFeedActive: StateFlow<Boolean> = _marketDataSource.map {
-        it.startsWith("LIVE", ignoreCase = true)
+    val isLiveFeedActive: StateFlow<Boolean> = marketDataProviderState.map {
+        it.live && !it.stale
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
 
@@ -580,6 +582,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     
+    fun connectUpstox(apiKey: String, apiSecret: String, authCode: String) {
+        viewModelScope.launch {
+            _isAuthInProgress.value = true
+            _authErrorMessage.value = null
+
+            sessionManager.upstoxApiKey = apiKey
+            sessionManager.upstoxApiSecret = apiSecret
+
+            val res = brokerManager.upstoxAuthManager.exchangeAuthCode(authCode)
+            _isAuthInProgress.value = false
+
+            if (res.isSuccess) {
+                _brokerSwitchStatus.value = "Upstox Feed Connected • Primary Market Data"
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                brokerManager.upstoxMarketDataService.connect()
+                alertService.notifyBrokerConnected("Upstox", account = apiKey)
+            } else {
+                _authErrorMessage.value = "Upstox Authentication Failed: ${res.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
     fun connectFyers(appId: String, secretId: String, authCode: String) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
@@ -701,6 +726,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 code = codeMatch?.groupValues?.get(1)
             }
 
+            val state = uri.getQueryParameter("state") ?: ""
+            val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true)
+            val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true)
+
+            if (isUpstox && !code.isNullOrBlank()) {
+                val upstoxKey = sessionManager.upstoxApiKey ?: ""
+                val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
+                connectUpstox(upstoxKey, upstoxSecret, code)
+                return@launch
+            } else if (isFyers && !code.isNullOrBlank()) {
+                val fyersAppId = sessionManager.fyersAppId ?: ""
+                val fyersSecretId = sessionManager.fyersSecretId ?: ""
+                connectFyers(fyersAppId, fyersSecretId, code)
+                return@launch
+            }
+
             val hasTokenId = !code.isNullOrBlank() || !token.isNullOrBlank()
             android.util.Log.d("DhanAuth", "tokenId received: ${if (hasTokenId) "YES" else "NO"}")
 
@@ -795,7 +836,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (_marketDataLastUpdated.value.isBlank()) {
                     _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 }
-                com.example.util.AlgoEngine.processMarketFeed(_watchlist.value, isValidSession)
+                com.example.util.AlgoEngine.processMarketFeed(_watchlist.value, isLiveFeedActive.value)
                 kotlinx.coroutines.delay(10000L)
             }
         }
@@ -1303,6 +1344,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendSignalToTelegram(signal: com.example.data.model.AISignalEntity) {
         viewModelScope.launch {
+            if (!isLiveFeedActive.value || marketDataProviderState.value.stale) {
+                repository.addNotification(
+                    title = "Signal Transmission Blocked",
+                    message = "Market feed is ${if (marketDataProviderState.value.stale) "STALE" else "UNAVAILABLE"}. Signals are blocked until fresh verified market ticks arrive.",
+                    type = "ERROR"
+                )
+                return@launch
+            }
+
             val isBullish = signal.trend.equals("BULLISH", ignoreCase = true) || signal.actionType.contains("CE", ignoreCase = true)
             if (isBullish) {
                 alertService.notifyAiBuyCeSignal(
