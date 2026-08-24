@@ -181,6 +181,10 @@ class SessionManager(context: Context) {
         get() = prefs.getString("pending_oauth_broker", "") ?: ""
         set(value) = prefs.edit().putString("pending_oauth_broker", value).apply()
 
+    var pendingOAuthState: String
+        get() = prefs.getString("pending_oauth_state", "") ?: ""
+        set(value) = prefs.edit().putString("pending_oauth_state", value).apply()
+
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution
         set(value) {

@@ -35,11 +35,11 @@
                 <data android:scheme="kingkhan" />
             </intent-filter>
 
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="application-beige-psi.vercel.app" />
+                <data android:scheme="https" android:host="application-beige-psi.vercel.app" android:pathPrefix="/oauth" />
             </intent-filter>
         </activity>
 

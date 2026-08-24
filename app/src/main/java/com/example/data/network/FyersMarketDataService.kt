@@ -103,7 +103,7 @@ class FyersMarketDataService(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "FYERS WebSocket connected")
                 isConnected = true
-                _connectionState.value = "LIVE"
+                _connectionState.value = "CONNECTED"
                 
                 // Resubscribe symbols
                 if (subscribedSymbols.isNotEmpty()) {
@@ -314,6 +314,9 @@ class FyersMarketDataService(
         }
         
         if (!ltp.isNaN()) {
+            hasFirstTick = true
+            lastTickReceivedTime = System.currentTimeMillis()
+            _connectionState.value = "LIVE"
             val tick = MarketTick(
                 symbol = symbol,
                 ltp = ltp,
@@ -340,6 +343,7 @@ class FyersMarketDataService(
         if (ltpVal != -2147483648) {
             hasFirstTick = true
             lastTickReceivedTime = System.currentTimeMillis()
+            _connectionState.value = "LIVE"
             val tick = MarketTick(
                 symbol = symbol,
                 ltp = ltpVal / multiplier,
@@ -368,6 +372,9 @@ class FyersMarketDataService(
             val ts = json.optLong("timestamp", System.currentTimeMillis())
             
             if (symbol.isNotEmpty() && !ltp.isNaN()) {
+                hasFirstTick = true
+                lastTickReceivedTime = System.currentTimeMillis()
+                _connectionState.value = "LIVE"
                 val tick = MarketTick(
                     symbol = symbol,
                     ltp = ltp,

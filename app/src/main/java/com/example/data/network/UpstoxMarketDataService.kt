@@ -113,7 +113,7 @@ class UpstoxMarketDataService(
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         Log.i(TAG, "UPSTOX WebSocket V3 Connected")
                         isConnected = true
-                        _connectionState.value = "LIVE"
+                        _connectionState.value = "CONNECTED"
                         backoffDelayMs = 1000L
 
                         // Subscribe to default index scrips & any pending subscriptions
@@ -165,12 +165,12 @@ class UpstoxMarketDataService(
             if (response.feeds.isEmpty()) return
 
             val now = System.currentTimeMillis()
-            hasFirstTick = true
-            lastTickReceivedTime = now
+            var hasValidTick = false
             response.feeds.forEach { (instrumentKey, feed) ->
                 val (sym, exch) = UpstoxSymbolMapper.fromUpstoxInstrumentKey(instrumentKey)
 
                 if (feed.ltp > 0.0) {
+                    hasValidTick = true
                     val tick = MarketTick(
                         symbol = sym,
                         token = instrumentKey,
@@ -187,6 +187,11 @@ class UpstoxMarketDataService(
                         marketDataEngine.updateUpstoxTick(tick)
                     }
                 }
+            }
+            if (hasValidTick) {
+                hasFirstTick = true
+                lastTickReceivedTime = now
+                _connectionState.value = "LIVE"
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error handling Upstox binary feed: ${e.message}")

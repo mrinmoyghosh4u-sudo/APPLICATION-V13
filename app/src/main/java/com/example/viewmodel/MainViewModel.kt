@@ -702,22 +702,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val state = uri.getQueryParameter("state") ?: ""
+            val pendingState = sessionManager.pendingOAuthState
+            val pendingBroker = sessionManager.pendingOAuthBroker
             android.util.Log.d("Auth", "[6] Authorization code received: PASS (hidden)")
-            val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Upstox"
-            val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Fyers"
 
-            if (isUpstox && !code.isNullOrBlank()) {
-                val upstoxKey = sessionManager.upstoxApiKey ?: ""
-                val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
-                sessionManager.pendingOAuthBroker = ""
-                connectUpstox(upstoxKey, upstoxSecret, code)
-                return@launch
-            } else if (isFyers && !code.isNullOrBlank()) {
-                val fyersAppId = sessionManager.fyersAppId ?: ""
-                val fyersSecretId = sessionManager.fyersSecretId ?: ""
-                sessionManager.pendingOAuthBroker = ""
-                connectFyers(fyersAppId, fyersSecretId, code)
-                return@launch
+            val isUpstox = pendingBroker == "Upstox" || _connectingBrokerName.value == "Upstox" || state.startsWith("upstox_") || (state.contains("upstox", ignoreCase = true) && !state.contains("fyers", ignoreCase = true))
+            val isFyers = pendingBroker == "Fyers" || _connectingBrokerName.value == "Fyers" || state.startsWith("fyers_") || (state.contains("fyers", ignoreCase = true) && !state.contains("upstox", ignoreCase = true))
+
+            if (isUpstox || isFyers) {
+                // Validate state if pendingState was stored
+                if (pendingState.isNotBlank()) {
+                    if (state.isBlank() || state != pendingState) {
+                        android.util.Log.e("Auth", "OAuth State Validation Failed! Received state='$state', expected='$pendingState'")
+                        _authErrorMessage.value = "OAuth State Validation Failed: Security state mismatch. Please try logging in again."
+                        _isAuthInProgress.value = false
+                        sessionManager.pendingOAuthState = ""
+                        sessionManager.pendingOAuthBroker = ""
+                        return@launch
+                    }
+                    android.util.Log.d("Auth", "OAuth State Validation: PASS")
+                }
+                sessionManager.pendingOAuthState = ""
+            }
+
+            if (isUpstox) {
+                if (!code.isNullOrBlank()) {
+                    val upstoxKey = sessionManager.upstoxApiKey ?: ""
+                    val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
+                    sessionManager.pendingOAuthBroker = ""
+                    connectUpstox(upstoxKey, upstoxSecret, code)
+                    return@launch
+                } else {
+                    val err = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description") ?: "No code received from Upstox"
+                    _authErrorMessage.value = "Upstox Login Failed: $err"
+                    _isAuthInProgress.value = false
+                    sessionManager.pendingOAuthBroker = ""
+                    return@launch
+                }
+            } else if (isFyers) {
+                if (!code.isNullOrBlank()) {
+                    val fyersAppId = sessionManager.fyersAppId ?: ""
+                    val fyersSecretId = sessionManager.fyersSecretId ?: ""
+                    sessionManager.pendingOAuthBroker = ""
+                    connectFyers(fyersAppId, fyersSecretId, code)
+                    return@launch
+                } else {
+                    val err = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description") ?: "No auth_code received from Fyers"
+                    _authErrorMessage.value = "Fyers Login Failed: $err"
+                    _isAuthInProgress.value = false
+                    sessionManager.pendingOAuthBroker = ""
+                    return@launch
+                }
             }
 
             val hasTokenId = !code.isNullOrBlank() || !token.isNullOrBlank()
