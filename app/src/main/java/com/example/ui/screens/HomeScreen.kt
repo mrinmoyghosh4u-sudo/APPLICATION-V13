@@ -98,9 +98,7 @@ fun HomeScreen(
                 }
             }
 
-            val isDhanConnected = userProfile.isDhanConnected
-
-            // 1. TOP HEADER (Logo, App Title, Dhan Live Badge, Notifications Badge)
+            // 1. TOP HEADER (Logo, App Title, Live Provider Badge, Notifications Badge)
             val isLiveFeedActive by (viewModel?.isLiveFeedActive ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsStateWithLifecycle()
             HomeHeaderSection(
                 isLiveFeedActive = isLiveFeedActive,

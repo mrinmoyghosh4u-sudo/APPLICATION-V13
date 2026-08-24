@@ -80,9 +80,10 @@ fun OptionChainScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val isDhanConnected = userProfile.isDhanConnected || (viewModel?.sessionManager?.isDhanConnected == true)
+                    val isLiveFeedActive by viewModel.isLiveFeedActive.collectAsStateWithLifecycle()
                     com.example.ui.components.LiveStatusBadge(
-                        isLive = isDhanConnected, dataSource = "",
+                        isLive = isLiveFeedActive,
+                        dataSource = marketDataSource,
                         modifier = Modifier.padding(end = 4.dp)
                     )
                     IconButton(onClick = onOpenNotificationCenter) {

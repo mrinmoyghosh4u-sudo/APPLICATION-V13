@@ -89,11 +89,12 @@ fun MarketScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            val isDhanConnected = userProfile.isDhanConnected
+            val isLiveFeedActive = marketDataSource.startsWith("LIVE", ignoreCase = true)
 
-            // 1. TOP HEADER (Crown Logo, App Name, Dhan Live Badge, Notifications with badge)
+            // 1. TOP HEADER (Crown Logo, App Name, Live Provider Badge, Notifications with badge)
             MarketHeaderSection(
-                isDhanConnected = isDhanConnected,
+                isLiveFeedActive = isLiveFeedActive,
+                marketDataSource = marketDataSource,
                 unreadCount = unreadCount,
                 onOpenNotificationCenter = onOpenNotificationCenter
             )
@@ -212,11 +213,12 @@ fun MarketScreen(
 }
 
 // ==========================================
-// 1. TOP HEADER (Logo, App Title, Dhan Live Badge, Notification Icon)
+// 1. TOP HEADER (Logo, App Title, Live Provider Badge, Notification Icon)
 // ==========================================
 @Composable
 private fun MarketHeaderSection(
-    isDhanConnected: Boolean,
+    isLiveFeedActive: Boolean,
+    marketDataSource: String,
     unreadCount: Int,
     onOpenNotificationCenter: () -> Unit
 ) {
@@ -242,7 +244,8 @@ private fun MarketHeaderSection(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             com.example.ui.components.LiveStatusBadge(
-                isLive = isDhanConnected, dataSource = "",
+                isLive = isLiveFeedActive,
+                dataSource = marketDataSource,
                 modifier = Modifier.padding(end = 6.dp)
             )
 

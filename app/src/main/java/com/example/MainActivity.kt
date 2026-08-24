@@ -411,6 +411,7 @@ class MainActivity : FragmentActivity() {
                                             userProfile = userProfile,
                                             signals = aiSignals,
                                             notifications = notifications,
+                                            marketDataSource = marketDataSource,
                                             appPreferences = appPreferences,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onExecuteSignal = { signal ->
@@ -432,6 +433,7 @@ class MainActivity : FragmentActivity() {
                                             watchlist = watchlist,
                                             notifications = notifications,
                                             availableMargin = userProfile.availableMargin,
+                                            marketDataSource = marketDataSource,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
                                             onOpenOrderDialog = { symbol, side, price, lot ->
                                                 orderDialogState = Triple(symbol, side, price to lot)
@@ -490,6 +492,7 @@ class MainActivity : FragmentActivity() {
                                                 orders = orders,
                                                 holdings = holdings,
                                                 notifications = notifications,
+                                                marketDataSource = marketDataSource,
                                                 appPreferences = remember { com.example.util.AppPreferences(applicationContext) },
                                                 brokerStatuses = brokerStatuses,
                                                 onSwitchBroker = { broker ->
@@ -556,6 +559,7 @@ class MainActivity : FragmentActivity() {
                                 AISignalsScreen(
                                     userProfile = userProfile,
                                     signals = aiSignals,
+                                    marketDataSource = marketDataSource,
                                     onOpenNotificationCenter = { showNotificationCenter = true },
                                     onExecuteSignal = { signal ->
                                         orderDialogState = Triple(
@@ -580,6 +584,7 @@ class MainActivity : FragmentActivity() {
                                 PortfolioScreen(
                                     holdings = holdings,
                                     userProfile = userProfile,
+                                    marketDataSource = marketDataSource,
                                     isRefreshing = isRefreshing,
                                     onRefresh = { viewModel.refreshBrokerData() },
                                     onNavigateToPositions = {

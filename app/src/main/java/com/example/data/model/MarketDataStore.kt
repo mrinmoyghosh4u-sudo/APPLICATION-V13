@@ -234,7 +234,7 @@ object MarketDataStore {
         }
 
         // 7. Calculate Change and Change %
-        val prevClose = if (close > 0.0) close else (existing?.previousClose ?: if (existing != null && existing.ltp > 0.0) existing.ltp else ltp)
+        val prevClose = if (close > 0.0) close else (existing?.previousClose ?: 0.0)
         val change = if (prevClose > 0.0) ltp - prevClose else 0.0
         val changePct = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
 

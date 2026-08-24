@@ -86,11 +86,8 @@ fun AlgoScreen(
 
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
-    val isDhanConnected = userProfile.isDhanConnected || viewModel.sessionManager.isDhanConnected
-    val marketSourceState = viewModel.marketDataSource.collectAsStateWithLifecycle()
-    val marketSource = marketSourceState.value
-    val marketLastUpdatedState = viewModel.marketDataLastUpdated.collectAsStateWithLifecycle()
-    val marketLastUpdated = marketLastUpdatedState.value
+    val marketDataSource by viewModel.marketDataSource.collectAsStateWithLifecycle()
+    val isLiveFeedActive by viewModel.isLiveFeedActive.collectAsStateWithLifecycle()
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
@@ -132,7 +129,8 @@ fun AlgoScreen(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     com.example.ui.components.LiveStatusBadge(
-                        isLive = isDhanConnected, dataSource = "",
+                        isLive = isLiveFeedActive,
+                        dataSource = marketDataSource,
                         modifier = Modifier.padding(end = 6.dp)
                     )
 

@@ -103,9 +103,10 @@ fun IndexDetailsScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val isDhanConnected = viewModel?.sessionManager?.isDhanConnected == true
+                    val isLiveFeedActive by viewModel.isLiveFeedActive.collectAsStateWithLifecycle()
                     com.example.ui.components.LiveStatusBadge(
-                        isLive = isDhanConnected, dataSource = "",
+                        isLive = isLiveFeedActive,
+                        dataSource = marketDataSource,
                         modifier = Modifier.padding(end = 4.dp)
                     )
                     IconButton(onClick = { /* Favorite */ }) {
@@ -247,13 +248,15 @@ fun MarketTabContent(
         com.example.data.model.MarketDataStore.getTick(indexName)
     }
 
-    val prevClose = if (indexTick != null && indexTick.previousClose > 0.0) indexTick.previousClose else if (hasData) ltp - change else 0.0
-    val rawOpen = if (indexTick != null && indexTick.open > 0.0) indexTick.open else prevClose
-    val open = if (rawOpen <= 0.0) ltp else rawOpen
-    val rawHigh = if (indexTick != null && indexTick.high > 0.0) indexTick.high else maxOf(ltp, prevClose, open)
-    val rawLow = if (indexTick != null && indexTick.low > 0.0) indexTick.low else minOf(ltp, prevClose, open)
-    val high = maxOf(rawHigh, ltp, prevClose, open)
-    val low = minOf(rawLow, ltp, prevClose, open)
+    val prevCloseVal = indexTick?.previousClose?.takeIf { it > 0.0 }
+    val openVal = indexTick?.open?.takeIf { it > 0.0 }
+    val highVal = indexTick?.high?.takeIf { it > 0.0 }
+    val lowVal = indexTick?.low?.takeIf { it > 0.0 }
+
+    val prevCloseStr = prevCloseVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"
+    val openStr = openVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"
+    val highStr = highVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"
+    val lowStr = lowVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"
 
     // Dynamic Underlying Component Analysis
     val cleanIndex = indexName.trim().uppercase()
@@ -266,15 +269,6 @@ fun MarketTabContent(
         cleanIndex.contains("CRUDE") -> 1
         else -> 50 // NIFTY 50
     }
-
-    val isPositive = change >= 0
-    val positiveMovers = remember(cleanIndex, change) {
-        if (change > 0) (totalConstituents * 0.65).toInt().coerceAtLeast(1)
-        else if (change < 0) (totalConstituents * 0.35).toInt().coerceAtMost(totalConstituents - 1)
-        else totalConstituents / 2
-    }
-    val negativeMovers = (totalConstituents - positiveMovers).coerceAtLeast(0)
-    val positiveRatio = if (totalConstituents > 0) positiveMovers.toFloat() / totalConstituents else 0.5f
 
     var candleList by remember { mutableStateOf<List<com.example.ui.components.CandleData>>(emptyList()) }
     LaunchedEffect(indexName) {
@@ -299,40 +293,18 @@ fun MarketTabContent(
             if (hasData) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Positive Index Movers", fontSize = 12.sp, color = TextWhite)
-                        Text("$positiveMovers", fontSize = 12.sp, color = ProfitGreen, fontWeight = FontWeight.Bold)
+                        Text("Index Tracked Constituents", fontSize = 12.sp, color = TextWhite)
+                        Text("$totalConstituents Instruments", fontSize = 12.sp, color = SecondaryGold, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                    ) {
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(positiveRatio).background(ProfitGreen))
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(1f - positiveRatio).background(LossRed))
-                    }
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Negative Index Movers", fontSize = 12.sp, color = TextWhite)
-                        Text("$negativeMovers", fontSize = 12.sp, color = LossRed, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                    ) {
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(1f - positiveRatio).background(LossRed))
-                    }
+                    Text("Real-time constituent market breadth tracks actively over provider socket connection.", fontSize = 11.sp, color = TextGray)
                 }
             } else {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("DATA UNAVAILABLE — Broker Disconnected", fontSize = 12.sp, color = TextGray)
+                    Text("DATA UNAVAILABLE — Provider Disconnected", fontSize = 12.sp, color = TextGray)
                 }
             }
         }
@@ -352,45 +324,49 @@ fun MarketTabContent(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("Open", fontSize = 11.sp, color = TextGray)
-                            Text(String.format("%,.2f", open), fontSize = 13.sp, color = TextWhite, fontWeight = FontWeight.Bold)
+                            Text(openStr, fontSize = 13.sp, color = TextWhite, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("High", fontSize = 11.sp, color = TextGray)
-                            Text(String.format("%,.2f", high), fontSize = 13.sp, color = ProfitGreen, fontWeight = FontWeight.Bold)
+                            Text(highStr, fontSize = 13.sp, color = ProfitGreen, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Low", fontSize = 11.sp, color = TextGray)
-                            Text(String.format("%,.2f", low), fontSize = 13.sp, color = LossRed, fontWeight = FontWeight.Bold)
+                            Text(lowStr, fontSize = 13.sp, color = LossRed, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("Prev. Close", fontSize = 11.sp, color = TextGray)
-                            Text(String.format("%,.2f", prevClose), fontSize = 13.sp, color = TextWhite, fontWeight = FontWeight.Bold)
+                            Text(prevCloseStr, fontSize = 13.sp, color = TextWhite, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     
                     // Day range bar
-                    val range = if (high > low) high - low else 1.0
-                    val currentRatio = ((ltp - low) / range).coerceIn(0.0, 1.0).toFloat()
+                    if (highVal != null && lowVal != null && highVal > lowVal && ltp > 0.0) {
+                        val range = highVal - lowVal
+                        val currentRatio = ((ltp - lowVal) / range).coerceIn(0.0, 1.0).toFloat()
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(String.format("Low: %,.2f", low), fontSize = 10.sp, color = LossRed)
-                        Text(String.format("High: %,.2f", high), fontSize = 10.sp, color = ProfitGreen)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(DarkCardSecondary)
-                    ) {
-                        Box(
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(String.format(java.util.Locale.getDefault(), "Low: %,.2f", lowVal), fontSize = 10.sp, color = LossRed)
+                            Text(String.format(java.util.Locale.getDefault(), "High: %,.2f", highVal), fontSize = 10.sp, color = ProfitGreen)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(currentRatio)
-                                .background(if (change >= 0) ProfitGreen else LossRed)
-                        )
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(DarkCardSecondary)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(currentRatio)
+                                    .background(if (change >= 0) ProfitGreen else LossRed)
+                            )
+                        }
+                    } else {
+                        Text("Day range: N/A", fontSize = 11.sp, color = TextGray)
                     }
                 }
             } else {
@@ -398,7 +374,7 @@ fun MarketTabContent(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("DATA UNAVAILABLE — Connect broker to view day stats", fontSize = 12.sp, color = TextGray)
+                    Text("DATA UNAVAILABLE — Real provider data required", fontSize = 12.sp, color = TextGray)
                 }
             }
         }

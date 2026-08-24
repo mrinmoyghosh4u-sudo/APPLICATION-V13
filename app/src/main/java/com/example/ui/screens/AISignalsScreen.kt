@@ -50,6 +50,7 @@ fun AISignalsScreen(
     userProfile: UserProfileEntity = UserProfileEntity(),
     signals: List<AISignalEntity>,
     notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
+    marketDataSource: String = "",
     appPreferences: AppPreferences? = null,
     onOpenNotificationCenter: () -> Unit = {},
     onExecuteSignal: (AISignalEntity) -> Unit,
@@ -154,9 +155,10 @@ fun AISignalsScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val isDhanConnected = userProfile.isDhanConnected
+                    val isLive = marketDataSource.startsWith("LIVE", ignoreCase = true)
                     com.example.ui.components.LiveStatusBadge(
-                        isLive = isDhanConnected, dataSource = "",
+                        isLive = isLive,
+                        dataSource = marketDataSource,
                         modifier = Modifier.padding(end = 4.dp)
                     )
 

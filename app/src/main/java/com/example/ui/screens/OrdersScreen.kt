@@ -43,6 +43,7 @@ fun OrdersScreen(
     watchlist: List<WatchlistItem> = emptyList(),
     notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
     availableMargin: Double,
+    marketDataSource: String = "",
     onOpenNotificationCenter: () -> Unit = {},
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
     onCancelOrder: ((orderId: String) -> Unit)? = null,
@@ -196,9 +197,10 @@ fun OrdersScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val isDhanConnected = userProfile.isDhanConnected
+                        val isLiveFeedActive = marketDataSource.startsWith("LIVE", ignoreCase = true)
                         com.example.ui.components.LiveStatusBadge(
-                            isLive = isDhanConnected, dataSource = "",
+                            isLive = isLiveFeedActive,
+                            dataSource = marketDataSource,
                             modifier = Modifier.padding(end = 4.dp)
                         )
                         IconButton(onClick = onOpenNotificationCenter) {

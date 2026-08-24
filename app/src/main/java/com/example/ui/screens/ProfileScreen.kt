@@ -50,6 +50,7 @@ fun ProfileScreen(
     orders: List<OrderEntity> = emptyList(),
     holdings: List<PortfolioHoldingEntity> = emptyList(),
     notifications: List<com.example.data.model.NotificationEntity> = emptyList(),
+    marketDataSource: String = "",
     appPreferences: AppPreferences,
     brokerStatuses: Map<String, com.example.data.network.BrokerConnectionState> = emptyMap(),
     onSwitchBroker: (String) -> Unit,
@@ -202,8 +203,10 @@ fun ProfileScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isLive = marketDataSource.startsWith("LIVE", ignoreCase = true)
                     com.example.ui.components.LiveStatusBadge(
-                        isLive = isDhanConnected, dataSource = "",
+                        isLive = isLive,
+                        dataSource = marketDataSource,
                         modifier = Modifier.padding(end = 4.dp)
                     )
 

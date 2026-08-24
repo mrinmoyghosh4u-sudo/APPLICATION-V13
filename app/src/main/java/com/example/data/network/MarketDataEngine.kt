@@ -309,7 +309,7 @@ class MarketDataEngine(
                     open = state?.open ?: 0.0,
                     high = state?.high ?: 0.0,
                     low = state?.low ?: 0.0,
-                    previousClose = state?.previousClose ?: (item.ltp - item.change),
+                    previousClose = state?.previousClose ?: 0.0,
                     timestamp = System.currentTimeMillis(),
                     isLive = _unifiedFeedStatus.value.contains("LIVE")
                 )
@@ -320,18 +320,18 @@ class MarketDataEngine(
     }
     
     suspend fun updateFyersTick(tick: MarketTick) {
-        val current = MarketDataStore.getTick(tick.symbol)
+        val current = MarketDataStore.getTick(tick.exchange, tick.symbol)
         
         MarketDataStore.updateTick(
             source = "FYERS",
             symbol = tick.symbol,
-            token = "",
-            exchange = "NSE",
+            token = tick.token,
+            exchange = if (tick.exchange.isNotBlank()) tick.exchange else "NSE",
             ltp = tick.ltp,
-            open = tick.open.takeIf { it > 0.0 } ?: current?.open ?: tick.ltp,
-            high = tick.high.takeIf { it > 0.0 } ?: current?.high ?: tick.ltp,
-            low = tick.low.takeIf { it > 0.0 } ?: current?.low ?: tick.ltp,
-            close = tick.close.takeIf { it > 0.0 } ?: current?.previousClose ?: tick.ltp,
+            open = tick.open.takeIf { it > 0.0 } ?: current?.open ?: 0.0,
+            high = tick.high.takeIf { it > 0.0 } ?: current?.high ?: 0.0,
+            low = tick.low.takeIf { it > 0.0 } ?: current?.low ?: 0.0,
+            close = tick.close.takeIf { it > 0.0 } ?: current?.previousClose ?: 0.0,
             volume = tick.volume.takeIf { it > 0L } ?: current?.volume ?: 0L,
             exchangeTimestamp = tick.timestamp,
             receivedTimestamp = System.currentTimeMillis(),

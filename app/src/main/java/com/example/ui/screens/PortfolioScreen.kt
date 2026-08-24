@@ -40,6 +40,7 @@ import com.example.ui.theme.*
 fun PortfolioScreen(
     holdings: List<PortfolioHoldingEntity>,
     userProfile: UserProfileEntity,
+    marketDataSource: String = "",
     onNavigateToPositions: () -> Unit,
     onNavigateToOrders: () -> Unit,
     isRefreshing: Boolean = false,
@@ -82,8 +83,10 @@ fun PortfolioScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val isLive = marketDataSource.startsWith("LIVE", ignoreCase = true)
                 com.example.ui.components.LiveStatusBadge(
-                    isLive = userProfile.isDhanConnected,
+                    isLive = isLive,
+                    dataSource = marketDataSource,
                     modifier = Modifier.padding(end = 6.dp)
                 )
                 if (userProfile.connectedBroker.isNotEmpty()) {
