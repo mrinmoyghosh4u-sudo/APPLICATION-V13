@@ -29,14 +29,12 @@ class BrokerManager(
     val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService)
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
     val mStockMarketDataService = MStockMarketDataService(sessionManager, instrumentMasterService)
-    val tradeSmartMarketDataService = TradeSmartMarketDataService(sessionManager, instrumentMasterService)
     val healthManager = ProviderHealthManager()
 
     // Unified Market Data Engine with Hidden Failover Router
     val marketDataEngine = MarketDataEngine(
         angelMarketDataService = angelMarketDataService,
         mStockMarketDataService = mStockMarketDataService,
-                tradeSmartMarketDataService = tradeSmartMarketDataService,
         sessionManager = sessionManager,
         healthManager = healthManager
     )
@@ -57,7 +55,6 @@ class BrokerManager(
         angelOneService = angelOneService,
         angelMarketDataService = angelMarketDataService,
         mStockMarketDataService = mStockMarketDataService,
-        tradeSmartMarketDataService = tradeSmartMarketDataService,
         brokerManager = this
     )
 

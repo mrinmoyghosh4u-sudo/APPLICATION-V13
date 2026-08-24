@@ -43,7 +43,6 @@ fun BrokerConnectDialog(
     onDismiss: () -> Unit,
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
     onMStockLogin: ((String, String, String) -> Unit)? = null,
-    onTradeSmartLogin: ((String, String, String) -> Unit)? = null,
     onFyersLogin: ((String, String, String) -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
@@ -62,9 +61,6 @@ fun BrokerConnectDialog(
     var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
     var mstockTotpSecret by remember { mutableStateOf(sessionManager.mstockTotpSecret) }
 
-    var tradeSmartApiKey by remember { mutableStateOf(sessionManager.tradesmartApiKey) }
-    var tradeSmartClientId by remember { mutableStateOf(sessionManager.tradesmartClientId) }
-    var tradeSmartToken by remember { mutableStateOf(sessionManager.tradesmartAccessToken ?: "") }
     var fyersAppId by remember { mutableStateOf(sessionManager.fyersAppId ?: "") }
     var fyersSecretId by remember { mutableStateOf(sessionManager.fyersSecretId ?: "") }
     var fyersAuthCode by remember { mutableStateOf("") }
@@ -86,10 +82,6 @@ fun BrokerConnectDialog(
             if (mstockClientId.isBlank()) mstockClientId = sessionManager.mstockClientId
             if (mstockApiKey.isBlank()) mstockApiKey = sessionManager.mstockApiKey
             if (mstockTotpSecret.isBlank()) mstockTotpSecret = sessionManager.mstockTotpSecret
-        } else if (selectedBroker == "TradeSmart") {
-            if (tradeSmartApiKey.isBlank()) tradeSmartApiKey = sessionManager.tradesmartApiKey
-            if (tradeSmartClientId.isBlank()) tradeSmartClientId = sessionManager.tradesmartClientId
-            if (tradeSmartToken.isBlank()) tradeSmartToken = sessionManager.tradesmartAccessToken ?: ""
         }
     }
 
@@ -138,6 +130,15 @@ fun BrokerConnectDialog(
                         }
                     )
                     BrokerTab(
+                        name = "Fyers",
+                        logoRes = R.drawable.ic_dhan_logo, // fallback logo
+                        isSelected = selectedBroker == "Fyers",
+                        onClick = { 
+                            selectedBroker = "Fyers"
+                            localErrorMsg = null
+                        }
+                    )
+                    BrokerTab(
                         name = "Angel",
                         logoRes = R.drawable.ic_angel_one_logo,
                         isSelected = selectedBroker == "Angel One",
@@ -152,24 +153,6 @@ fun BrokerConnectDialog(
                         isSelected = selectedBroker == "m.Stock",
                         onClick = { 
                             selectedBroker = "m.Stock"
-                            localErrorMsg = null
-                        }
-                    )
-                    BrokerTab(
-                        name = "Fyers",
-                        logoRes = R.drawable.ic_dhan_logo, // fallback logo
-                        isSelected = selectedBroker == "Fyers",
-                        onClick = { 
-                            selectedBroker = "Fyers"
-                            localErrorMsg = null
-                        }
-                    )
-                    BrokerTab(
-                        name = "TradeSmart",
-                        letter = "T",
-                        isSelected = selectedBroker == "TradeSmart",
-                        onClick = { 
-                            selectedBroker = "TradeSmart"
                             localErrorMsg = null
                         }
                     )
@@ -193,7 +176,7 @@ fun BrokerConnectDialog(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                "m.Stock (Secondary Market Data)",
+                                "m.Stock (Fallback #2 Market Data)",
                                 color = TextWhite,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
@@ -345,110 +328,6 @@ fun BrokerConnectDialog(
                             }
                         }
                     }
-                    "TradeSmart" -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color(0xFF0288D1), RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("T", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                "TradeSmart (Tertiary Fallback Data)",
-                                color = TextWhite,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        OutlinedTextField(
-                            value = tradeSmartApiKey,
-                            onValueChange = { tradeSmartApiKey = it },
-                            label = { Text("Sine API Key / App Key") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFF0288D1),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFF0288D1),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = tradeSmartClientId,
-                            onValueChange = { tradeSmartClientId = it },
-                            label = { Text("Client Code / User ID") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFF0288D1),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFF0288D1),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = tradeSmartToken,
-                            onValueChange = { tradeSmartToken = it },
-                            label = { Text("Sine Access Token / Session Key") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFF0288D1),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFF0288D1),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = {
-                                if (tradeSmartApiKey.isBlank() && tradeSmartClientId.isBlank()) {
-                                    localErrorMsg = "Please enter TradeSmart API Key or Client ID."
-                                } else {
-                                    localErrorMsg = null
-                                    onTradeSmartLogin?.invoke(tradeSmartApiKey, tradeSmartClientId, tradeSmartToken)
-                                }
-                            },
-                            enabled = !isAuthInProgress,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0288D1))
-                        ) {
-                            if (isAuthInProgress) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .background(Color.White, RoundedCornerShape(4.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("T", color = Color(0xFF0288D1), fontSize = 12.sp, fontWeight = FontWeight.Black)
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("LOGIN WITH TRADESMART", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                }
-                            }
-                        }
-                    }
                     "Angel One" -> {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -461,7 +340,7 @@ fun BrokerConnectDialog(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                "Angel One (Primary Market Data)",
+                                "Angel One (Fallback #1 Market Data)",
                                 color = TextWhite,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold

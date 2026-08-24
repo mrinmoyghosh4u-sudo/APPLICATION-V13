@@ -36,10 +36,9 @@ data class BrokerConnectionState(
  * 
  * Strict Role Separation:
  * 1. Dhan -> PRIMARY ORDER EXECUTION ONLY
- * 2. Angel One -> PRIMARY LIVE MARKET DATA ONLY
- * 3. m.Stock -> SECONDARY MARKET DATA FALLBACK
- * 4. TradeSmart -> TERTIARY MARKET DATA FALLBACK
- * 5. NSE & Yahoo -> REFERENCE ONLY
+ * 2. Fyers -> PRIMARY MARKET DATA FEED
+ * 3. Angel One -> FALLBACK #1 MARKET DATA FEED
+ * 4. m.Stock -> FALLBACK #2 MARKET DATA FEED
  * 
  * Startup Flow:
  * Initialize -> Check stored secure credentials/tokens -> Validate each broker session ->
@@ -51,7 +50,6 @@ class BrokerAuthManager(
     private val angelOneService: AngelOneBrokerService,
     private val angelMarketDataService: AngelOneMarketDataService,
     private val mStockMarketDataService: MStockMarketDataService,
-    private val tradeSmartMarketDataService: TradeSmartMarketDataService,
     private val brokerManager: BrokerManager
 ) {
     companion object {
@@ -64,11 +62,9 @@ class BrokerAuthManager(
     private val _statuses = MutableStateFlow<Map<String, BrokerConnectionState>>(
         mapOf(
             "Dhan" to BrokerConnectionState("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE),
-            "Angel One" to BrokerConnectionState("Angel One", "Primary Market Data", BrokerAuthStatus.CONFIGURE),
-            "m.Stock" to BrokerConnectionState("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.CONFIGURE),
-            "TradeSmart" to BrokerConnectionState("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE),
-            "NSE" to BrokerConnectionState("NSE", "Reference Only", BrokerAuthStatus.STANDBY),
-            
+            "Fyers" to BrokerConnectionState("Fyers", "Primary Market Data", BrokerAuthStatus.CONFIGURE),
+            "Angel One" to BrokerConnectionState("Angel One", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE),
+            "m.Stock" to BrokerConnectionState("m.Stock", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE)
         )
     )
     val statuses: StateFlow<Map<String, BrokerConnectionState>> = _statuses.asStateFlow()
@@ -89,17 +85,14 @@ class BrokerAuthManager(
             // 1. Dhan (Primary Order Execution)
             validateDhanSession()
 
-            // 2. Angel One (Primary Market Data)
+            // 2. Fyers & Angel One Market Data
             validateFyersSession()
             validateAngelOneSession()
 
-            // 3. m.Stock (Secondary Fallback Data)
+            // 3. m.Stock (Fallback #2 Data)
             validateMStockSession()
 
-            // 4. TradeSmart (Tertiary Fallback Data)
-            validateTradeSmartSession()
-
-            // 5. Connect Active Live Feeds
+            // 4. Connect Active Live Feeds
             connectActiveMarketFeeds()
         } catch (e: Exception) {
             Log.e(TAG, "Startup sequence encountered error: ${e.message}", e)
@@ -503,69 +496,28 @@ class BrokerAuthManager(
     }
 
     // ==========================================
-    // TRADESMART (TERTIARY MARKET DATA FALLBACK)
-    // ==========================================
-
-    private suspend fun validateTradeSmartSession() {
-        if (!sessionManager.isTradeSmartConfigured()) {
-            updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Not Configured")
-            return
-        }
-
-        val higherLive = getConnectionStatus("Angel One") == BrokerAuthStatus.CONNECTED ||
-                getConnectionStatus("m.Stock") == BrokerAuthStatus.CONNECTED
-        val status = if (higherLive) BrokerAuthStatus.STANDBY else BrokerAuthStatus.CONNECTED
-        val msg = if (higherLive) "Configured • Standby Fallback" else "Active Tertiary Market Data"
-
-        updateStatus("TradeSmart", "Tertiary Data Fallback", status, msg)
-    }
-
-    suspend fun connectTradeSmart(
-        apiKey: String? = null,
-        clientId: String? = null,
-        token: String? = null
-    ): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (!apiKey.isNullOrBlank()) sessionManager.tradesmartApiKey = apiKey
-            if (!clientId.isNullOrBlank()) sessionManager.tradesmartClientId = clientId
-            if (!token.isNullOrBlank()) sessionManager.tradesmartAccessToken = token
-
-            sessionManager.tradesmartTokenTimestamp = System.currentTimeMillis()
-            tradeSmartMarketDataService.connect()
-
-            validateTradeSmartSession()
-            true
-        }
-    }
-
-    suspend fun refreshTradeSmart(): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (!sessionManager.isTradeSmartConfigured()) {
-                throw Exception("TradeSmart is not configured.")
-            }
-            tradeSmartMarketDataService.connect()
-            validateTradeSmartSession()
-            true
-        }
-    }
-
-    // ==========================================
     // ORCHESTRATION & COMMON METHODS
     // ==========================================
 
     private fun connectActiveMarketFeeds() {
-        // Angel One is primary feed
+        if (sessionManager.isFyersConfigured()) {
+            scope.launch {
+                brokerManager.fyersMarketDataService.connect()
+            }
+        }
+
+        // Fallback #1: Angel One
         if (sessionManager.hasAngelSession()) {
-            angelMarketDataService.connect()
+            scope.launch {
+                angelMarketDataService.connect()
+            }
         }
 
-        // Connect fallbacks if configured
+        // Fallback #2: m.Stock
         if (sessionManager.isMStockConfigured()) {
-            mStockMarketDataService.connect()
-        }
-
-        if (sessionManager.isTradeSmartConfigured()) {
-            tradeSmartMarketDataService.connect()
+            scope.launch {
+                mStockMarketDataService.connect()
+            }
         }
     }
 
@@ -583,8 +535,6 @@ class BrokerAuthManager(
                 sessionManager.clearDhanSession()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.OFFLINE, "Disconnected")
             }
-            
-
             "Fyers" -> {
                 sessionManager.clearFyersSession()
                 updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.OFFLINE, "Disconnected")
@@ -592,17 +542,12 @@ class BrokerAuthManager(
             "Angel One" -> {
                 angelMarketDataService.disconnect()
                 sessionManager.clearAngelSessionTokens()
-                updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
+                updateStatus("Angel One", "Fallback #1 Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
             }
             "m.Stock" -> {
                 mStockMarketDataService.disconnect()
                 sessionManager.clearMStockSessionTokens()
-                updateStatus("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
-            }
-            "TradeSmart" -> {
-                tradeSmartMarketDataService.disconnect()
-                sessionManager.clearTradeSmartSession()
-                updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
+                updateStatus("m.Stock", "Fallback #2 Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
             }
         }
     }
@@ -613,8 +558,6 @@ class BrokerAuthManager(
                 sessionManager.clearDhanCredentials()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Account Removed")
             }
-            
-
             "Fyers" -> {
                 sessionManager.clearFyersSession()
                 sessionManager.fyersAppId = ""
@@ -624,17 +567,12 @@ class BrokerAuthManager(
             "Angel One" -> {
                 angelMarketDataService.disconnect()
                 sessionManager.clearAngelOneCredentials()
-                updateStatus("Angel One", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("Angel One", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
             }
             "m.Stock" -> {
                 mStockMarketDataService.disconnect()
                 sessionManager.clearMStockCredentials()
-                updateStatus("m.Stock", "Secondary Data Fallback", BrokerAuthStatus.CONFIGURE, "Account Removed")
-            }
-            "TradeSmart" -> {
-                tradeSmartMarketDataService.disconnect()
-                sessionManager.clearTradeSmartSession()
-                updateStatus("TradeSmart", "Tertiary Data Fallback", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("m.Stock", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
             }
         }
     }
@@ -646,7 +584,6 @@ class BrokerAuthManager(
     suspend fun reconnectBroker(brokerName: String): Result<Boolean> {
         return when (brokerName) {
             "Dhan" -> refreshDhan()
-            
             "Fyers" -> {
                 val fyersAuth = brokerManager.fyersAuthManager
                 val refreshRes = fyersAuth.refreshSession()
@@ -704,7 +641,6 @@ class BrokerAuthManager(
                 }
                 Result.failure(Exception("m.Stock reconnect failed. Credentials or session missing."))
             }
-            "TradeSmart" -> refreshTradeSmart()
             else -> Result.failure(Exception("Unknown broker: $brokerName"))
         }
     }
@@ -721,9 +657,9 @@ class BrokerAuthManager(
 
         val role = when (brokerName) {
             "Dhan" -> "Primary Order Execution"
-            "Angel One" -> "Primary Market Data"
-            "m.Stock" -> "Secondary Data Fallback"
-            "TradeSmart" -> "Tertiary Data Fallback"
+            "Fyers" -> "Primary Market Data"
+            "Angel One" -> "Fallback #1 Market Data"
+            "m.Stock" -> "Fallback #2 Market Data"
             else -> "Market Provider"
         }
 
@@ -733,11 +669,9 @@ class BrokerAuthManager(
     fun getBrokerRole(brokerName: String): String {
         return when (brokerName) {
             "Dhan" -> "Primary Order Execution"
-            "Angel One" -> if (sessionManager.primaryMarketDataProvider == "Angel One") "Primary Market Data" else "Secondary Market Data"
-            "m.Stock" -> if (sessionManager.primaryMarketDataProvider == "m.Stock") "Primary Market Data" else "Secondary Data Fallback"
-            "TradeSmart" -> "Tertiary Data Fallback"
-            "NSE" -> "Reference Only"
-           
+            "Fyers" -> "Primary Market Data"
+            "Angel One" -> "Fallback #1 Market Data"
+            "m.Stock" -> "Fallback #2 Market Data"
             else -> "Market Provider"
         }
     }

@@ -42,9 +42,6 @@ class ProviderHealthManager {
         const val PROVIDER_FYERS = "Fyers"
         const val PROVIDER_ANGEL_ONE = "Angel One"
         const val PROVIDER_MSTOCK = "m.Stock"
-        const val PROVIDER_NSE = "NSE"
-        const val PROVIDER_YAHOO = "Yahoo"
-        const val PROVIDER_TRADESMART = "TradeSmart"
         const val PROVIDER_NONE = "NONE"
     }
 

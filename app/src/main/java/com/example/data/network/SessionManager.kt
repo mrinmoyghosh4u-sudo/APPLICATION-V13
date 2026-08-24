@@ -432,50 +432,6 @@ class SessionManager(context: Context) {
         clearMStockSessionTokens()
     }
 
-    var tradesmartApiKey: String
-        get() = safeGetToken("tradesmart_api_key_enc") ?: ""
-        set(value) {
-            safeSetToken("tradesmart_api_key_enc", value)
-        }
-
-    var tradesmartClientId: String
-        get() = prefs.getString("tradesmart_client_id", "") ?: ""
-        set(value) {
-            prefs.edit().putString("tradesmart_client_id", value).commit()
-        }
-
-    var tradesmartAccessToken: String?
-        get() = safeGetToken("tradesmart_access_token_enc")
-        set(value) {
-            safeSetToken("tradesmart_access_token_enc", value)
-        }
-
-    var tradesmartRefreshToken: String?
-        get() = safeGetToken("tradesmart_refresh_token_enc")
-        set(value) {
-            safeSetToken("tradesmart_refresh_token_enc", value)
-        }
-
-    var tradesmartTokenTimestamp: Long
-        get() = prefs.getLong("tradesmart_token_time", 0L)
-        set(value) {
-            prefs.edit().putLong("tradesmart_token_time", value).commit()
-        }
-
-    fun isTradeSmartConfigured(): Boolean {
-        return !tradesmartApiKey.isBlank() || !tradesmartAccessToken.isNullOrBlank() || !tradesmartClientId.isBlank()
-    }
-
-    fun clearTradeSmartSession() {
-        prefs.edit()
-            .remove("tradesmart_api_key_enc")
-            .remove("tradesmart_client_id")
-            .remove("tradesmart_access_token_enc")
-            .remove("tradesmart_refresh_token_enc")
-            .remove("tradesmart_token_time")
-            .commit()
-    }
-
     fun clearSession() {
         prefs.edit().clear().commit()
     }
@@ -515,6 +471,10 @@ class SessionManager(context: Context) {
     var isFyersConnected: Boolean
         get() = prefs.getBoolean("is_fyers_connected", false) && !fyersAccessToken.isNullOrBlank()
         set(value) = prefs.edit().putBoolean("is_fyers_connected", value).apply()
+
+    fun isFyersConfigured(): Boolean {
+        return !fyersAppId.isBlank() && !fyersAccessToken.isNullOrBlank()
+    }
 
     fun clearFyersSession() {
         prefs.edit().apply {

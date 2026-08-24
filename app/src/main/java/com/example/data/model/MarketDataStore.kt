@@ -26,7 +26,7 @@ object MarketDataSourceNames {
 
 @Immutable
 data class MarketDataState(
-    val source: String, // "ANGEL_ONE", "MSTOCK", "TRADESMART", "NSE", "YAHOO"
+    val source: String, // "FYERS", "ANGEL_ONE", "MSTOCK", "REAL MARKET DATA UNAVAILABLE"
     val symbol: String,
     val exchange: String,
     val token: String,
@@ -40,7 +40,7 @@ data class MarketDataState(
     val volume: Long = 0L,
     val exchangeTimestamp: Long = 0L,
     val receivedTimestamp: Long = 0L,
-    val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "REFERENCE", "DELAYED", "UNAVAILABLE", "STANDBY"
+    val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "UNAVAILABLE", "STANDBY"
     val sequenceNumber: Long = 0L
 )
 
@@ -51,7 +51,7 @@ data class MarketDataState(
  * - Source is NEVER hardcoded.
  * - Every tick contains full provenance (source, timestamps, sequence).
  * - Full validation: timestamp freshness, stale detection, invalid price prevention, duplicate filtering.
- * - Source health tracking for ANGEL ONE, m.STOCK, TRADESMART, NSE, and YAHOO.
+ * - Source health tracking for FYERS, ANGEL ONE, m.STOCK.
  */
 object MarketDataStore {
     private val scope = CoroutineScope(Dispatchers.IO + Job())
@@ -73,22 +73,12 @@ object MarketDataStore {
     private val _mStockHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, STANDBY, OFFLINE
     val mStockHealth: StateFlow<String> = _mStockHealth.asStateFlow()
 
-    private val _tradeSmartHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, STANDBY, OFFLINE
-    val tradeSmartHealth: StateFlow<String> = _tradeSmartHealth.asStateFlow()
-
-    private val _nseHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
-    val nseHealth: StateFlow<String> = _nseHealth.asStateFlow()
-
-    private val _unusedHealth = MutableStateFlow("REFERENCE") // REFERENCE, DELAYED, OFFLINE
-    val unusedHealth: StateFlow<String> = _unusedHealth.asStateFlow()
-
     // Last Update Timestamps per source
     private val sourceLastUpdate = ConcurrentHashMap<String, Long>()
     // Last Sequence Numbers per source
     private val sourceLastSequence = ConcurrentHashMap<String, Long>()
 
     init {
-        sourceLastUpdate["REFERENCE"] = System.currentTimeMillis()
         startStaleDataMonitor()
     }
 
@@ -99,8 +89,13 @@ object MarketDataStore {
                 val now = System.currentTimeMillis()
                 val staleThreshold = 15000L // 15 seconds
 
-                // Angel One Health
+                // Fyers Health
                 val lastFyers = sourceLastUpdate[MarketDataSourceNames.FYERS] ?: 0L
+                if (lastFyers > 0 && now - lastFyers > staleThreshold && _fyersHealth.value == "LIVE") {
+                    _fyersHealth.value = "STALE"
+                }
+
+                // Angel One Health
                 val lastAngel = sourceLastUpdate[MarketDataSourceNames.ANGEL_ONE] ?: 0L
                 if (lastAngel > 0 && now - lastAngel > staleThreshold && _angelOneHealth.value == "LIVE") {
                     _angelOneHealth.value = "STALE"
@@ -111,8 +106,6 @@ object MarketDataStore {
                 if (lastMStock > 0 && now - lastMStock > staleThreshold && _mStockHealth.value == "LIVE") {
                     _mStockHealth.value = "STALE"
                 }
-
-                
             }
         }
     }
@@ -122,7 +115,6 @@ object MarketDataStore {
             MarketDataSourceNames.FYERS -> _fyersHealth.value = health
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = health
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = health
-                                    "REFERENCE" -> _unusedHealth.value = health
         }
     }
 
@@ -197,11 +189,10 @@ object MarketDataStore {
             return
         }
 
-        // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / TRADESMART / NSE) with reference data (YAHOO)
+        // 4. Source Priority & Validation: Never overwrite verified real-time tick (FYERS / ANGEL_ONE / MSTOCK)
         if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.FYERS)) {
             if (source == "REFERENCE") {
                 sourceLastUpdate[source] = receivedTimestamp
-                if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
                 // Keep the live tick, but update previous close if missing
                 if (existing.previousClose <= 0.0 && close > 0.0) {
                     val updated = existing.copy(
@@ -230,7 +221,6 @@ object MarketDataStore {
             MarketDataSourceNames.FYERS -> _fyersHealth.value = "LIVE"
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = "LIVE"
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
-                                    "REFERENCE" -> if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
         }
 
         // 7. Calculate Change and Change %

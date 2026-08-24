@@ -580,19 +580,19 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("ACTIVE ORDER BROKER: DHAN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
-                    Text("DATA FEED: ANGEL ONE (SMARTAPI)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
+                    Text("PRIMARY DATA: FYERS • FALLBACK: ANGEL ONE / m.STOCK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF29B6F6))
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 1. Dhan Row
+                // 1. Dhan Row (Order Execution Only)
                 val dhanInfo = brokerStatuses["Dhan"]
                 val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Dhan",
-                    subtitle = "Primary Order Execution Engine",
+                    subtitle = "Order Execution Only (Zero Market Data)",
                     letter = "ধ",
                     letterBg = Color(0xFF00C853),
                     status = dhanStatus,
@@ -604,8 +604,7 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-
-                // Fyers Row
+                // 2. Fyers Row (Primary Market Data)
                 val fyersInfo = brokerStatuses["Fyers"]
                 val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
@@ -618,13 +617,15 @@ fun ProfileScreen(
                     onDisconnect = { onDisconnectBroker("Fyers") },
                     onRemoveAccount = { onRemoveAccountBroker("Fyers") }
                 )
+
                 Spacer(modifier = Modifier.height(12.dp))
-                // 2. Angel One Row
+
+                // 3. Angel One Row (Fallback #1)
                 val angelInfo = brokerStatuses["Angel One"]
                 val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "Angel One",
-                    subtitle = "Primary Live Market Data Feed (SmartAPI)",
+                    subtitle = "Fallback #1 Market Data Feed (SmartAPI)",
                     logoRes = R.drawable.ic_angel_one_logo,
                     status = angelStatus,
                     onConnect = { onSwitchBroker("Angel One") },
@@ -635,12 +636,12 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. m.Stock Row (Secondary Market Data Fallback)
+                // 4. m.Stock Row (Fallback #2)
                 val mstockInfo = brokerStatuses["m.Stock"]
                 val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.STANDBY
                 BrokerStatusRow(
                     name = "m.Stock",
-                    subtitle = "Secondary Market Data Fallback",
+                    subtitle = "Fallback #2 Market Data Feed",
                     letter = "m",
                     letterBg = Color(0xFFE53935),
                     status = mstockStatus,
@@ -648,23 +649,6 @@ fun ProfileScreen(
                     onReconnect = { onReconnectBroker("m.Stock") },
                     onDisconnect = { onDisconnectBroker("m.Stock") },
                     onRemoveAccount = { onRemoveAccountBroker("m.Stock") }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 4. TradeSmart Row (Tertiary Market Data Fallback)
-                val tsInfo = brokerStatuses["TradeSmart"]
-                val tsStatus = tsInfo?.status ?: com.example.data.network.BrokerAuthStatus.CONFIGURE
-                BrokerStatusRow(
-                    name = "TradeSmart",
-                    subtitle = "Tertiary Market Data Fallback",
-                    letter = "T",
-                    letterBg = Color(0xFF0288D1),
-                    status = tsStatus,
-                    onConnect = { onSwitchBroker("TradeSmart") },
-                    onReconnect = { onReconnectBroker("TradeSmart") },
-                    onDisconnect = { onDisconnectBroker("TradeSmart") },
-                    onRemoveAccount = { onRemoveAccountBroker("TradeSmart") }
                 )
             }
 

@@ -28,20 +28,18 @@ import java.util.Locale
 /**
  * UNIFIED MARKET DATA ENGINE / REPOSITORY
  * 
- * Central orchestrator implementing hidden automatic data failover:
- * Priority: 1. Fyers (Primary) -> 2. Angel One (Secondary) -> 3. m.Stock (Tertiary) -> DATA UNAVAILABLE
+ * Central orchestrator implementing automatic data failover:
+ * Priority: 1. Fyers (Primary) -> 2. Angel One (Fallback #1) -> 3. m.Stock (Fallback #2) -> REAL MARKET DATA UNAVAILABLE
  *
  * STRICT REQUIREMENTS:
- * - NO YAHOO FINANCE
+ * - NO MOCK OR SYNTHETIC DATA
  * - NO HARDCODED OR RANDOM PRICES
- * - Return DATA UNAVAILABLE or fail Result if real data is missing.
+ * - Return REAL MARKET DATA UNAVAILABLE or fail Result if real data is missing.
  */
 class MarketDataEngine(
     var fyersMarketDataService: FyersMarketDataService? = null,
     val angelMarketDataService: AngelOneMarketDataService,
     val mStockMarketDataService: MStockMarketDataService,
-    
-    val tradeSmartMarketDataService: TradeSmartMarketDataService? = null,
     private val sessionManager: SessionManager,
     private val healthManager: ProviderHealthManager
 ) {

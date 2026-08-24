@@ -604,36 +604,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun connectTradeSmart(apiKey: String, clientId: String, token: String) {
-        viewModelScope.launch {
-            _isAuthInProgress.value = true
-            _authErrorMessage.value = null
-
-            if (apiKey.isBlank() || clientId.isBlank()) {
-                _authErrorMessage.value = "TradeSmart API Key and Client ID are required."
-                _isAuthInProgress.value = false
-                return@launch
-            }
-
-            sessionManager.tradesmartApiKey = apiKey
-            sessionManager.tradesmartClientId = clientId
-            sessionManager.tradesmartAccessToken = token
-            sessionManager.tradesmartTokenTimestamp = System.currentTimeMillis()
-
-            val res = brokerAuthManager.connectTradeSmart(apiKey, clientId, token)
-            _isAuthInProgress.value = false
-
-            if (res.isSuccess) {
-                _brokerSwitchStatus.value = "Broker Connected • TradeSmart"
-                _authSuccessEvent.value = true
-                _showConnectDialog.value = false
-                alertService.notifyBrokerConnected("TradeSmart", account = clientId)
-            } else {
-                _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Failed to connect TradeSmart."
-            }
-        }
-    }
-
     fun reconnectBroker(brokerName: String) {
         viewModelScope.launch {
             _isSessionRestoring.value = true
