@@ -90,6 +90,7 @@ class BrokerAuthManager(
             validateDhanSession()
 
             // 2. Angel One (Primary Market Data)
+            validateFyersSession()
             validateAngelOneSession()
 
             // 3. m.Stock (Secondary Fallback Data)
@@ -176,6 +177,19 @@ class BrokerAuthManager(
     // ==========================================
     // ANGEL ONE (PRIMARY LIVE MARKET DATA)
     // ==========================================
+
+    
+    private suspend fun validateFyersSession() {
+        val hasSession = sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()
+        if (!hasSession) {
+            updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            return
+        }
+        
+        // Fyers session doesn't expire quickly or we just assume it's valid if we have it, 
+        // until a data request fails. But we can set to CONNECTED.
+        updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Active for Market Data")
+    }
 
     private suspend fun validateAngelOneSession() {
         val hasAngelToken = !sessionManager.angelJwtToken.isNullOrBlank()
@@ -548,6 +562,12 @@ class BrokerAuthManager(
                 sessionManager.clearDhanSession()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.OFFLINE, "Disconnected")
             }
+            
+
+            "Fyers" -> {
+                sessionManager.clearFyersSession()
+                updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.OFFLINE, "Disconnected")
+            }
             "Angel One" -> {
                 angelMarketDataService.disconnect()
                 sessionManager.clearAngelSessionTokens()
@@ -571,6 +591,14 @@ class BrokerAuthManager(
             "Dhan" -> {
                 sessionManager.clearDhanCredentials()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Account Removed")
+            }
+            
+
+            "Fyers" -> {
+                sessionManager.clearFyersSession()
+                sessionManager.fyersAppId = ""
+                sessionManager.fyersSecretId = ""
+                updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
             }
             "Angel One" -> {
                 angelMarketDataService.disconnect()
@@ -597,6 +625,8 @@ class BrokerAuthManager(
     suspend fun reconnectBroker(brokerName: String): Result<Boolean> {
         return when (brokerName) {
             "Dhan" -> refreshDhan()
+            
+            "Fyers" -> Result.failure(Exception("Fyers auto-reconnect not supported. Please re-login."))
             "Angel One" -> {
                 // 1. Try refresh token first if present
                 if (!sessionManager.angelRefreshToken.isNullOrBlank()) {

@@ -202,8 +202,8 @@ fun ProfileScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.example.ui.components.DhanLiveStatusBadge(
-                        isDhanConnected = isDhanConnected,
+                    com.example.ui.components.LiveStatusBadge(
+                        isLive = isDhanConnected, dataSource = "",
                         modifier = Modifier.padding(end = 4.dp)
                     )
 
@@ -601,6 +601,21 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+
+                // Fyers Row
+                val fyersInfo = brokerStatuses["Fyers"]
+                val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Fyers",
+                    subtitle = "Primary Market Data Feed (API V3)",
+                    logoRes = R.drawable.ic_dhan_logo, // Fallback icon
+                    status = fyersStatus,
+                    onConnect = { onSwitchBroker("Fyers") },
+                    onReconnect = { onReconnectBroker("Fyers") },
+                    onDisconnect = { onDisconnectBroker("Fyers") },
+                    onRemoveAccount = { onRemoveAccountBroker("Fyers") }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 // 2. Angel One Row
                 val angelInfo = brokerStatuses["Angel One"]
                 val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE

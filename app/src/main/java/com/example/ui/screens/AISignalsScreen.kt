@@ -155,8 +155,8 @@ fun AISignalsScreen(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val isDhanConnected = userProfile.isDhanConnected
-                    com.example.ui.components.DhanLiveStatusBadge(
-                        isDhanConnected = isDhanConnected,
+                    com.example.ui.components.LiveStatusBadge(
+                        isLive = isDhanConnected, dataSource = "",
                         modifier = Modifier.padding(end = 4.dp)
                     )
 

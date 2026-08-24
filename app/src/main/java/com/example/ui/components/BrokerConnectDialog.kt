@@ -6,6 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,7 +39,8 @@ fun BrokerConnectDialog(
     onDismiss: () -> Unit,
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
     onMStockLogin: ((String, String, String) -> Unit)? = null,
-    onTradeSmartLogin: ((String, String, String) -> Unit)? = null
+    onTradeSmartLogin: ((String, String, String) -> Unit)? = null,
+    onFyersLogin: ((String, String, String) -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
     var localErrorMsg by remember { mutableStateOf<String?>(null) }
@@ -58,6 +61,9 @@ fun BrokerConnectDialog(
     var tradeSmartApiKey by remember { mutableStateOf(sessionManager.tradesmartApiKey) }
     var tradeSmartClientId by remember { mutableStateOf(sessionManager.tradesmartClientId) }
     var tradeSmartToken by remember { mutableStateOf(sessionManager.tradesmartAccessToken ?: "") }
+    var fyersAppId by remember { mutableStateOf(sessionManager.fyersAppId ?: "") }
+    var fyersSecretId by remember { mutableStateOf(sessionManager.fyersSecretId ?: "") }
+    var fyersAuthCode by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -114,8 +120,8 @@ fun BrokerConnectDialog(
                 
                 // 4 Broker Tabs
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     BrokerTab(
                         name = "Dhan",
@@ -141,6 +147,15 @@ fun BrokerConnectDialog(
                         isSelected = selectedBroker == "m.Stock",
                         onClick = { 
                             selectedBroker = "m.Stock"
+                            localErrorMsg = null
+                        }
+                    )
+                    BrokerTab(
+                        name = "Fyers",
+                        logoRes = R.drawable.ic_dhan_logo, // fallback logo
+                        isSelected = selectedBroker == "Fyers",
+                        onClick = { 
+                            selectedBroker = "Fyers"
                             localErrorMsg = null
                         }
                     )
@@ -266,6 +281,98 @@ fun BrokerConnectDialog(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("LOGIN WITH m.STOCK", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
+                            }
+                        }
+                    }
+
+                    "Fyers" -> {
+                        Text("Connect Fyers API V3", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Provides Live Quotes and Historical Data", color = TextGray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = fyersAppId,
+                            onValueChange = { fyersAppId = it },
+                            label = { Text("App ID", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = fyersSecretId,
+                            onValueChange = { fyersSecretId = it },
+                            label = { Text("Secret ID", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Fyers Web Login Button
+                        Button(
+                            onClick = {
+                                if (fyersAppId.isBlank()) {
+                                    localErrorMsg = "App ID is required"
+                                    return@Button
+                                }
+                                sessionManager.fyersAppId = fyersAppId
+                                sessionManager.fyersSecretId = fyersSecretId
+                                
+                                val redirectUri = "https://trade.fyers.in/api-login/redirect-uri/index.html"
+                                val url = "https://api-t1.fyers.in/api/v3/generate-authcode?client_id=$fyersAppId&redirect_uri=$redirectUri&response_type=code&state=sample_state"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen)
+                        ) {
+                            Text("1. LOGIN TO FYERS (WEB)", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        OutlinedTextField(
+                            value = fyersAuthCode,
+                            onValueChange = { fyersAuthCode = it },
+                            label = { Text("Paste Auth Code here", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (fyersAppId.isBlank() || fyersSecretId.isBlank() || fyersAuthCode.isBlank()) {
+                                    localErrorMsg = "All fields required"
+                                    return@Button
+                                }
+                                onFyersLogin?.invoke(fyersAppId, fyersSecretId, fyersAuthCode)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isAuthInProgress,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            if (isAuthInProgress) {
+                                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp))
+                            } else {
+                                Text("2. CONNECT MARKET DATA", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

@@ -100,8 +100,10 @@ fun KingKhanHeaderBrand(
 }
 
 @Composable
-fun DhanLiveStatusBadge(
-    isDhanConnected: Boolean,
+fun LiveStatusBadge(
+    isLive: Boolean,
+    dataSource: String = "",
+
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
@@ -109,10 +111,10 @@ fun DhanLiveStatusBadge(
         onClick = { onClick?.invoke() },
         enabled = onClick != null,
         shape = RoundedCornerShape(16.dp),
-        color = if (isDhanConnected) ProfitGreen.copy(alpha = 0.15f) else DarkCardSecondary,
+        color = if (isLive) ProfitGreen.copy(alpha = 0.15f) else DarkCardSecondary,
         border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = if (isDhanConnected) ProfitGreen.copy(alpha = 0.6f) else DarkCardBorder
+            color = if (isLive) ProfitGreen.copy(alpha = 0.6f) else DarkCardBorder
         ),
         modifier = modifier
     ) {
@@ -125,14 +127,14 @@ fun DhanLiveStatusBadge(
                 modifier = Modifier
                     .size(6.dp)
                     .background(
-                        color = if (isDhanConnected) ProfitGreen else TextGray,
+                        color = if (isLive) ProfitGreen else TextGray,
                         shape = CircleShape
                     )
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = if (isDhanConnected) "LIVE" else "OFFLINE",
-                color = if (isDhanConnected) ProfitGreen else TextGray,
+                text = if (isLive) "LIVE${if(dataSource.isNotBlank()) " ● $dataSource" else ""}" else "OFFLINE${if(dataSource.isNotBlank()) " ● $dataSource" else ""}",
+                color = if (isLive) ProfitGreen else TextGray,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 0.5.sp

@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -130,6 +132,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _marketDataSource = MutableStateFlow(brokerManager.currentMarketDataSource)
     val marketDataSource: StateFlow<String> = _marketDataSource.asStateFlow()
+    val isLiveFeedActive: StateFlow<Boolean> = _marketDataSource.map {
+        it.startsWith("LIVE", ignoreCase = true)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
 
     private val _marketDataLastUpdated = MutableStateFlow("")
     val marketDataLastUpdated: StateFlow<String> = _marketDataLastUpdated.asStateFlow()
@@ -178,7 +184,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.example.util.AlgoEngine.alertService = alertService
         viewModelScope.launch {
             repository.checkAndSeedInitialData()
+
             brokerAuthManager.initialize()
+            if (sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()) {
+                brokerManager.fyersMarketDataService.connect()
+            }
+
             validateAndRestoreSession()
         }
         observeData()
@@ -564,6 +575,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 val err = res.exceptionOrNull()?.message ?: "m.Stock login failed. Please verify credentials."
                 _authErrorMessage.value = err
+            }
+        }
+    }
+
+    
+    fun connectFyers(appId: String, secretId: String, authCode: String) {
+        viewModelScope.launch {
+            _isAuthInProgress.value = true
+            _authErrorMessage.value = null
+            
+            sessionManager.fyersAppId = appId
+            sessionManager.fyersSecretId = secretId
+            
+            val res = brokerManager.fyersAuthManager.exchangeAuthCode(authCode)
+            _isAuthInProgress.value = false
+            
+            if (res.isSuccess) {
+                _brokerSwitchStatus.value = "Broker Connected • Fyers (Market Data)"
+                _authSuccessEvent.value = true
+                
+                // Immediately connect market data
+                brokerManager.fyersMarketDataService.connect()
+                
+            } else {
+                _authErrorMessage.value = "Fyers Authentication Failed: ${res.exceptionOrNull()?.message}"
             }
         }
     }

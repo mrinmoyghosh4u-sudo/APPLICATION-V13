@@ -43,6 +43,7 @@ import java.util.Locale
  * - Automatic background failover and restoration without app restart or screen recreation.
  */
 class MarketDataEngine(
+    var fyersMarketDataService: FyersMarketDataService? = null,
     val angelMarketDataService: AngelOneMarketDataService,
     val mStockMarketDataService: MStockMarketDataService,
     val nseFeedService: NseAuthorizedFeedService,
@@ -507,7 +508,25 @@ class MarketDataEngine(
     // =========================================================================
 
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
-        // Priority 1: Angel One
+        // Priority 1: Fyers
+        if (fyersMarketDataService?.isConfigured() == true) {
+            val startFyers = System.currentTimeMillis()
+            val fyersRes = fyersMarketDataService!!.getMarketQuotes(symbols)
+            if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
+                val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+                if (valid.isNotEmpty()) {
+                    healthManager.reportSuccessfulRequest("FYERS", System.currentTimeMillis() - startFyers)
+                    _unifiedFeedStatus.value = "LIVE — FYERS"
+                    _internalActiveProvider.value = "FYERS"
+                    updateLastTickTime()
+                    return Result.success(valid)
+                }
+            }
+            healthManager.reportError("FYERS")
+            healthManager.logFailover("FYERS", ProviderHealthManager.PROVIDER_ANGEL_ONE)
+        }
+        
+        // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
         val angelRes = angelMarketDataService.getMarketQuotes(symbols)
         if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
@@ -598,6 +617,31 @@ class MarketDataEngine(
         } else {
             Result.failure(Exception("Index quote unavailable for $symbol"))
         }
+    }
+
+    
+    suspend fun updateFyersTick(tick: MarketTick) {
+        val current = MarketDataStore.getTick(tick.symbol)
+        
+        MarketDataStore.updateTick(
+            source = "FYERS",
+            symbol = tick.symbol,
+            token = "",
+            exchange = "NSE",
+            ltp = tick.ltp,
+            open = tick.open.takeIf { it > 0.0 } ?: current?.open ?: tick.ltp,
+            high = tick.high.takeIf { it > 0.0 } ?: current?.high ?: tick.ltp,
+            low = tick.low.takeIf { it > 0.0 } ?: current?.low ?: tick.ltp,
+            close = tick.close.takeIf { it > 0.0 } ?: current?.previousClose ?: tick.ltp,
+            volume = tick.volume.takeIf { it > 0L } ?: current?.volume ?: 0L,
+            exchangeTimestamp = tick.timestamp,
+            receivedTimestamp = System.currentTimeMillis(),
+            state = "LIVE"
+        )
+        
+        _unifiedFeedStatus.value = "LIVE"
+        _internalActiveProvider.value = "FYERS"
+        updateLastTickTime()
     }
 
     fun retryConnection() {

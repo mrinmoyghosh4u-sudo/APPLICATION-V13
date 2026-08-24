@@ -1,8 +1,12 @@
-lines = open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt').read().split('\n')
-out = []
-for i, line in enumerate(lines):
-    out.append(line)
-    if "emptyList()" in line and "    }" in lines[i+1] and "override" in lines[i+2] if i+2 < len(lines) else False:
-        out.append("            }")
-        out.append("        }")
-open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt', 'w').write('\n'.join(out))
+import os
+
+# 1. MainViewModel.kt imports
+filepath = "app/src/main/java/com/example/viewmodel/MainViewModel.kt"
+with open(filepath, "r") as f:
+    content = f.read()
+
+if "import kotlinx.coroutines.flow.stateIn" not in content:
+    content = content.replace("import kotlinx.coroutines.flow.map", "import kotlinx.coroutines.flow.map\nimport kotlinx.coroutines.flow.stateIn\nimport kotlinx.coroutines.flow.SharingStarted")
+    with open(filepath, "w") as f:
+        f.write(content)
+

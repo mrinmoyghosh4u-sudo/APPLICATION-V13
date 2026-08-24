@@ -101,8 +101,10 @@ fun HomeScreen(
             val isDhanConnected = userProfile.isDhanConnected
 
             // 1. TOP HEADER (Logo, App Title, Dhan Live Badge, Notifications Badge)
+            val isLiveFeedActive by (viewModel?.isLiveFeedActive ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsStateWithLifecycle()
             HomeHeaderSection(
-                isDhanConnected = isDhanConnected,
+                isLiveFeedActive = isLiveFeedActive,
+                marketDataSource = marketDataSource,
                 unreadCount = unreadCount,
                 onOpenNotificationCenter = onOpenNotificationCenter
             )
@@ -173,7 +175,8 @@ fun HomeScreen(
 // ==========================================
 @Composable
 private fun HomeHeaderSection(
-    isDhanConnected: Boolean,
+    isLiveFeedActive: Boolean,
+    marketDataSource: String,
     unreadCount: Int,
     onOpenNotificationCenter: () -> Unit
 ) {
@@ -198,8 +201,8 @@ private fun HomeHeaderSection(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            com.example.ui.components.DhanLiveStatusBadge(
-                isDhanConnected = isDhanConnected,
+            com.example.ui.components.LiveStatusBadge(
+                isLive = isLiveFeedActive, dataSource = marketDataSource,
                 modifier = Modifier.padding(end = 6.dp)
             )
 

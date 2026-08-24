@@ -82,8 +82,8 @@ fun PortfolioScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                com.example.ui.components.DhanLiveStatusBadge(
-                    isDhanConnected = userProfile.isDhanConnected,
+                com.example.ui.components.LiveStatusBadge(
+                    isLive = userProfile.isDhanConnected,
                     modifier = Modifier.padding(end = 6.dp)
                 )
                 if (userProfile.connectedBroker.isNotEmpty()) {

@@ -479,4 +479,28 @@ class SessionManager(context: Context) {
     fun clearSession() {
         prefs.edit().clear().commit()
     }
+
+    // FYERS
+    var fyersAppId: String?
+        get() = prefs.getString("fyers_app_id", "")
+        set(value) = prefs.edit().putString("fyers_app_id", value).apply()
+
+    var fyersSecretId: String?
+        get() = prefs.getString("fyers_secret_id", "")
+        set(value) = prefs.edit().putString("fyers_secret_id", value).apply()
+
+    var fyersAccessToken: String?
+        get() = prefs.getString("fyers_access_token", null)
+        set(value) = prefs.edit().putString("fyers_access_token", value).apply()
+
+    var isFyersConnected: Boolean
+        get() = prefs.getBoolean("is_fyers_connected", false) && !fyersAccessToken.isNullOrBlank()
+        set(value) = prefs.edit().putBoolean("is_fyers_connected", value).apply()
+
+    fun clearFyersSession() {
+        prefs.edit().apply {
+            remove("fyers_access_token")
+            putBoolean("is_fyers_connected", false)
+        }.apply()
+    }
 }
