@@ -1665,46 +1665,15 @@ fun AlgoPerformance() {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(160.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val width = size.width
-                        val height = size.height
-
-                        val samplePoints = listOf(100000.0, 102500.0, 101800.0, 104500.0, 107200.0, 106400.0, 112450.0)
-                        val minPnl = samplePoints.minOrNull() ?: 100000.0
-                        val maxPnl = samplePoints.maxOrNull() ?: 115000.0
-                        val rangePnl = (maxPnl - minPnl).coerceAtLeast(1.0)
-
-                        val stepX = width / (samplePoints.size - 1).coerceAtLeast(1)
-
-                        val points = samplePoints.mapIndexed { idx, valPnl ->
-                            val x = idx * stepX
-                            val y = height - (((valPnl - minPnl) / rangePnl) * (height * 0.75f) + (height * 0.12f)).toFloat()
-                            Offset(x, y)
-                        }
-
-                        val path = Path().apply {
-                            moveTo(points[0].x, points[0].y)
-                            for (i in 1 until points.size) {
-                                lineTo(points[i].x, points[i].y)
-                            }
-                        }
-
-                        drawPath(
-                            path = path,
-                            color = ProfitGreen,
-                            style = Stroke(width = 2.5.dp.toPx())
-                        )
-
-                        points.forEach { pt ->
-                            drawCircle(
-                                color = ProfitGreen,
-                                radius = 3.5.dp.toPx(),
-                                center = pt
-                            )
-                        }
-                    }
+                    Text(
+                        text = "EQUITY CURVE DATA UNAVAILABLE (NO COMPLETED TRADES YET)",
+                        color = TextGray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

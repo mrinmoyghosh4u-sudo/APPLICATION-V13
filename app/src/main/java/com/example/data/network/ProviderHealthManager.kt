@@ -23,12 +23,22 @@ import java.util.concurrent.ConcurrentHashMap
  */
 data class ProviderHealthState(
     val provider: String,
+    val exchange: String = "ALL",
     val connected: Boolean = false,
     val authenticated: Boolean = false,
+    val authenticationState: String = "UNAUTHENTICATED",
+    val webSocketState: String = "DISCONNECTED",
+    val subscriptionState: String = "UNSUBSCRIBED",
+    val firstTickReceived: Boolean = false,
     val lastSuccessfulRequest: Long = 0L,
     val lastTickTimestamp: Long = 0L,
+    val tickAgeMs: Long = 0L,
     val latency: Long = 0L,
     val errorCount: Int = 0,
+    val activeInstrumentCount: Int = 0,
+    val activeSubscriptionCount: Int = 0,
+    val lastError: String = "",
+    val dataSource: String = provider,
     val stale: Boolean = false,
     val healthy: Boolean = false
 )
@@ -62,7 +72,8 @@ class ProviderHealthManager {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val updated = current.copy(
             connected = isConnected,
-            healthy = isConnected && current.authenticated && !current.stale
+            webSocketState = if (isConnected) "CONNECTED" else "DISCONNECTED",
+            healthy = isConnected && current.authenticated && current.firstTickReceived && !current.stale
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
@@ -72,7 +83,8 @@ class ProviderHealthManager {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val updated = current.copy(
             authenticated = isAuthenticated,
-            healthy = current.connected && isAuthenticated && !current.stale
+            authenticationState = if (isAuthenticated) "AUTHENTICATED" else "AUTHENTICATION_FAILED",
+            healthy = current.connected && isAuthenticated && current.firstTickReceived && !current.stale
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
@@ -81,20 +93,28 @@ class ProviderHealthManager {
     fun reportTickReceived(provider: String, timestamp: Long = System.currentTimeMillis(), latencyMs: Long = 0L) {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val wasHealthy = current.healthy
+        val now = System.currentTimeMillis()
+        val age = (now - timestamp).coerceAtLeast(0L)
         val updated = current.copy(
             connected = true,
+            authenticated = true,
+            authenticationState = "AUTHENTICATED",
+            webSocketState = "CONNECTED",
+            subscriptionState = "SUBSCRIBED",
+            firstTickReceived = true,
             lastTickTimestamp = timestamp,
             lastSuccessfulRequest = timestamp,
+            tickAgeMs = age,
             latency = if (latencyMs > 0) latencyMs else current.latency,
             stale = false,
             errorCount = 0,
-            healthy = current.authenticated 
+            healthy = true
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
 
         if (!wasHealthy && updated.healthy) {
-            try { Log.i(TAG, "DATA PROVIDER: $provider → HEALTHY") } catch (_: Throwable) { println("DATA PROVIDER: $provider → HEALTHY") }
+            try { Log.i(TAG, "DATA PROVIDER: $provider → HEALTHY (FIRST REAL TICK RECEIVED)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → HEALTHY") }
         }
     }
 
@@ -116,11 +136,12 @@ class ProviderHealthManager {
         val isHealthy = if (newErrors >= 3) false else current.healthy
         val updated = current.copy(
             errorCount = newErrors,
+            lastError = if (errorMessage.isNotBlank()) errorMessage else current.lastError,
             healthy = isHealthy
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
-        Log.w(TAG, "DATA PROVIDER ERROR: $provider (error count=$newErrors)")
+        Log.w(TAG, "DATA PROVIDER ERROR: $provider (error count=$newErrors, msg=$errorMessage)")
     }
 
     fun checkAndEvaluateStaleness(now: Long = System.currentTimeMillis()) {
