@@ -734,10 +734,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isFyers = pendingBroker == "Fyers" || _connectingBrokerName.value == "Fyers" || state.startsWith("fyers_") || (state.contains("fyers", ignoreCase = true) && !state.contains("upstox", ignoreCase = true))
 
             if (isUpstox || isFyers) {
-                if (pendingState.isNotBlank() && state.isNotBlank() && state != pendingState) {
-                    android.util.Log.w("Auth", "OAuth State Warning! Received state='$state', expected='$pendingState'")
-                } else if (pendingState.isNotBlank()) {
-                    android.util.Log.d("Auth", "OAuth State Validation: PASS")
+                val providerName = if (isUpstox) ProviderHealthManager.PROVIDER_UPSTOX else ProviderHealthManager.PROVIDER_FYERS
+                val logPrefix = if (isUpstox) "UPSTOX" else "FYERS"
+
+                android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with code")
+
+                if (pendingState.isNotBlank()) {
+                    if (state.isBlank() || state != pendingState) {
+                        val errMsg = "$logPrefix OAuth State Mismatch Rejection! Expected state='$pendingState', got '$state'."
+                        android.util.Log.e("Auth", "[$logPrefix" + "_STATE_REJECTED] $errMsg")
+                        _authErrorMessage.value = errMsg
+                        _isAuthInProgress.value = false
+                        sessionManager.pendingOAuthState = ""
+                        sessionManager.pendingOAuthBroker = ""
+                        brokerManager.healthManager.reportAuthentication(providerName, false, errMsg)
+                        return@launch
+                    } else {
+                        android.util.Log.i("Auth", "[$logPrefix" + "_STATE_OK] OAuth State Validation: PASS")
+                    }
                 }
                 sessionManager.pendingOAuthState = ""
             }

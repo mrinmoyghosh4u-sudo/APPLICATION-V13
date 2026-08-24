@@ -28,7 +28,7 @@ class UpstoxAuthManager(
             val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
                 ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
-            Log.d(TAG, "Exchanging Upstox authorization code...")
+            Log.i(TAG, "[UPSTOX_AUTH_START] Exchanging Upstox authorization code...")
 
             android.util.Log.d("UpstoxAuth", "[7] Token exchange initiated...")
             val response = upstoxApi.getAccessToken(
@@ -52,6 +52,8 @@ class UpstoxAuthManager(
                 _authStatus.value = BrokerAuthStatus.ERROR
                 throw Exception("Upstox Access Token is empty in response")
             }
+
+            Log.i(TAG, "[UPSTOX_TOKEN_OK] Upstox Access Token obtained & validated successfully")
 
             // Securely store credentials and tokens in encrypted storage
             sessionManager.upstoxAccessToken = accessToken

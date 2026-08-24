@@ -29,6 +29,7 @@ class FyersAuthManager(
                 code = authCode
             )
 
+            Log.i(TAG, "[FYERS_AUTH_START] Exchanging FYERS authorization code...")
             android.util.Log.d("FyersAuth", "[7] Token exchange initiated...")
             val response = fyersApi.validateAuthCode(request)
             if (!response.isSuccessful) {
@@ -38,6 +39,7 @@ class FyersAuthManager(
             val body = response.body() ?: throw Exception("Empty response body")
             android.util.Log.d("FyersAuth", "[8] Token validated: PASS")
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
+                Log.i(TAG, "[FYERS_TOKEN_OK] FYERS Access Token obtained & validated successfully")
                 sessionManager.fyersAccessToken = body.access_token
                 sessionManager.fyersRefreshToken = body.refresh_token
                 sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
