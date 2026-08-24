@@ -9,8 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +21,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.viewmodel.MainViewModel
 import com.example.data.model.MarketDataStore
 import com.example.data.model.MarketDataSourceNames
-import kotlinx.coroutines.launch
+import com.example.data.model.MarketDataProviderState
+import com.example.data.model.MarketDataState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,52 +33,20 @@ fun DiagnosticsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
+    val providerState by MarketDataStore.providerState.collectAsStateWithLifecycle()
+    val marketData by MarketDataStore.marketData.collectAsStateWithLifecycle()
+    val tickCount by MarketDataStore.tickCountFlow.collectAsStateWithLifecycle() // Forces recomposition on new ticks
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+
     val upstoxConnectionState by viewModel.brokerManager.upstoxMarketDataService.connectionState.collectAsStateWithLifecycle()
     val fyersConnectionState by viewModel.brokerManager.fyersMarketDataService.connectionState.collectAsStateWithLifecycle()
     val angelConnectionState by viewModel.brokerManager.angelMarketDataService.connectionState.collectAsStateWithLifecycle()
     val mStockConnectionState by viewModel.brokerManager.mStockMarketDataService.connectionState.collectAsStateWithLifecycle()
+    
     val upstoxHealth by MarketDataStore.upstoxHealth.collectAsStateWithLifecycle()
     val fyersHealth by MarketDataStore.fyersHealth.collectAsStateWithLifecycle()
     val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
     val mStockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
-    val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
-    val internalActiveProvider by viewModel.brokerManager.marketDataEngine.internalActiveProvider.collectAsStateWithLifecycle()
-    
-    val isMasterLoaded = viewModel.brokerManager.instrumentMasterService.isLoaded
-    val upstoxAuthStatus = if (viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
-    val fyersAuthStatus = if (viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
-    val angelAuthStatus = if (viewModel.sessionManager.angelJwtToken.isNullOrEmpty()) "FAIL (Unauthenticated)" else "PASS (Authenticated)"
-    val angelFeedTokenStatus = if (viewModel.sessionManager.angelFeedToken.isNullOrEmpty()) "FAIL" else "PASS"
-    val angelClientIdStatus = if (viewModel.sessionManager.angelClientId.isNullOrBlank()) "FAIL" else "PASS"
-    val angelApiKeyStatus = if (viewModel.sessionManager.angelApiKey.isNullOrBlank()) "FAIL" else "PASS"
-
-    val mstockConfigured = viewModel.sessionManager.isMStockConfigured()
-    val dhanConfigured = !viewModel.sessionManager.dhanAccessToken.isNullOrBlank()
-
-    // Core index token resolutions
-    val niftyToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("NIFTY 50")
-    val bankNiftyToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("BANKNIFTY")
-    val finNiftyToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("FINNIFTY")
-    val midcpNiftyToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("MIDCPNIFTY")
-    val sensexToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("SENSEX")
-    val bankexToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("BANKEX")
-    val crudeToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL")
-    val crudeMToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL M")
-
-    val hasUpstoxLiveTick = viewModel.brokerManager.upstoxMarketDataService.isConnectionLive()
-    val hasFyersLiveTick = viewModel.brokerManager.fyersMarketDataService.isConnectionLive()
-    val hasAngelLiveTick = viewModel.brokerManager.angelMarketDataService.isConnectionLive()
-    val hasMStockLiveTick = viewModel.brokerManager.mStockMarketDataService.isConnectionLive()
-    val hasLiveStream = hasUpstoxLiveTick || hasFyersLiveTick || hasAngelLiveTick || hasMStockLiveTick
-
-    val marketData = MarketDataStore.marketData.collectAsStateWithLifecycle().value
-
-    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        viewModel.brokerManager.mStockMarketDataService.connect()
-    }
 
     com.example.ui.components.PullToRefreshLayout(
         isRefreshing = isRefreshing,
@@ -109,211 +76,381 @@ fun DiagnosticsScreen(
                 )
             }
 
-        // Real Data Status Banner
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (hasLiveStream) Color(0xFF1B382B) else Color(0xFF381B1B)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // 1. TOP LIVE STATUS
+            TopLiveStatusCard(providerState = providerState, marketDataSize = marketData.size)
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 2. EXCHANGE SEGMENTATION
+            ExchangeSegmentationSection(marketData = marketData)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 3. LIVE TICK TABLE
+            LiveTickStreamSection(marketData = marketData)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 4. INSTRUMENT RESOLUTION
+            InstrumentResolutionSection(viewModel = viewModel)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. BROKER DIAGNOSTICS & AUTOMATIC FAILOVER ROUTER
+            BrokerDiagnosticsSection(
+                viewModel = viewModel,
+                upstoxState = upstoxConnectionState,
+                fyersState = fyersConnectionState,
+                angelState = angelConnectionState,
+                mStockState = mStockConnectionState,
+                upstoxHealth = upstoxHealth,
+                fyersHealth = fyersHealth,
+                angelHealth = angelHealth,
+                mStockHealth = mStockHealth,
+                providerState = providerState
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun TopLiveStatusCard(providerState: MarketDataProviderState, marketDataSize: Int) {
+    val isLive = providerState.live
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isLive) Color(0xFF1B382B) else Color(0xFF381B1B)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (hasLiveStream) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                    imageVector = if (isLive) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
                     contentDescription = "Status",
-                    tint = if (hasLiveStream) Color(0xFF00E676) else Color(0xFFFF5252),
-                    modifier = Modifier.size(32.dp)
+                    tint = if (isLive) Color(0xFF00E676) else Color(0xFFFF5252),
+                    modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Text(
+                    text = if (isLive) "🟢 LIVE MARKET DATA" else "🔴 NO LIVE MARKET DATA",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            val timeStr = if (providerState.lastTickTimestamp > 0) {
+                SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(providerState.lastTickTimestamp))
+            } else "N/A"
+            
+            val ageMs = if (providerState.lastTickTimestamp > 0) System.currentTimeMillis() - providerState.lastTickTimestamp else -1L
+            val ageStr = if (ageMs >= 0) "${ageMs} ms" else "N/A"
+            
+            DiagnosticItem("Active Broker", providerState.provider)
+            DiagnosticItem("Connection", if (providerState.connected) "CONNECTED" else "DISCONNECTED")
+            DiagnosticItem("Last Real Tick", timeStr)
+            DiagnosticItem("Tick Age", ageStr)
+            DiagnosticItem("Active Instruments", marketDataSize.toString())
+        }
+    }
+}
+
+@Composable
+fun ExchangeSegmentationSection(marketData: Map<String, MarketDataState>) {
+    val nseData = marketData.filter { it.value.exchange == "NSE" || it.value.exchange == "NFO" || it.value.exchange == "CDS" }
+    val bseData = marketData.filter { it.value.exchange == "BSE" || it.value.exchange == "BFO" || it.value.exchange == "BCD" }
+    val mcxData = marketData.filter { it.value.exchange == "MCX" }
+
+    SectionHeader("🟢 NSE — EQUITY & F&O")
+    ExchangeCard("NSE", nseData)
+    
+    Spacer(modifier = Modifier.height(8.dp))
+    
+    SectionHeader("🔵 BSE — EQUITY & F&O")
+    ExchangeCard("BSE", bseData)
+    
+    Spacer(modifier = Modifier.height(8.dp))
+    
+    SectionHeader("🟠 MCX — COMMODITY")
+    ExchangeCard("MCX", mcxData)
+}
+
+@Composable
+fun ExchangeCard(exchange: String, data: Map<String, MarketDataState>) {
+    val activeCount = data.size
+    val realTicks = MarketDataStore.getExchangeTickCount(exchange)
+    val maxTs = data.values.maxOfOrNull { it.receivedTimestamp } ?: 0L
+    val ageMs = if (maxTs > 0) System.currentTimeMillis() - maxTs else -1L
+    val status = when {
+        activeCount == 0 || maxTs == 0L -> "DISCONNECTED"
+        ageMs < 3000 -> "LIVE"
+        ageMs < 10000 -> "WARNING"
+        else -> "STALE"
+    }
+    
+    val timeStr = if (maxTs > 0) {
+        SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(maxTs))
+    } else "N/A"
+    
+    val sources = data.values.map { it.source }.distinct().filter { it != "REFERENCE" }
+    val sourceStr = if (sources.isNotEmpty()) sources.joinToString("/") else "NONE"
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            DiagnosticItem("Status", status)
+            DiagnosticItem("Active Instruments", activeCount.toString())
+            DiagnosticItem("Real Ticks", realTicks.toString())
+            DiagnosticItem("Last Tick", timeStr)
+            DiagnosticItem("Data Source", sourceStr)
+        }
+    }
+}
+
+@Composable
+fun LiveTickStreamSection(marketData: Map<String, MarketDataState>) {
+    SectionHeader("LIVE TICK STREAM")
+    
+    if (marketData.isEmpty()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+                Text("No market ticks received yet.", color = Color.Gray, fontSize = 13.sp)
+            }
+        }
+        return
+    }
+
+    marketData.entries.sortedByDescending { it.value.receivedTimestamp }.take(10).forEach { (_, data) ->
+        val timeStr = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(data.receivedTimestamp))
+        val ageMs = System.currentTimeMillis() - data.receivedTimestamp
+        val health = when {
+            ageMs < 3000 -> "LIVE"
+            ageMs < 10000 -> "WARNING"
+            else -> "STALE"
+        }
+        val healthColor = when(health) {
+            "LIVE" -> Color(0xFF00E676)
+            "WARNING" -> Color(0xFFFFB300)
+            else -> Color(0xFFFF5252)
+        }
+        
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${data.exchange} | ${data.symbol}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        text = if (hasLiveStream) "AUTHENTICATED LIVE BROKER STREAM" else "NO LIVE STREAM ACTIVE",
-                        color = Color.White,
-                        fontSize = 15.sp,
+                        text = health,
+                        color = healthColor,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Token: ${data.token.ifBlank { "N/A" }}", color = Color.LightGray, fontSize = 11.sp)
                     Text(
-                        text = if (hasLiveStream) "Real market ticks streaming with provenance" else "Connect Angel One or m.Stock with valid API credentials",
-                        color = if (hasLiveStream) Color(0xFFB9F6CA) else Color(0xFFFFCDD2),
-                        fontSize = 12.sp
+                        "₹${String.format(Locale.getDefault(), "%.2f", data.ltp)}",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            }
-        }
-
-        // Section: Automatic Failover Engine
-        SectionHeader("AUTOMATIC FAILOVER ROUTER (UNIFIED)")
-        DiagnosticItem("Unified Output Status", unifiedStatus)
-        DiagnosticItem("Internal Active Provider", internalActiveProvider)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Section: Live Feed Providers
-        SectionHeader("PRIMARY FEED: UPSTOX (API V2/V3)")
-        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.upstoxApiKey.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("API Secret Saved", if (viewModel.sessionManager.upstoxApiSecret.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Access Token Saved", if (!viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Authentication", upstoxAuthStatus)
-        DiagnosticItem("WebSocket State", upstoxConnectionState)
-        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.upstoxMarketDataService.hasActiveSubscription()) "PASS" else "NO")
-        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.upstoxMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
-        DiagnosticItem("Last Tick Time", viewModel.brokerManager.upstoxMarketDataService.getLastUpdatedTime())
-        DiagnosticItem("Tick Age", if (viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs()} ms" else "N/A")
-        DiagnosticItem("Feed Health Status", upstoxHealth)
-        DiagnosticItem("Status Reason", if (!hasUpstoxLiveTick) "No real tick received yet" else "Operational")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SectionHeader("FALLBACK #1: FYERS (API V3)")
-        DiagnosticItem("App ID Saved", if (viewModel.sessionManager.fyersAppId.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Secret ID Saved", if (viewModel.sessionManager.fyersSecretId.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Access Token Saved", if (!viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Authentication", fyersAuthStatus)
-        DiagnosticItem("WebSocket State", fyersConnectionState)
-        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.fyersMarketDataService.hasActiveSubscription()) "PASS" else "NO")
-        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.fyersMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
-        DiagnosticItem("Last Tick Time", viewModel.brokerManager.fyersMarketDataService.getLastUpdatedTime())
-        DiagnosticItem("Tick Age", if (viewModel.brokerManager.fyersMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.fyersMarketDataService.getTickAgeMs()} ms" else "N/A")
-        DiagnosticItem("Feed Health Status", fyersHealth)
-        DiagnosticItem("Status Reason", if (!hasFyersLiveTick) "No real tick received yet" else "Operational")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SectionHeader("FALLBACK #2: ANGEL ONE (SmartAPI)")
-        DiagnosticItem("Client ID Saved", if (viewModel.sessionManager.angelClientId.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.angelApiKey.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Session Token Saved", if (!viewModel.sessionManager.angelJwtToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Feed Token Saved", if (!viewModel.sessionManager.angelFeedToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Authentication", if (!viewModel.sessionManager.angelJwtToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("WebSocket State", angelConnectionState)
-        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.angelMarketDataService.hasActiveSubscription()) "PASS" else "NO")
-        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.angelMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
-        DiagnosticItem("Last Tick Time", viewModel.brokerManager.angelMarketDataService.getLastUpdatedTime().ifBlank { "No ticks received yet" })
-        DiagnosticItem("Tick Age", if (viewModel.brokerManager.angelMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.angelMarketDataService.getTickAgeMs()} ms" else "N/A")
-        DiagnosticItem("Feed Health Status", angelHealth)
-        DiagnosticItem("Status Reason", if (!hasAngelLiveTick) "No real tick received yet" else "Operational")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SectionHeader("FALLBACK #3: m.STOCK (Mirae Asset)")
-        val mStockEndpoint by com.example.util.MStockAuthHelper.lastEndpoint.collectAsStateWithLifecycle()
-        val mStockHttpStatus by com.example.util.MStockAuthHelper.lastHttpStatus.collectAsStateWithLifecycle()
-        val mStockAuthStage by com.example.util.MStockAuthHelper.authStage.collectAsStateWithLifecycle()
-        val mStockAuthMsg by com.example.util.MStockAuthHelper.lastAuthMessage.collectAsStateWithLifecycle()
-        val mStockLastTickTime = viewModel.brokerManager.mStockMarketDataService.getLastUpdatedTime()
-
-        DiagnosticItem("Client Code Saved", if (viewModel.sessionManager.mstockClientId.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("API Key Saved", if (viewModel.sessionManager.mstockApiKey.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("TOTP Secret Saved", if (viewModel.sessionManager.mstockTotpSecret.isNotBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Session Token Saved", if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("Authentication", if (!viewModel.sessionManager.mstockAccessToken.isNullOrBlank()) "PASS" else "FAIL")
-        DiagnosticItem("m.Stock API Endpoint", mStockEndpoint)
-        DiagnosticItem("HTTP Status", mStockHttpStatus)
-        DiagnosticItem("Authentication Stage", mStockAuthStage)
-        DiagnosticItem("Auth Diagnostic Message", mStockAuthMsg)
-        DiagnosticItem("WebSocket State", mStockConnectionState)
-        DiagnosticItem("Subscription Status", if (viewModel.brokerManager.mStockMarketDataService.hasActiveSubscription()) "PASS" else "NO")
-        DiagnosticItem("First Real Tick Received", if (viewModel.brokerManager.mStockMarketDataService.hasFirstTickReceived()) "PASS (Verified)" else "NO")
-        DiagnosticItem("Last Tick Time", mStockLastTickTime)
-        DiagnosticItem("Tick Age", if (viewModel.brokerManager.mStockMarketDataService.getTickAgeMs() >= 0) "${viewModel.brokerManager.mStockMarketDataService.getTickAgeMs()} ms" else "N/A")
-        DiagnosticItem("Feed Health Status", mStockHealth)
-        DiagnosticItem("Status Reason", if (!hasMStockLiveTick) "No real tick received yet" else "Operational")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SectionHeader("ORDER EXECUTION ENGINE: DHAN")
-        DiagnosticItem("Dhan Token Configured", if (dhanConfigured) "PASS (Authenticated)" else "NOT CONFIGURED")
-        DiagnosticItem("Role", "ORDER PLACEMENT ONLY (Not Market Feed)")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-                
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Section: Instrument Master & Token Resolution
-        SectionHeader("INSTRUMENT MASTER & TOKEN RESOLUTION")
-        DiagnosticItem("Scrip Master Loaded", if (isMasterLoaded) "PASS (Loaded)" else "FAIL (Not Loaded)")
-        DiagnosticItem("BANKEX (BSE)", if (bankexToken != null) "RESOLVED [Token: ${bankexToken.token}]" else "FAILED")
-        DiagnosticItem("CRUDEOIL (MCX Active Near)", if (crudeToken != null) "RESOLVED [Token: ${crudeToken.token} | ${crudeToken.symbol}]" else "FAILED")
-        DiagnosticItem("CRUDEOIL M (MCX Mini Near)", if (crudeMToken != null) "RESOLVED [Token: ${crudeMToken.token} | ${crudeMToken.symbol}]" else "FAILED")
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Section: Real-time Ingested Ticks
-        SectionHeader("REAL-TIME INGESTED MARKET TICKS (${marketData.size} Active)")
-        if (marketData.isNotEmpty()) {
-            marketData.entries.take(15).forEach { (key, data) ->
-                val timeStr = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(data.receivedTimestamp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
-                    shape = RoundedCornerShape(8.dp)
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(data.symbol, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            val badgeColor = when (data.source) {
-                                MarketDataSourceNames.ANGEL_ONE -> Color(0xFF00C853)
-                                MarketDataSourceNames.MSTOCK -> Color(0xFF00B0FF)
-                                else -> Color(0xFFFFB300)
-                            }
-                            Text(
-                                text = "${data.source} • ${data.state}",
-                                color = badgeColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Exch: ${data.exchange} | Token: ${data.token.ifBlank { "N/A" }}", color = Color.LightGray, fontSize = 11.sp)
-                            Text(
-                                "LTP: ₹${String.format(Locale.getDefault(), "%.2f", data.ltp)}",
-                                color = if (data.change >= 0) Color(0xFF00E676) else Color(0xFFFF5252),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Received: $timeStr", color = Color.Gray, fontSize = 10.sp)
-                            Text("Seq: ${data.sequenceNumber} | Vol: ${data.volume}", color = Color.Gray, fontSize = 10.sp)
-                        }
-                    }
-                }
-            }
-        } else {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("No market ticks received yet.", color = Color.Gray, fontSize = 13.sp)
+                    Text("Time: $timeStr", color = Color.Gray, fontSize = 10.sp)
+                    Text("Src: ${data.source}", color = Color.Gray, fontSize = 10.sp)
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(24.dp))
+@Composable
+fun InstrumentResolutionSection(viewModel: MainViewModel) {
+    SectionHeader("INSTRUMENT RESOLUTION")
+    
+    val bankexToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("BANKEX")
+    val crudeToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL")
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (bankexToken != null) {
+                DiagnosticItem("BANKEX (BSE)", "RESOLVED")
+                DiagnosticItem("  Token", bankexToken.token)
+                DiagnosticItem("  Exchange", bankexToken.exch_seg)
+            } else {
+                DiagnosticItem("BANKEX (BSE)", "UNRESOLVED")
+            }
+            
+            Divider(color = Color(0xFF2C313C), modifier = Modifier.padding(vertical = 8.dp))
+            
+            if (crudeToken != null) {
+                DiagnosticItem("CRUDEOIL (MCX)", "RESOLVED")
+                DiagnosticItem("  Token", crudeToken.token)
+                DiagnosticItem("  Symbol", crudeToken.symbol)
+                DiagnosticItem("  Exchange", crudeToken.exch_seg)
+            } else {
+                DiagnosticItem("CRUDEOIL (MCX)", "UNRESOLVED")
+            }
+        }
+    }
+}
+
+@Composable
+fun BrokerDiagnosticsSection(
+    viewModel: MainViewModel,
+    upstoxState: String,
+    fyersState: String,
+    angelState: String,
+    mStockState: String,
+    upstoxHealth: String,
+    fyersHealth: String,
+    angelHealth: String,
+    mStockHealth: String,
+    providerState: MarketDataProviderState
+) {
+    SectionHeader("AUTOMATIC FAILOVER ROUTER")
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            DiagnosticItem("Router Selected", if (providerState.provider != "NONE") providerState.provider else "NO HEALTHY PROVIDER")
+            Text("Logic: UPSTOX -> FYERS -> ANGEL ONE -> M.STOCK", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top=4.dp))
+        }
+    }
+    
+    Spacer(modifier = Modifier.height(16.dp))
+    
+    SectionHeader("BROKER DIAGNOSTICS")
+    
+    BrokerCard(
+        name = "UPSTOX (Primary)",
+        hasCredentials = viewModel.sessionManager.upstoxApiKey.isNotBlank() && !viewModel.sessionManager.upstoxAccessToken.isNullOrBlank(),
+        isAuthenticated = !viewModel.sessionManager.upstoxAccessToken.isNullOrBlank(),
+        wsState = upstoxState,
+        isActiveSubscription = viewModel.brokerManager.upstoxMarketDataService.hasActiveSubscription(),
+        hasRealTick = viewModel.brokerManager.upstoxMarketDataService.hasFirstTickReceived(),
+        lastTickTime = viewModel.brokerManager.upstoxMarketDataService.getLastUpdatedTime(),
+        tickAgeMs = viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs(),
+        health = upstoxHealth,
+        sourceName = MarketDataSourceNames.UPSTOX
+    )
+    
+    Spacer(modifier = Modifier.height(8.dp))
+    
+    BrokerCard(
+        name = "FYERS (Fallback #1)",
+        hasCredentials = viewModel.sessionManager.fyersAppId.isNotBlank() && !viewModel.sessionManager.fyersAccessToken.isNullOrBlank(),
+        isAuthenticated = !viewModel.sessionManager.fyersAccessToken.isNullOrBlank(),
+        wsState = fyersState,
+        isActiveSubscription = viewModel.brokerManager.fyersMarketDataService.hasActiveSubscription(),
+        hasRealTick = viewModel.brokerManager.fyersMarketDataService.hasFirstTickReceived(),
+        lastTickTime = viewModel.brokerManager.fyersMarketDataService.getLastUpdatedTime(),
+        tickAgeMs = viewModel.brokerManager.fyersMarketDataService.getTickAgeMs(),
+        health = fyersHealth,
+        sourceName = MarketDataSourceNames.FYERS
+    )
+    
+    Spacer(modifier = Modifier.height(8.dp))
+    
+    BrokerCard(
+        name = "ANGEL ONE (Fallback #2)",
+        hasCredentials = viewModel.sessionManager.angelClientId.isNotBlank() && !viewModel.sessionManager.angelJwtToken.isNullOrBlank(),
+        isAuthenticated = !viewModel.sessionManager.angelJwtToken.isNullOrBlank(),
+        wsState = angelState,
+        isActiveSubscription = viewModel.brokerManager.angelMarketDataService.hasActiveSubscription(),
+        hasRealTick = viewModel.brokerManager.angelMarketDataService.hasFirstTickReceived(),
+        lastTickTime = viewModel.brokerManager.angelMarketDataService.getLastUpdatedTime(),
+        tickAgeMs = viewModel.brokerManager.angelMarketDataService.getTickAgeMs(),
+        health = angelHealth,
+        sourceName = MarketDataSourceNames.ANGEL_ONE
+    )
+    
+    Spacer(modifier = Modifier.height(8.dp))
+    
+    BrokerCard(
+        name = "m.STOCK (Fallback #3)",
+        hasCredentials = viewModel.sessionManager.mstockClientId.isNotBlank() && !viewModel.sessionManager.mstockAccessToken.isNullOrBlank(),
+        isAuthenticated = !viewModel.sessionManager.mstockAccessToken.isNullOrBlank(),
+        wsState = mStockState,
+        isActiveSubscription = viewModel.brokerManager.mStockMarketDataService.hasActiveSubscription(),
+        hasRealTick = viewModel.brokerManager.mStockMarketDataService.hasFirstTickReceived(),
+        lastTickTime = viewModel.brokerManager.mStockMarketDataService.getLastUpdatedTime(),
+        tickAgeMs = viewModel.brokerManager.mStockMarketDataService.getTickAgeMs(),
+        health = mStockHealth,
+        sourceName = MarketDataSourceNames.MSTOCK
+    )
+}
+
+@Composable
+fun BrokerCard(
+    name: String,
+    hasCredentials: Boolean,
+    isAuthenticated: Boolean,
+    wsState: String,
+    isActiveSubscription: Boolean,
+    hasRealTick: Boolean,
+    lastTickTime: String,
+    tickAgeMs: Long,
+    health: String,
+    sourceName: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+            
+            DiagnosticItem("API Credentials", if (hasCredentials) "CONFIGURED" else "NOT CONFIGURED")
+            DiagnosticItem("Authentication", if (isAuthenticated) "AUTHENTICATED" else "UNAUTHENTICATED")
+            DiagnosticItem("WebSocket", wsState)
+            DiagnosticItem("Subscription", if (isActiveSubscription) "ACTIVE" else "INACTIVE")
+            DiagnosticItem("Real Tick", if (hasRealTick) "YES" else "NO")
+            DiagnosticItem("Last Tick", if (hasRealTick) lastTickTime else "N/A")
+            DiagnosticItem("Tick Age", if (tickAgeMs >= 0) "${tickAgeMs} ms" else "N/A")
+            
+            val activeInstruments = MarketDataStore.marketData.value.values.count { it.source == sourceName }
+            DiagnosticItem("Subscribed Instruments", activeInstruments.toString())
+            
+            val feedHealth = if (hasRealTick && health == "LIVE") "LIVE" else "NONE"
+            DiagnosticItem("Data Source", feedHealth)
         }
     }
 }
@@ -325,7 +462,7 @@ fun SectionHeader(title: String) {
         color = Color(0xFF81D4FA),
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 6.dp)
+        modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
     )
 }
 
@@ -334,17 +471,17 @@ fun DiagnosticItem(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 2.dp)
             .background(Color(0xFF161A22), RoundedCornerShape(6.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = label, color = Color(0xFFB0BEC5), fontSize = 12.sp)
         val color = when {
-            value.contains("PASS") || value.contains("RESOLVED") || value.contains("YES") || value == "LIVE" || value == "CONNECTED" -> Color(0xFF00E676)
-            value.contains("FAIL") || value.contains("NO") || value == "DISCONNECTED" || value == "ERROR" || value == "OFFLINE" -> Color(0xFFFF5252)
-            value.contains("STALE") || value.contains("REFERENCE") || value.contains("SUBSCRIBING") || value.contains("CONNECTING") -> Color(0xFFFFB300)
+            value == "LIVE" || value == "CONNECTED" || value == "PASS" || value == "CONFIGURED" || value == "AUTHENTICATED" || value == "ACTIVE" || value == "YES" || value == "RESOLVED" -> Color(0xFF00E676)
+            value == "DISCONNECTED" || value == "FAIL" || value == "NOT CONFIGURED" || value == "UNAUTHENTICATED" || value == "INACTIVE" || value == "NO" || value == "NONE" || value.contains("ERROR") || value == "OFFLINE" || value == "UNRESOLVED" -> Color(0xFFFF5252)
+            value == "WARNING" || value == "STALE" || value.contains("CONNECTING") -> Color(0xFFFFB300)
             else -> Color.White
         }
         Text(text = value, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

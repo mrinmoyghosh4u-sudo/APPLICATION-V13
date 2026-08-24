@@ -102,6 +102,21 @@ object MarketDataStore {
     // Last Sequence Numbers per source
     private val sourceLastSequence = ConcurrentHashMap<String, Long>()
 
+    // Tick Counters
+    private val _exchangeTickCount = ConcurrentHashMap<String, Long>()
+    private val _brokerTickCount = ConcurrentHashMap<String, Long>()
+    private val _tickCountFlow = MutableStateFlow(0L)
+    val tickCountFlow = _tickCountFlow.asStateFlow()
+
+    fun getExchangeTickCount(exchange: String): Long {
+        val normExch = exchange.trim().uppercase()
+        return _exchangeTickCount[normExch] ?: 0L
+    }
+
+    fun getBrokerTickCount(source: String): Long {
+        return _brokerTickCount[source] ?: 0L
+    }
+
     init {
         startStaleDataMonitor()
     }
@@ -355,6 +370,12 @@ object MarketDataStore {
             MarketDataSourceNames.FYERS -> _fyersHealth.value = "LIVE"
             MarketDataSourceNames.ANGEL_ONE -> _angelOneHealth.value = "LIVE"
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
+        }
+        
+        if (source != "REFERENCE") {
+            _exchangeTickCount[normExch] = (_exchangeTickCount[normExch] ?: 0L) + 1L
+            _brokerTickCount[source] = (_brokerTickCount[source] ?: 0L) + 1L
+            _tickCountFlow.value = _tickCountFlow.value + 1L
         }
 
         // 7. Calculate Change and Change %
