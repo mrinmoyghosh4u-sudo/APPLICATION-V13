@@ -65,11 +65,9 @@ fun BrokerConnectDialog(
     var fyersAppId by remember { mutableStateOf(sessionManager.fyersAppId ?: "") }
     var fyersSecretId by remember { mutableStateOf(sessionManager.fyersSecretId ?: "") }
     var fyersAuthCode by remember { mutableStateOf("") }
-    var showFyersWebView by remember { mutableStateOf(false) }
 
     var upstoxApiKey by remember { mutableStateOf(sessionManager.upstoxApiKey ?: "") }
     var upstoxApiSecret by remember { mutableStateOf(sessionManager.upstoxApiSecret ?: "") }
-    var showUpstoxWebView by remember { mutableStateOf(false) }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -675,148 +673,11 @@ fun BrokerConnectDialog(
             }
         }
     }
-    if (showUpstoxWebView) {
-        Dialog(
-            onDismissRequest = { showUpstoxWebView = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(DarkBackground).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Upstox Secure Login", color = TextWhite, fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { showUpstoxWebView = false }) {
-                            Text("Close", color = ProfitGreen)
-                        }
-                    }
-                    AndroidView(
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                webViewClient = object : WebViewClient() {
-                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                        url?.let {
-                                            android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
-                                val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-                                            if (it.startsWith(redirectUri) || it.contains("code=")) {
-                                                val uri = android.net.Uri.parse(it)
-                                                val authCode = uri.getQueryParameter("code")
-                                                if (!authCode.isNullOrBlank()) {
-                                                    showUpstoxWebView = false
-                                                    onUpstoxLogin?.invoke(upstoxApiKey, upstoxApiSecret, authCode)
-                                                    return
-                                                }
-                                            }
-                                        }
-                                        super.onPageStarted(view, url, favicon)
-                                    }
-
-                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                        val url = request?.url.toString()
-                                        android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
-                                val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-                                        if (url.startsWith(redirectUri) || url.contains("code=")) {
-                                            val authCode = request?.url?.getQueryParameter("code")
-                                            if (!authCode.isNullOrBlank()) {
-                                                showUpstoxWebView = false
-                                                onUpstoxLogin?.invoke(upstoxApiKey, upstoxApiSecret, authCode)
-                                                return true
-                                            }
-                                        }
-                                        return super.shouldOverrideUrlLoading(view, request)
-                                    }
-                                }
-                                val redirectUri = sessionManager.upstoxRedirectUri ?: "https://application-beige-psi.vercel.app/oauth"
-                                val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri)
-                                loadUrl(loginUrl)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        }
-    }
-
-    if (showFyersWebView) {
-        Dialog(
-            onDismissRequest = { showFyersWebView = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(DarkBackground).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Fyers Secure Login", color = TextWhite, fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { showFyersWebView = false }) {
-                            Text("Close", color = ProfitGreen)
-                        }
-                    }
-                    AndroidView(
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                val targetRedirectUri: String = sessionManager.fyersRedirectUri.ifBlank { com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI }
-                                webViewClient = object : WebViewClient() {
-                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                        url?.let {
-                                            if (it.startsWith(targetRedirectUri) || 
-                                                it.startsWith("https://application-beige-psi.vercel.app/oauth") ||
-                                                it.startsWith("https://trade.fyers.in/api-login/redirect-uri/index.html") ||
-                                                it.contains("auth_code=") || 
-                                                it.contains("code=")) {
-                                                val uri = android.net.Uri.parse(it)
-                                                val authCode = uri.getQueryParameter("auth_code") ?: uri.getQueryParameter("code")
-                                                if (!authCode.isNullOrBlank()) {
-                                                    showFyersWebView = false
-                                                    onFyersLogin?.invoke(fyersAppId, fyersSecretId, authCode)
-                                                    return
-                                                }
-                                            }
-                                        }
-                                        super.onPageStarted(view, url, favicon)
-                                    }
-
-                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                        val url = request?.url.toString()
-                                        if (url.startsWith(targetRedirectUri) || 
-                                            url.startsWith("https://application-beige-psi.vercel.app/oauth") ||
-                                            url.startsWith("https://trade.fyers.in/api-login/redirect-uri/index.html") ||
-                                            url.contains("auth_code=") || 
-                                            url.contains("code=")) {
-                                            val authCode = request?.url?.getQueryParameter("auth_code")
-                                                ?: request?.url?.getQueryParameter("code")
-                                            if (!authCode.isNullOrBlank()) {
-                                                showFyersWebView = false
-                                                onFyersLogin?.invoke(fyersAppId, fyersSecretId, authCode)
-                                                return true
-                                            }
-                                        }
-                                        return super.shouldOverrideUrlLoading(view, request)
-                                    }
-                                }
-                                val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, targetRedirectUri, state = "fyers")
-                                loadUrl(loginUrl)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
 private fun BrokerTab(
+
     name: String,
     logoRes: Int = 0,
     letter: String = "",
