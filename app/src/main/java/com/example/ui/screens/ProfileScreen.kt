@@ -589,7 +589,73 @@ fun ProfileScreen(
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 1. Dhan Row (Order Execution Only)
+                // 1. Upstox Row (Primary Market Data)
+                val upstoxInfo = brokerStatuses["Upstox"]
+                val upstoxStatus = upstoxInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Upstox",
+                    subtitle = "Primary Market Data Feed (API V2/V3)",
+                    letter = "U",
+                    letterBg = Color(0xFF673AB7),
+                    status = upstoxStatus,
+                    onConnect = { onSwitchBroker("Upstox") },
+                    onReconnect = { onReconnectBroker("Upstox") },
+                    onDisconnect = { onDisconnectBroker("Upstox") },
+                    onRemoveAccount = { onRemoveAccountBroker("Upstox") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 2. Fyers Row (Fallback #1 Market Data)
+                val fyersInfo = brokerStatuses["Fyers"]
+                val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Fyers",
+                    subtitle = "Secondary Market Data Feed (API V3)",
+                    logoRes = R.drawable.ic_dhan_logo, // Fallback icon
+                    status = fyersStatus,
+                    onConnect = { onSwitchBroker("Fyers") },
+                    onReconnect = { onReconnectBroker("Fyers") },
+                    onDisconnect = { onDisconnectBroker("Fyers") },
+                    onRemoveAccount = { onRemoveAccountBroker("Fyers") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3. Angel One Row (Fallback #2 Market Data)
+                val angelInfo = brokerStatuses["Angel One"]
+                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
+                BrokerStatusRow(
+                    name = "Angel One",
+                    subtitle = "Tertiary Market Data Feed (SmartAPI)",
+                    logoRes = R.drawable.ic_angel_one_logo,
+                    status = angelStatus,
+                    onConnect = { onSwitchBroker("Angel One") },
+                    onReconnect = { onReconnectBroker("Angel One") },
+                    onDisconnect = { onDisconnectBroker("Angel One") },
+                    onRemoveAccount = { onRemoveAccountBroker("Angel One") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4. m.Stock Row (Fallback #3 Market Data)
+                val mstockInfo = brokerStatuses["m.Stock"]
+                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.STANDBY
+                BrokerStatusRow(
+                    name = "m.Stock",
+                    subtitle = "Quaternary Market Data Feed",
+                    letter = "m",
+                    letterBg = Color(0xFFE53935),
+                    status = mstockStatus,
+                    onConnect = { onSwitchBroker("m.Stock") },
+                    onReconnect = { onReconnectBroker("m.Stock") },
+                    onDisconnect = { onDisconnectBroker("m.Stock") },
+                    onRemoveAccount = { onRemoveAccountBroker("m.Stock") }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 5. Dhan Row (Order Execution Only)
                 val dhanInfo = brokerStatuses["Dhan"]
                 val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
@@ -602,72 +668,6 @@ fun ProfileScreen(
                     onReconnect = { onReconnectBroker("Dhan") },
                     onDisconnect = { onDisconnectBroker("Dhan") },
                     onRemoveAccount = { onRemoveAccountBroker("Dhan") }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 2. Upstox Row (Primary Market Data)
-                val upstoxInfo = brokerStatuses["Upstox"]
-                val upstoxStatus = upstoxInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
-                BrokerStatusRow(
-                    name = "Upstox",
-                    subtitle = "Primary Real Market Data Feed (API V2/V3)",
-                    letter = "U",
-                    letterBg = Color(0xFF673AB7),
-                    status = upstoxStatus,
-                    onConnect = { onSwitchBroker("Upstox") },
-                    onReconnect = { onReconnectBroker("Upstox") },
-                    onDisconnect = { onDisconnectBroker("Upstox") },
-                    onRemoveAccount = { onRemoveAccountBroker("Upstox") }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 3. Fyers Row (Fallback #1)
-                val fyersInfo = brokerStatuses["Fyers"]
-                val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
-                BrokerStatusRow(
-                    name = "Fyers",
-                    subtitle = "Fallback #1 Market Data Feed (API V3)",
-                    logoRes = R.drawable.ic_dhan_logo, // Fallback icon
-                    status = fyersStatus,
-                    onConnect = { onSwitchBroker("Fyers") },
-                    onReconnect = { onReconnectBroker("Fyers") },
-                    onDisconnect = { onDisconnectBroker("Fyers") },
-                    onRemoveAccount = { onRemoveAccountBroker("Fyers") }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 4. Angel One Row (Fallback #2)
-                val angelInfo = brokerStatuses["Angel One"]
-                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
-                BrokerStatusRow(
-                    name = "Angel One",
-                    subtitle = "Fallback #2 Market Data Feed (SmartAPI)",
-                    logoRes = R.drawable.ic_angel_one_logo,
-                    status = angelStatus,
-                    onConnect = { onSwitchBroker("Angel One") },
-                    onReconnect = { onReconnectBroker("Angel One") },
-                    onDisconnect = { onDisconnectBroker("Angel One") },
-                    onRemoveAccount = { onRemoveAccountBroker("Angel One") }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 5. m.Stock Row (Fallback #3)
-                val mstockInfo = brokerStatuses["m.Stock"]
-                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.STANDBY
-                BrokerStatusRow(
-                    name = "m.Stock",
-                    subtitle = "Fallback #3 Market Data Feed",
-                    letter = "m",
-                    letterBg = Color(0xFFE53935),
-                    status = mstockStatus,
-                    onConnect = { onSwitchBroker("m.Stock") },
-                    onReconnect = { onReconnectBroker("m.Stock") },
-                    onDisconnect = { onDisconnectBroker("m.Stock") },
-                    onRemoveAccount = { onRemoveAccountBroker("m.Stock") }
                 )
             }
 

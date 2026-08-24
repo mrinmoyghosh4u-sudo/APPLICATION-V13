@@ -721,22 +721,27 @@ fun BrokerConnectDialog(
                             WebView(ctx).apply {
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
+                                val targetRedirectUri: String = sessionManager.fyersRedirectUri.ifBlank { com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI }
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                         val url = request?.url.toString()
-                                        if (url.startsWith("https://trade.fyers.in/api-login/redirect-uri/index.html")) {
+                                        if (url.startsWith(targetRedirectUri) || 
+                                            url.startsWith("https://application-beige-psi.vercel.app/oauth") ||
+                                            url.startsWith("https://trade.fyers.in/api-login/redirect-uri/index.html") ||
+                                            url.contains("auth_code=") || 
+                                            url.contains("code=")) {
                                             val authCode = request?.url?.getQueryParameter("auth_code")
+                                                ?: request?.url?.getQueryParameter("code")
                                             if (!authCode.isNullOrBlank()) {
                                                 showFyersWebView = false
                                                 onFyersLogin?.invoke(fyersAppId, fyersSecretId, authCode)
+                                                return true
                                             }
-                                            return true
                                         }
                                         return super.shouldOverrideUrlLoading(view, request)
                                     }
                                 }
-                                val redirectUri = "https://trade.fyers.in/api-login/redirect-uri/index.html"
-                                val loginUrl = "https://api-t1.fyers.in/api/v3/generate-authcode?client_id=$fyersAppId&redirect_uri=$redirectUri&response_type=code&state=sample_state"
+                                val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, targetRedirectUri, state = "fyers")
                                 loadUrl(loginUrl)
                             }
                         },

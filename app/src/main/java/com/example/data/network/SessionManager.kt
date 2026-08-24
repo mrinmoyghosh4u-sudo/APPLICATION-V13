@@ -352,6 +352,7 @@ class SessionManager(context: Context) {
     fun hasDhanSession(): Boolean = !dhanAccessToken.isNullOrBlank()
     fun hasUpstoxSession(): Boolean = !upstoxAccessToken.isNullOrBlank()
     fun hasFyersSession(): Boolean = !fyersAccessToken.isNullOrBlank()
+    fun hasMStockSession(): Boolean = isMStockConfigured()
 
     fun clearDhanSession() {
         prefs.edit()
@@ -469,6 +470,10 @@ class SessionManager(context: Context) {
     var fyersTokenTimestamp: Long
         get() = prefs.getLong("fyers_token_time", 0L)
         set(value) = prefs.edit().putLong("fyers_token_time", value).apply()
+
+    var fyersRedirectUri: String
+        get() = prefs.getString("fyers_redirect_uri", com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI) ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+        set(value) = prefs.edit().putString("fyers_redirect_uri", value).apply()
 
     var isFyersConnected: Boolean
         get() = prefs.getBoolean("is_fyers_connected", false) && !fyersAccessToken.isNullOrBlank()

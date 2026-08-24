@@ -430,61 +430,136 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun switchActiveBroker(brokerName: String) {
+        val brokerType = BrokerType.fromString(brokerName)
         viewModelScope.launch {
             _isSessionRestoring.value = true
-            _brokerSwitchStatus.value = "Setting primary market data provider to $brokerName..."
 
-            if (brokerName == "Angel One" || brokerName == "m.Stock") {
-                val isReady = if (brokerName == "Angel One") {
-                    brokerManager.angelMarketDataService.isConnectionLive() ||
-                    brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-                } else {
-                    brokerManager.mStockMarketDataService.isConnectionLive() ||
-                    brokerManager.brokerAuthManager.statuses.value["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-                }
+            when (brokerType) {
+                BrokerType.UPSTOX -> {
+                    _brokerSwitchStatus.value = "Setting primary market data provider to Upstox..."
+                    val isReady = brokerManager.upstoxMarketDataService.isConnectionLive() ||
+                            brokerManager.brokerAuthManager.statuses.value["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            sessionManager.hasUpstoxSession()
 
-                if (!isReady) {
+                    if (!isReady) {
+                        _isSessionRestoring.value = false
+                        _brokerSwitchStatus.value = null
+                        _authErrorMessage.value = "Upstox is not connected. Please authenticate first."
+                        openConnectDialog("Upstox")
+                        return@launch
+                    }
+
+                    brokerManager.setPrimaryMarketDataProvider("Upstox")
+                    _brokerSwitchStatus.value = "Primary Market Data • Upstox"
                     _isSessionRestoring.value = false
-                    _brokerSwitchStatus.value = null
-                    _authErrorMessage.value = "Provider is not ready. Please connect first."
-                    openConnectDialog(brokerName)
-                    return@launch
-                }
-
-                brokerManager.setPrimaryMarketDataProvider(brokerName)
-                _brokerSwitchStatus.value = "Primary Market Data • $brokerName"
-                _isSessionRestoring.value = false
-                repository.addNotification(
-                    title = "Market Data Provider Switched",
-                    message = "Primary market data feed switched to $brokerName",
-                    type = "SUCCESS"
-                )
-            } else {
-                sessionManager.activeBroker = "Dhan"
-                brokerManager.setActiveBroker("Dhan")
-                val valid = validateAndRestoreSession()
-                if (valid) {
-                    _brokerSwitchStatus.value = "Broker Connected • Dhan"
-                    _authSuccessEvent.value = true
                     repository.addNotification(
-                        title = "Order Broker Selected",
-                        message = "Active order execution broker set to Dhan",
+                        title = "Market Data Provider Switched",
+                        message = "Primary market data feed switched to Upstox",
                         type = "SUCCESS"
                     )
-                } else {
-                    _brokerSwitchStatus.value = null
-                    _authErrorMessage.value = "Dhan session expired. Please re-authenticate."
-                    openConnectDialog("Dhan")
                 }
-                _isSessionRestoring.value = false
+                BrokerType.FYERS -> {
+                    _brokerSwitchStatus.value = "Setting primary market data provider to Fyers..."
+                    val isReady = brokerManager.fyersMarketDataService.isConnectionLive() ||
+                            brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            sessionManager.hasFyersSession()
+
+                    if (!isReady) {
+                        _isSessionRestoring.value = false
+                        _brokerSwitchStatus.value = null
+                        _authErrorMessage.value = "Fyers is not connected. Please authenticate first."
+                        openConnectDialog("Fyers")
+                        return@launch
+                    }
+
+                    brokerManager.setPrimaryMarketDataProvider("Fyers")
+                    _brokerSwitchStatus.value = "Primary Market Data • Fyers"
+                    _isSessionRestoring.value = false
+                    repository.addNotification(
+                        title = "Market Data Provider Switched",
+                        message = "Primary market data feed switched to Fyers",
+                        type = "SUCCESS"
+                    )
+                }
+                BrokerType.ANGEL_ONE -> {
+                    _brokerSwitchStatus.value = "Setting primary market data provider to Angel One..."
+                    val isReady = brokerManager.angelMarketDataService.isConnectionLive() ||
+                            brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            sessionManager.hasAngelSession()
+
+                    if (!isReady) {
+                        _isSessionRestoring.value = false
+                        _brokerSwitchStatus.value = null
+                        _authErrorMessage.value = "Angel One is not connected. Please authenticate first."
+                        openConnectDialog("Angel One")
+                        return@launch
+                    }
+
+                    brokerManager.setPrimaryMarketDataProvider("Angel One")
+                    _brokerSwitchStatus.value = "Primary Market Data • Angel One"
+                    _isSessionRestoring.value = false
+                    repository.addNotification(
+                        title = "Market Data Provider Switched",
+                        message = "Primary market data feed switched to Angel One",
+                        type = "SUCCESS"
+                    )
+                }
+                BrokerType.MSTOCK -> {
+                    _brokerSwitchStatus.value = "Setting primary market data provider to m.Stock..."
+                    val isReady = brokerManager.mStockMarketDataService.isConnectionLive() ||
+                            brokerManager.brokerAuthManager.statuses.value["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            sessionManager.hasMStockSession()
+
+                    if (!isReady) {
+                        _isSessionRestoring.value = false
+                        _brokerSwitchStatus.value = null
+                        _authErrorMessage.value = "m.Stock is not connected. Please authenticate first."
+                        openConnectDialog("m.Stock")
+                        return@launch
+                    }
+
+                    brokerManager.setPrimaryMarketDataProvider("m.Stock")
+                    _brokerSwitchStatus.value = "Primary Market Data • m.Stock"
+                    _isSessionRestoring.value = false
+                    repository.addNotification(
+                        title = "Market Data Provider Switched",
+                        message = "Primary market data feed switched to m.Stock",
+                        type = "SUCCESS"
+                    )
+                }
+                BrokerType.DHAN, null -> {
+                    _brokerSwitchStatus.value = "Setting active order execution broker to Dhan..."
+                    sessionManager.activeBroker = "Dhan"
+                    brokerManager.setActiveBroker("Dhan")
+                    val valid = validateAndRestoreSession()
+                    if (valid) {
+                        _brokerSwitchStatus.value = "Broker Connected • Dhan"
+                        _authSuccessEvent.value = true
+                        repository.addNotification(
+                            title = "Order Broker Selected",
+                            message = "Active order execution broker set to Dhan",
+                            type = "SUCCESS"
+                        )
+                    } else {
+                        _brokerSwitchStatus.value = null
+                        _authErrorMessage.value = "Dhan session expired. Please re-authenticate."
+                        openConnectDialog("Dhan")
+                    }
+                    _isSessionRestoring.value = false
+                }
             }
         }
     }
 
     fun switchBroker(brokerName: String) = switchActiveBroker(brokerName)
 
+    fun openConnectDialog(brokerType: BrokerType) {
+        openConnectDialog(brokerType.displayName)
+    }
+
     fun openConnectDialog(brokerName: String = "Dhan") {
-        _connectingBrokerName.value = brokerName
+        val type = BrokerType.fromString(brokerName) ?: BrokerType.DHAN
+        _connectingBrokerName.value = type.displayName
         _authErrorMessage.value = null
         _showConnectDialog.value = true
     }
@@ -644,50 +719,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnectBroker(brokerName: String) {
+        val type = BrokerType.fromString(brokerName) ?: BrokerType.DHAN
+        val name = type.displayName
         viewModelScope.launch {
-            brokerAuthManager.disconnectBroker(brokerName)
+            brokerAuthManager.disconnectBroker(name)
             val current = _userProfile.value
-            val updated = when (brokerName) {
-                "Dhan" -> current.copy(
+            val updated = when (type) {
+                BrokerType.DHAN -> current.copy(
                     isDhanConnected = false,
                     connectedBroker = if (current.connectedBroker == "Dhan") "" else current.connectedBroker
                 )
-                "Angel One" -> current.copy(
+                BrokerType.ANGEL_ONE -> current.copy(
                     isAngelConnected = false,
                     connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
                 )
                 else -> current.copy(
-                    connectedBroker = if (current.connectedBroker == brokerName) "" else current.connectedBroker
+                    connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
                 )
             }
             _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
             repository.updateProfile(updated)
-            alertService.notifyBrokerDisconnected(brokerName)
+            alertService.notifyBrokerDisconnected(name)
         }
     }
 
     fun removeAccountBroker(brokerName: String) {
+        val type = BrokerType.fromString(brokerName) ?: BrokerType.DHAN
+        val name = type.displayName
         viewModelScope.launch {
-            brokerAuthManager.removeAccount(brokerName)
+            brokerAuthManager.removeAccount(name)
             val current = _userProfile.value
-            val updated = when (brokerName) {
-                "Dhan" -> current.copy(
+            val updated = when (type) {
+                BrokerType.DHAN -> current.copy(
                     isDhanConnected = false,
                     dhanClientId = "",
                     connectedBroker = if (current.connectedBroker == "Dhan") "" else current.connectedBroker
                 )
-                "Angel One" -> current.copy(
+                BrokerType.ANGEL_ONE -> current.copy(
                     isAngelConnected = false,
                     angelClientId = "",
                     connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
                 )
                 else -> current.copy(
-                    connectedBroker = if (current.connectedBroker == brokerName) "" else current.connectedBroker
+                    connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
                 )
             }
             _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
             repository.updateProfile(updated)
-            repository.addNotification("Account Removed", "$brokerName credentials and tokens cleared", "WARNING")
+            repository.addNotification("Account Removed", "$name credentials and tokens cleared", "WARNING")
         }
     }
 
