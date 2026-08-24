@@ -9,8 +9,17 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class UpstoxTokenResponse(
+    @Json(name = "email") val email: String? = null,
+    @Json(name = "user_name") val userName: String? = null,
+    @Json(name = "user_id") val userId: String? = null,
+    @Json(name = "access_token") val accessToken: String? = null,
+    @Json(name = "refresh_token") val refreshToken: String? = null,
+    @Json(name = "extended_token") val extendedToken: String? = null,
+    @Json(name = "is_active") val isActive: Boolean? = null,
+    @Json(name = "exchanges") val exchanges: List<String>? = null,
+    @Json(name = "products") val products: List<String>? = null,
+    @Json(name = "order_types") val orderTypes: List<String>? = null,
     @Json(name = "status") val status: String? = null,
-    @Json(name = "data") val data: UpstoxTokenData? = null,
     @Json(name = "errors") val errors: List<UpstoxApiError>? = null
 )
 

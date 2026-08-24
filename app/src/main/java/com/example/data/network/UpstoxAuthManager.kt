@@ -44,9 +44,8 @@ class UpstoxAuthManager(
             }
 
             val body = response.body() ?: throw Exception("Empty response body from Upstox")
-            val data = body.data ?: throw Exception("No token data returned by Upstox")
 
-            val accessToken = data.accessToken
+            val accessToken = body.accessToken
             if (accessToken.isNullOrBlank()) {
                 _authStatus.value = BrokerAuthStatus.ERROR
                 throw Exception("Upstox Access Token is empty in response")
@@ -54,8 +53,8 @@ class UpstoxAuthManager(
 
             // Securely store credentials and tokens in encrypted storage
             sessionManager.upstoxAccessToken = accessToken
-            if (!data.refreshToken.isNullOrBlank()) {
-                sessionManager.upstoxRefreshToken = data.refreshToken
+            if (!body.refreshToken.isNullOrBlank()) {
+                sessionManager.upstoxRefreshToken = body.refreshToken
             }
             sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
             sessionManager.isUpstoxConnected = true

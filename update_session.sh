@@ -1,0 +1,1 @@
+sed -i 's/var activeBroker: String/var activeOrderExecutionBroker: String = "Dhan"\n    var activeMarketDataProvider: String = ""\n    var activeBroker: String/g' app/src/main/java/com/example/data/network/SessionManager.kt

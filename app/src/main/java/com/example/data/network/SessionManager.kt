@@ -169,10 +169,18 @@ class SessionManager(context: Context) {
         }
     }
 
+    
+    var activeMarketDataProvider: String
+        get() = prefs.getString("active_market_provider", "Upstox") ?: "Upstox"
+        set(value) = prefs.edit().putString("active_market_provider", value).apply()
+        
+    var activeOrderExecutionBroker: String = "Dhan"
+
+
     var activeBroker: String
-        get() = prefs.getString(KEY_ACTIVE_BROKER, "Dhan") ?: "Dhan"
+        get() = "Dhan" // Always Dhan for execution
         set(value) {
-            prefs.edit().putString(KEY_ACTIVE_BROKER, value).commit()
+            // prefs.edit().putString(KEY_ACTIVE_BROKER, "Dhan").commit()
         }
 
     var primaryMarketDataProvider: String

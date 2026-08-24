@@ -206,121 +206,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hasSession = sessionManager.hasValidSession()
         if (!hasSession) {
             android.util.Log.d("SessionRestore", "session exists: false")
-            android.util.Log.d("SessionRestore", "broker: None")
-            android.util.Log.d("SessionRestore", "token expiry status: expired")
-            android.util.Log.d("SessionRestore", "restore success: false")
             _isSessionValid.value = false
             _isSessionRestoring.value = false
             return@withLock false
         }
-
-        val broker = sessionManager.activeBroker
-        brokerManager.setActiveBroker(broker)
         android.util.Log.d("SessionRestore", "session exists: true")
-        android.util.Log.d("SessionRestore", "broker: $broker")
-
-        return@withLock try {
-            val isValid = when (broker) {
-                "Dhan" -> {
-                    val profileRes = dhanService.getProfile()
-                    if (profileRes.isSuccess) {
-                        android.util.Log.d("SessionRestore", "token expiry status: valid")
-                        android.util.Log.d("SessionRestore", "restore success: true")
-                        repository.syncWithBroker()
-                        true
-                    } else {
-                        val err = profileRes.exceptionOrNull()?.message ?: ""
-                        if (err.contains("401") || err.contains("403") || err.contains("not connected", ignoreCase = true) || err.contains("Unauthenticated", ignoreCase = true) || err.contains("token", ignoreCase = true)) {
-                            android.util.Log.d("SessionRestore", "token expiry status: expired")
-                            android.util.Log.d("SessionRestore", "restore success: false")
-                            sessionManager.clearDhanSession()
-                            false
-                        } else {
-                            android.util.Log.d("SessionRestore", "token expiry status: valid (network warning: $err)")
-                            android.util.Log.d("SessionRestore", "restore success: true")
-                            repository.syncWithBroker()
-                            true
-                        }
-                    }
-                }
-                "Angel One" -> {
-                    var profileRes = angelOneService.getProfile()
-                    if (profileRes.isSuccess) {
-                        android.util.Log.d("SessionRestore", "token expiry status: valid")
-                        android.util.Log.d("SessionRestore", "restore success: true")
-                        repository.syncWithBroker()
-                        true
-                    } else {
-                        val refreshToken = sessionManager.angelRefreshToken
-                        var refreshed = false
-                        if (!refreshToken.isNullOrBlank()) {
-                            android.util.Log.d("SessionRestore", "Attempting Angel One token refresh...")
-                            val refreshRes = AngelAuthHelper.renewSession(refreshToken)
-                            if (refreshRes.isSuccess) {
-                                val newTokens = refreshRes.getOrThrow()
-                                if (!newTokens.jwtToken.isNullOrBlank()) {
-                                    sessionManager.angelJwtToken = newTokens.jwtToken
-                                }
-                                if (!newTokens.refreshToken.isNullOrBlank()) {
-                                    sessionManager.angelRefreshToken = newTokens.refreshToken
-                                }
-                                if (!newTokens.feedToken.isNullOrBlank()) {
-                                    sessionManager.angelFeedToken = newTokens.feedToken
-                                }
-                                profileRes = angelOneService.getProfile()
-                                if (profileRes.isSuccess) {
-                                    refreshed = true
-                                }
-                            }
-                        }
-
-                        if (refreshed) {
-                            android.util.Log.d("SessionRestore", "token expiry status: refreshed")
-                            android.util.Log.d("SessionRestore", "restore success: true")
-                            repository.syncWithBroker()
-                            true
-                        } else {
-                            val err = profileRes.exceptionOrNull()?.message ?: ""
-                            if (err.contains("401") || err.contains("403") || err.contains("expired", ignoreCase = true) || err.contains("not connected", ignoreCase = true) || err.contains("invalid", ignoreCase = true)) {
-                                android.util.Log.d("SessionRestore", "token expiry status: expired")
-                                android.util.Log.d("SessionRestore", "restore success: false")
-                                sessionManager.clearAngelSession()
-                                false
-                            } else {
-                                android.util.Log.d("SessionRestore", "token expiry status: valid (network warning: $err)")
-                                android.util.Log.d("SessionRestore", "restore success: true")
-                                repository.syncWithBroker()
-                                true
-                            }
-                        }
-                    }
-                }
-                "m.Stock" -> {
-                    if (sessionManager.isMStockConfigured()) {
-                        android.util.Log.d("SessionRestore", "token expiry status: valid")
-                        android.util.Log.d("SessionRestore", "restore success: true")
-                        repository.syncWithBroker()
-                        true
-                    } else {
-                        android.util.Log.d("SessionRestore", "token expiry status: expired")
-                        android.util.Log.d("SessionRestore", "restore success: false")
-                        sessionManager.clearMStockSession()
-                        false
-                    }
-                }
-                else -> false
-            }
-
-            _isSessionValid.value = isValid
-            _isSessionRestoring.value = false
-            isValid
-        } catch (e: Exception) {
-            android.util.Log.e("SessionRestore", "Error validating session: ${e.message}")
-            android.util.Log.d("SessionRestore", "restore success: false")
-            _isSessionValid.value = false
-            _isSessionRestoring.value = false
-            false
-        }
+        _isSessionValid.value = true
+        _isSessionRestoring.value = false
+        repository.syncWithBroker()
+        return@withLock true
     }
 
     private fun observeData() {

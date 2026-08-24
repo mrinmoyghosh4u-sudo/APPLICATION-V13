@@ -673,9 +673,25 @@ fun BrokerConnectDialog(
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
                                 webViewClient = object : WebViewClient() {
+                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                        url?.let {
+                                            val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                            if (it.startsWith(redirectUri) || it.contains("code=")) {
+                                                val uri = android.net.Uri.parse(it)
+                                                val authCode = uri.getQueryParameter("code")
+                                                if (!authCode.isNullOrBlank()) {
+                                                    showUpstoxWebView = false
+                                                    onUpstoxLogin?.invoke(upstoxApiKey, upstoxApiSecret, authCode)
+                                                    return
+                                                }
+                                            }
+                                        }
+                                        super.onPageStarted(view, url, favicon)
+                                    }
+
                                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                         val url = request?.url.toString()
-                                        val redirectUri = sessionManager.upstoxRedirectUri ?: "https://application-beige-psi.vercel.app/oauth"
+                                        val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                         if (url.startsWith(redirectUri) || url.contains("code=")) {
                                             val authCode = request?.url?.getQueryParameter("code")
                                             if (!authCode.isNullOrBlank()) {
@@ -723,6 +739,25 @@ fun BrokerConnectDialog(
                                 settings.domStorageEnabled = true
                                 val targetRedirectUri: String = sessionManager.fyersRedirectUri.ifBlank { com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI }
                                 webViewClient = object : WebViewClient() {
+                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                        url?.let {
+                                            if (it.startsWith(targetRedirectUri) || 
+                                                it.startsWith("https://application-beige-psi.vercel.app/oauth") ||
+                                                it.startsWith("https://trade.fyers.in/api-login/redirect-uri/index.html") ||
+                                                it.contains("auth_code=") || 
+                                                it.contains("code=")) {
+                                                val uri = android.net.Uri.parse(it)
+                                                val authCode = uri.getQueryParameter("auth_code") ?: uri.getQueryParameter("code")
+                                                if (!authCode.isNullOrBlank()) {
+                                                    showFyersWebView = false
+                                                    onFyersLogin?.invoke(fyersAppId, fyersSecretId, authCode)
+                                                    return
+                                                }
+                                            }
+                                        }
+                                        super.onPageStarted(view, url, favicon)
+                                    }
+
                                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                         val url = request?.url.toString()
                                         if (url.startsWith(targetRedirectUri) || 
