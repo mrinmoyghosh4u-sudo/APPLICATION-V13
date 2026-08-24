@@ -68,6 +68,7 @@ fun BrokerConnectDialog(
 
     var upstoxApiKey by remember { mutableStateOf(sessionManager.upstoxApiKey ?: "") }
     var upstoxApiSecret by remember { mutableStateOf(sessionManager.upstoxApiSecret ?: "") }
+    var upstoxAuthCode by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -209,8 +210,8 @@ fun BrokerConnectDialog(
                             ),
                             singleLine = true
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Button(
                             onClick = {
                                 if (upstoxApiKey.isBlank() || upstoxApiSecret.isBlank()) {
@@ -219,32 +220,75 @@ fun BrokerConnectDialog(
                                 }
                                 sessionManager.upstoxApiKey = upstoxApiKey
                                 sessionManager.upstoxApiSecret = upstoxApiSecret
-                                android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
                                 val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                 val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
                                 sessionManager.pendingOAuthState = randomState
                                 sessionManager.pendingOAuthBroker = "Upstox"
                                 val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri, state = randomState)
                                 try {
-                                    android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
-                                    android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                     context.startActivity(intent)
-                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
                                     onDismiss()
                                 } catch (e: Exception) {
-                                    localErrorMsg = "Failed to open browser"
+                                    localErrorMsg = "Failed to open browser: ${e.message}"
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isAuthInProgress,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
                         ) {
+                            Text("1. LOGIN VIA BROWSER (AUTO-CONNECT)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("— OR PASTE AUTH CODE / REDIRECT URL —", color = TextGray, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = upstoxAuthCode,
+                            onValueChange = { upstoxAuthCode = it },
+                            label = { Text("Auth Code or Full Callback URL", color = TextGray) },
+                            placeholder = { Text("e.g. paste code or full redirect URL", color = TextGray.copy(alpha = 0.5f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                if (upstoxApiKey.isBlank() || upstoxApiSecret.isBlank()) {
+                                    localErrorMsg = "API Key and API Secret are required"
+                                    return@Button
+                                }
+                                if (upstoxAuthCode.isBlank()) {
+                                    localErrorMsg = "Please enter or paste Upstox Auth Code"
+                                    return@Button
+                                }
+                                localErrorMsg = null
+                                sessionManager.upstoxApiKey = upstoxApiKey
+                                sessionManager.upstoxApiSecret = upstoxApiSecret
+                                onUpstoxLogin?.invoke(upstoxApiKey, upstoxApiSecret, upstoxAuthCode)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isAuthInProgress,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A148C))
+                        ) {
                             if (isAuthInProgress) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                Text("LOGIN & CONNECT UPSTOX", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("2. CONNECT WITH AUTH CODE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
+                        }
+
+                        if (!localErrorMsg.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(localErrorMsg!!, color = Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     "m.Stock" -> {
@@ -391,8 +435,8 @@ fun BrokerConnectDialog(
                             ),
                             singleLine = true
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Button(
                             onClick = {
                                 if (fyersAppId.isBlank() || fyersSecretId.isBlank()) {
@@ -401,32 +445,75 @@ fun BrokerConnectDialog(
                                 }
                                 sessionManager.fyersAppId = fyersAppId
                                 sessionManager.fyersSecretId = fyersSecretId
-                                android.util.Log.d("FyersAuth", "[1] Credentials: PASS")
                                 val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
                                 val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
                                 sessionManager.pendingOAuthState = randomState
                                 sessionManager.pendingOAuthBroker = "Fyers"
                                 val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, redirectUri, state = randomState)
                                 try {
-                                    android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
-                                    android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                     context.startActivity(intent)
-                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
                                     onDismiss()
                                 } catch (e: Exception) {
-                                    localErrorMsg = "Failed to open browser"
+                                    localErrorMsg = "Failed to open browser: ${e.message}"
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isAuthInProgress,
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen)
                         ) {
+                            Text("1. LOGIN VIA BROWSER (AUTO-CONNECT)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("— OR PASTE AUTH CODE / REDIRECT URL —", color = TextGray, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = fyersAuthCode,
+                            onValueChange = { fyersAuthCode = it },
+                            label = { Text("Auth Code or Full Callback URL", color = TextGray) },
+                            placeholder = { Text("e.g. paste code or full redirect URL", color = TextGray.copy(alpha = 0.5f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                if (fyersAppId.isBlank() || fyersSecretId.isBlank()) {
+                                    localErrorMsg = "App ID and Secret ID are required"
+                                    return@Button
+                                }
+                                if (fyersAuthCode.isBlank()) {
+                                    localErrorMsg = "Please enter or paste Fyers Auth Code"
+                                    return@Button
+                                }
+                                localErrorMsg = null
+                                sessionManager.fyersAppId = fyersAppId
+                                sessionManager.fyersSecretId = fyersSecretId
+                                onFyersLogin?.invoke(fyersAppId, fyersSecretId, fyersAuthCode)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isAuthInProgress,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                        ) {
                             if (isAuthInProgress) {
-                                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp))
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                Text("LOGIN & CONNECT", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("2. CONNECT WITH AUTH CODE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
+                        }
+
+                        if (!localErrorMsg.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(localErrorMsg!!, color = Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     "Angel One" -> {

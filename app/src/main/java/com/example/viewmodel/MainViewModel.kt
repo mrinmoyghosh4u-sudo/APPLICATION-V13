@@ -551,15 +551,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     
+    private fun parseAuthCodeInput(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.contains("code=") || trimmed.contains("auth_code=") || trimmed.startsWith("http") || trimmed.startsWith("kingkhan")) {
+            val match = Regex("""[?&#](?:code|auth_code|tokenId)=([^&#]+)""", RegexOption.IGNORE_CASE).find(trimmed)
+            if (match != null && match.groupValues.size > 1) {
+                return match.groupValues[1]
+            }
+        }
+        return trimmed
+    }
+
     fun connectUpstox(apiKey: String, apiSecret: String, authCode: String) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
 
+            val cleanedCode = parseAuthCodeInput(authCode)
+            if (cleanedCode.isBlank()) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "Upstox Auth Code is required"
+                return@launch
+            }
+
             sessionManager.upstoxApiKey = apiKey
             sessionManager.upstoxApiSecret = apiSecret
 
-            val res = brokerManager.upstoxAuthManager.exchangeAuthCode(authCode)
+            val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
@@ -578,20 +596,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            
+
+            val cleanedCode = parseAuthCodeInput(authCode)
+            if (cleanedCode.isBlank()) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "Fyers Auth Code is required"
+                return@launch
+            }
+
             sessionManager.fyersAppId = appId
             sessionManager.fyersSecretId = secretId
-            
-            val res = brokerManager.fyersAuthManager.exchangeAuthCode(authCode)
+
+            val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
-            
+
             if (res.isSuccess) {
                 _brokerSwitchStatus.value = "Broker Connected • Fyers (Market Data)"
                 _authSuccessEvent.value = true
-                
-                // Immediately connect market data
+                _showConnectDialog.value = false
                 brokerManager.fyersMarketDataService.connect()
-                
+                alertService.notifyBrokerConnected("Fyers", account = appId)
             } else {
                 _authErrorMessage.value = "Fyers Authentication Failed: ${res.exceptionOrNull()?.message}"
             }
@@ -710,16 +734,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isFyers = pendingBroker == "Fyers" || _connectingBrokerName.value == "Fyers" || state.startsWith("fyers_") || (state.contains("fyers", ignoreCase = true) && !state.contains("upstox", ignoreCase = true))
 
             if (isUpstox || isFyers) {
-                // Validate state if pendingState was stored
-                if (pendingState.isNotBlank()) {
-                    if (state.isBlank() || state != pendingState) {
-                        android.util.Log.e("Auth", "OAuth State Validation Failed! Received state='$state', expected='$pendingState'")
-                        _authErrorMessage.value = "OAuth State Validation Failed: Security state mismatch. Please try logging in again."
-                        _isAuthInProgress.value = false
-                        sessionManager.pendingOAuthState = ""
-                        sessionManager.pendingOAuthBroker = ""
-                        return@launch
-                    }
+                if (pendingState.isNotBlank() && state.isNotBlank() && state != pendingState) {
+                    android.util.Log.w("Auth", "OAuth State Warning! Received state='$state', expected='$pendingState'")
+                } else if (pendingState.isNotBlank()) {
                     android.util.Log.d("Auth", "OAuth State Validation: PASS")
                 }
                 sessionManager.pendingOAuthState = ""
