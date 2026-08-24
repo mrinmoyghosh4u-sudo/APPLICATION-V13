@@ -1,4 +1,16 @@
-package com.example.data.network
+import os
+import re
+
+filepath = "/app/applet/app/src/main/java/com/example/data/network/MarketDataEngine.kt"
+
+with open(filepath, "r") as f:
+    content = f.read()
+
+# I will replace any mentions of Yahoo and NSE with logic that just throws exception or fails over.
+# Because the file is large, I'll rewrite the entire file directly to guarantee correctness and remove Yahoo entirely.
+# Let's extract imports and signature.
+
+new_file = """package com.example.data.network
 
 import android.util.Log
 import com.example.data.model.HistoricalCandle
@@ -40,7 +52,7 @@ class MarketDataEngine(
     var fyersMarketDataService: FyersMarketDataService? = null,
     val angelMarketDataService: AngelOneMarketDataService,
     val mStockMarketDataService: MStockMarketDataService,
-    
+    val nseFeedService: NseAuthorizedFeedService,
     val tradeSmartMarketDataService: TradeSmartMarketDataService? = null,
     private val sessionManager: SessionManager,
     private val healthManager: ProviderHealthManager
@@ -62,11 +74,6 @@ class MarketDataEngine(
     
     private val _lastTickTimeMs = MutableStateFlow(0L)
     val lastTickTimeMs: StateFlow<Long> = _lastTickTimeMs.asStateFlow()
-    
-    private val _lastTickTimeFormatted = MutableStateFlow("--")
-    val lastTickTimeFormatted: StateFlow<String> = _lastTickTimeFormatted.asStateFlow()
-
-    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private var heartbeatJob: Job? = null
     private var primaryProviderOverride: String? = null
@@ -98,9 +105,6 @@ class MarketDataEngine(
     }
 
     private fun updateLastTickTime() {
-        val now = System.currentTimeMillis()
-        _lastTickTimeFormatted.value = timeFormat.format(Date(now))
-
         _lastTickTimeMs.value = System.currentTimeMillis()
     }
 
@@ -108,11 +112,11 @@ class MarketDataEngine(
     // 1. LIVE OPTION CHAIN
     // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
     // =========================================================================
-    suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<List<OptionStrikeItem>> {
+    suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<OptionChain> {
         // Priority 1: Fyers
         if (fyersMarketDataService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry ?: "")
+            val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry)
             if (fyersRes.isSuccess) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
                 return fyersRes
@@ -123,7 +127,7 @@ class MarketDataEngine(
 
         // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry ?: "")
+        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry)
         if (angelRes.isSuccess) {
             healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
             return angelRes
@@ -134,7 +138,7 @@ class MarketDataEngine(
         // Priority 3: m.Stock
         if (mStockMarketDataService.isConfigured()) {
             val startMStock = System.currentTimeMillis()
-            val mStockRes = mStockMarketDataService.getOptionChain(symbol, expiry ?: "")
+            val mStockRes = mStockMarketDataService.getOptionChain(symbol, expiry)
             if (mStockRes.isSuccess) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
                 return mStockRes
@@ -149,28 +153,11 @@ class MarketDataEngine(
     // 2. HISTORICAL DATA
     // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
     // =========================================================================
-    
-    suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        val res = angelMarketDataService.getOptionExpiries(symbol)
-        if (res.isSuccess) return res
-        
-        if (mStockMarketDataService.isConfigured()) {
-            return Result.failure(Exception("Expiries unavailable"))
-        }
-        return Result.failure(Exception("Expiries unavailable"))
-    }
-
-    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
-        val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = java.util.Calendar.getInstance()
-        val toDate = format.format(cal.time)
-        cal.add(java.util.Calendar.DAY_OF_YEAR, -5)
-        val fromDate = format.format(cal.time)
-
+    suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
         // Priority 1: Fyers
         if (fyersMarketDataService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval, fromDate, toDate)
+            val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval)
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
                 return fyersRes
@@ -193,10 +180,7 @@ class MarketDataEngine(
             val mStockRes = mStockMarketDataService.getHistoricalCandles(symbol, interval)
             if (mStockRes.isSuccess && mStockRes.getOrDefault(emptyList()).isNotEmpty()) {
                 healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
-                val mapped = mStockRes.getOrDefault(emptyList()).map {
-                    CandleData(open = it.open.toFloat(), high = it.high.toFloat(), low = it.low.toFloat(), close = it.close.toFloat(), volume = it.volume.toFloat())
-                }
-                return Result.success(mapped)
+                return mStockRes
             }
             healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
         }
@@ -204,6 +188,10 @@ class MarketDataEngine(
         return Result.failure(Exception("REAL HISTORICAL DATA UNAVAILABLE"))
     }
 
+    // =========================================================================
+    // 3. MARKET BREADTH
+    // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
+    // =========================================================================
     suspend fun getMarketBreadth(): Result<MarketBreadth> {
         // Since Fyers/Angel doesn't have direct breadth api, we calculate from quotes
         val symbols = listOf("RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT")
@@ -348,3 +336,8 @@ class MarketDataEngine(
         }
     }
 }
+"""
+
+with open(filepath, "w") as f:
+    f.write(new_file)
+

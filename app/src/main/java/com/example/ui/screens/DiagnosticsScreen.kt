@@ -39,10 +39,7 @@ fun DiagnosticsScreen(
     val mStockConnectionState by viewModel.brokerManager.mStockMarketDataService.connectionState.collectAsStateWithLifecycle()
     val angelHealth by MarketDataStore.angelOneHealth.collectAsStateWithLifecycle()
     val mStockHealth by MarketDataStore.mStockHealth.collectAsStateWithLifecycle()
-    val nseHealth by MarketDataStore.nseHealth.collectAsStateWithLifecycle()
-    val nseState by viewModel.brokerManager.nseFeedService.connectionState.collectAsStateWithLifecycle()
-    val yahooHealth by MarketDataStore.yahooHealth.collectAsStateWithLifecycle()
-    val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
+                val unifiedStatus by viewModel.brokerManager.marketDataEngine.unifiedFeedStatus.collectAsStateWithLifecycle()
     val internalActiveProvider by viewModel.brokerManager.marketDataEngine.internalActiveProvider.collectAsStateWithLifecycle()
     
     val isMasterLoaded = viewModel.brokerManager.instrumentMasterService.isLoaded
@@ -143,9 +140,6 @@ fun DiagnosticsScreen(
         SectionHeader("AUTOMATIC FAILOVER ROUTER (UNIFIED)")
         DiagnosticItem("Unified Output Status", unifiedStatus)
         DiagnosticItem("Internal Active Provider", internalActiveProvider)
-        DiagnosticItem("Failover Hierarchy", "1. Angel One → 2. m.Stock → 3. NSE → 4. Yahoo")
-        DiagnosticItem("Historical Failover", "1. m.Stock → 2. Yahoo → 3. NSE → 4. Angel One")
-        DiagnosticItem("Market Breadth Failover", "1. m.Stock → 2. NSE → 3. Yahoo → 4. Angel One")
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -199,26 +193,15 @@ fun DiagnosticsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         SectionHeader("REFERENCE / BACKUP: NSE INDIA & YAHOO FINANCE")
-        DiagnosticItem("NSE Reference Role", "REFERENCE / BACKUP DATA (Official Index Stream)")
-        DiagnosticItem("NSE Connection State", nseState)
-        DiagnosticItem("NSE Health Status", if (nseHealth == "LIVE") "PASS (Active)" else nseHealth)
-        DiagnosticItem("NSE Reference Feeds", "NIFTY 50, BANKNIFTY, FINNIFTY, MIDCPNIFTY")
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        DiagnosticItem("Yahoo Data Role", "SECONDARY REFERENCE ONLY")
-        DiagnosticItem("Yahoo Health", yahooHealth)
-
+                
         Spacer(modifier = Modifier.height(16.dp))
 
         // Section: Instrument Master & Token Resolution
         SectionHeader("INSTRUMENT MASTER & TOKEN RESOLUTION")
         DiagnosticItem("Scrip Master Loaded", if (isMasterLoaded) "PASS (Loaded)" else "FAIL (Not Loaded)")
-        DiagnosticItem("NIFTY 50 (NSE)", if (niftyToken != null) "RESOLVED [Token: ${niftyToken.token}]" else "FAILED")
-        DiagnosticItem("BANKNIFTY (NSE)", if (bankNiftyToken != null) "RESOLVED [Token: ${bankNiftyToken.token}]" else "FAILED")
-        DiagnosticItem("FINNIFTY (NSE)", if (finNiftyToken != null) "RESOLVED [Token: ${finNiftyToken.token}]" else "FAILED")
-        DiagnosticItem("MIDCPNIFTY (NSE)", if (midcpNiftyToken != null) "RESOLVED [Token: ${midcpNiftyToken.token}]" else "FAILED")
-        DiagnosticItem("SENSEX (BSE)", if (sensexToken != null) "RESOLVED [Token: ${sensexToken.token}]" else "FAILED")
         DiagnosticItem("BANKEX (BSE)", if (bankexToken != null) "RESOLVED [Token: ${bankexToken.token}]" else "FAILED")
         DiagnosticItem("CRUDEOIL (MCX Active Near)", if (crudeToken != null) "RESOLVED [Token: ${crudeToken.token} | ${crudeToken.symbol}]" else "FAILED")
         DiagnosticItem("CRUDEOIL M (MCX Mini Near)", if (crudeMToken != null) "RESOLVED [Token: ${crudeMToken.token} | ${crudeMToken.symbol}]" else "FAILED")

@@ -1,4 +1,16 @@
-package com.example.data.network
+import os
+
+filepath = "app/src/main/java/com/example/data/network/BrokerManager.kt"
+
+with open(filepath, "r") as f:
+    content = f.read()
+
+# Replace getOptionChain return type 
+# Replace getHistoricalCandleData 
+# Replace getAdvanceDecline 
+# We need to make sure we don't break the return types of BrokerManager
+
+new_file = """package com.example.data.network
 
 import com.example.data.model.HistoricalCandle
 import com.example.data.model.MarketBreadth
@@ -36,7 +48,8 @@ class BrokerManager(
     val marketDataEngine = MarketDataEngine(
         angelMarketDataService = angelMarketDataService,
         mStockMarketDataService = mStockMarketDataService,
-                tradeSmartMarketDataService = tradeSmartMarketDataService,
+        nseFeedService = null, // removed
+        tradeSmartMarketDataService = tradeSmartMarketDataService,
         sessionManager = sessionManager,
         healthManager = healthManager
     )
@@ -126,15 +139,30 @@ class BrokerManager(
     }
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> {
-        return marketDataEngine.getOptionChain(symbol, expiry)
+        val res = marketDataEngine.getOptionChain(symbol, expiry)
+        if (res.isSuccess) {
+            return Result.success(res.getOrThrow().strikes)
+        }
+        return Result.failure(res.exceptionOrNull() ?: Exception("Option chain fetch failed"))
     }
 
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return marketDataEngine.getOptionExpiries(symbol)
+        val res = marketDataEngine.getOptionChain(symbol, "")
+        if (res.isSuccess) {
+            return Result.success(res.getOrThrow().expiries)
+        }
+        return Result.failure(res.exceptionOrNull() ?: Exception("Option expiries fetch failed"))
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
-        return marketDataEngine.getHistoricalCandles(symbol, interval)
+        val res = marketDataEngine.getHistoricalCandles(symbol, interval)
+        if (res.isSuccess) {
+            val candles = res.getOrThrow().map { 
+                CandleData(timestamp = it.timestamp, open = it.open.toFloat(), high = it.high.toFloat(), low = it.low.toFloat(), close = it.close.toFloat())
+            }
+            return Result.success(candles)
+        }
+        return Result.failure(res.exceptionOrNull() ?: Exception("Historical data fetch failed"))
     }
 
     suspend fun getMarketBreadth(): Result<MarketBreadth> {
@@ -145,8 +173,11 @@ class BrokerManager(
         val quotes = marketDataEngine.getMarketQuotes(listOf(symbol))
         val item = quotes.getOrNull()?.firstOrNull()
         if (item != null) {
-            return MarketTick(symbol = item.symbol, ltp = item.ltp, timestamp = System.currentTimeMillis(), exchange = item.exchange)
+            return MarketTick(symbol = item.symbol, ltp = item.ltp, timestamp = System.currentTimeMillis())
         }
         return null
     }
 }
+"""
+with open(filepath, "w") as f:
+    f.write(new_file)

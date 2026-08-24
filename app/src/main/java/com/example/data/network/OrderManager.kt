@@ -86,7 +86,7 @@ class OrderManager(
 
             // 4.6. Stale Data Protection
             val storeTick = com.example.data.model.MarketDataStore.getTick(symbol)
-            if (storeTick != null && (storeTick.state == "STALE" || storeTick.state == "OFFLINE" || storeTick.source == com.example.data.model.MarketDataSourceNames.YAHOO)) {
+            if (storeTick != null && (storeTick.state == "STALE" || storeTick.state == "OFFLINE" || false)) {
                 return@withContext Result.failure(Exception("Stale Data Protection: Cannot place order using stale or unverified market data."))
             }
 

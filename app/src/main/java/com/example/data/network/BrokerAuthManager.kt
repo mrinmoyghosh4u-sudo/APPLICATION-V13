@@ -180,15 +180,36 @@ class BrokerAuthManager(
 
     
     private suspend fun validateFyersSession() {
-        val hasSession = sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()
-        if (!hasSession) {
+        val hasSession = !sessionManager.fyersAccessToken.isNullOrBlank()
+        val hasRefreshToken = !sessionManager.fyersRefreshToken.isNullOrBlank()
+        
+        if (!hasSession && !hasRefreshToken) {
             updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
             return
         }
         
-        // Fyers session doesn't expire quickly or we just assume it's valid if we have it, 
-        // until a data request fails. But we can set to CONNECTED.
-        updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Active for Market Data")
+        // Check if token is older than 20 hours (expires daily)
+        val timestamp = sessionManager.fyersTokenTimestamp
+        val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
+        
+        if (hasSession && !isExpired) {
+            updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
+            // Reconnect WebSocket
+            brokerManager.fyersMarketDataService.connect()
+            return
+        }
+        
+        if (hasRefreshToken) {
+            updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
+            val result = reconnectBroker("Fyers")
+            if (result.isSuccess) {
+                updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active (Restored)")
+            } else {
+                updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+            }
+        } else {
+            updateStatus("Fyers", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+        }
     }
 
     private suspend fun validateAngelOneSession() {
@@ -626,7 +647,16 @@ class BrokerAuthManager(
         return when (brokerName) {
             "Dhan" -> refreshDhan()
             
-            "Fyers" -> Result.failure(Exception("Fyers auto-reconnect not supported. Please re-login."))
+            "Fyers" -> {
+                val fyersAuth = brokerManager.fyersAuthManager
+                val refreshRes = fyersAuth.refreshSession()
+                if (refreshRes.isSuccess) {
+                    brokerManager.fyersMarketDataService.connect()
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(refreshRes.exceptionOrNull()?.message ?: "Fyers refresh failed"))
+                }
+            }
             "Angel One" -> {
                 // 1. Try refresh token first if present
                 if (!sessionManager.angelRefreshToken.isNullOrBlank()) {

@@ -23,8 +23,7 @@ object MarketDataSourceNames {
     const val MSTOCK = "MSTOCK"
     const val TRADESMART = "TRADESMART"
     const val NSE = "NSE"
-    const val YAHOO = "YAHOO"
-}
+    }
 
 @Immutable
 data class MarketDataState(
@@ -79,8 +78,8 @@ object MarketDataStore {
     private val _nseHealth = MutableStateFlow("OFFLINE") // LIVE, STALE, OFFLINE
     val nseHealth: StateFlow<String> = _nseHealth.asStateFlow()
 
-    private val _yahooHealth = MutableStateFlow("REFERENCE") // REFERENCE, DELAYED, OFFLINE
-    val yahooHealth: StateFlow<String> = _yahooHealth.asStateFlow()
+    private val _unusedHealth = MutableStateFlow("REFERENCE") // REFERENCE, DELAYED, OFFLINE
+    val unusedHealth: StateFlow<String> = _unusedHealth.asStateFlow()
 
     // Last Update Timestamps per source
     private val sourceLastUpdate = ConcurrentHashMap<String, Long>()
@@ -88,7 +87,7 @@ object MarketDataStore {
     private val sourceLastSequence = ConcurrentHashMap<String, Long>()
 
     init {
-        sourceLastUpdate[MarketDataSourceNames.YAHOO] = System.currentTimeMillis()
+        sourceLastUpdate["REFERENCE"] = System.currentTimeMillis()
         startStaleDataMonitor()
     }
 
@@ -124,9 +123,9 @@ object MarketDataStore {
                 }
 
                 // Yahoo Health
-                val lastYahoo = sourceLastUpdate[MarketDataSourceNames.YAHOO] ?: 0L
-                if (lastYahoo > 0 && now - lastYahoo > 60000L && _yahooHealth.value == "REFERENCE") {
-                    _yahooHealth.value = "DELAYED"
+                val lastYahoo = sourceLastUpdate["REFERENCE"] ?: 0L
+                if (lastYahoo > 0 && now - lastYahoo > 60000L && _unusedHealth.value == "REFERENCE") {
+                    _unusedHealth.value = "DELAYED"
                 }
             }
         }
@@ -138,7 +137,7 @@ object MarketDataStore {
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = health
             MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = health
             MarketDataSourceNames.NSE -> _nseHealth.value = health
-            MarketDataSourceNames.YAHOO -> _yahooHealth.value = health
+            "REFERENCE" -> _unusedHealth.value = health
         }
     }
 
@@ -215,9 +214,9 @@ object MarketDataStore {
 
         // 4. Source Priority & Validation: Never overwrite verified real-time tick (ANGEL_ONE / MSTOCK / TRADESMART / NSE) with reference data (YAHOO)
         if (existing != null && (existing.source == MarketDataSourceNames.ANGEL_ONE || existing.source == MarketDataSourceNames.MSTOCK || existing.source == MarketDataSourceNames.TRADESMART || existing.source == MarketDataSourceNames.NSE)) {
-            if (source == MarketDataSourceNames.YAHOO) {
+            if (source == "REFERENCE") {
                 sourceLastUpdate[source] = receivedTimestamp
-                if (_yahooHealth.value != "REFERENCE") _yahooHealth.value = "REFERENCE"
+                if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
                 // Keep the live tick, but update previous close if missing
                 if (existing.previousClose <= 0.0 && close > 0.0) {
                     val updated = existing.copy(
@@ -247,7 +246,7 @@ object MarketDataStore {
             MarketDataSourceNames.MSTOCK -> _mStockHealth.value = "LIVE"
             MarketDataSourceNames.TRADESMART -> _tradeSmartHealth.value = "LIVE"
             MarketDataSourceNames.NSE -> _nseHealth.value = "LIVE"
-            MarketDataSourceNames.YAHOO -> if (_yahooHealth.value != "REFERENCE") _yahooHealth.value = "REFERENCE"
+            "REFERENCE" -> if (_unusedHealth.value != "REFERENCE") _unusedHealth.value = "REFERENCE"
         }
 
         // 7. Calculate Change and Change %
@@ -256,7 +255,7 @@ object MarketDataStore {
         val changePct = if (prevClose > 0.0) (change / prevClose) * 100.0 else 0.0
 
         val validatedState = when (source) {
-            MarketDataSourceNames.YAHOO -> "REFERENCE"
+            "REFERENCE" -> "REFERENCE"
             else -> state
         }
 

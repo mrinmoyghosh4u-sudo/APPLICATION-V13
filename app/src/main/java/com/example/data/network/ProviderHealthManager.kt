@@ -39,6 +39,7 @@ class ProviderHealthManager {
         const val STALE_TIMEOUT_MS = 15000L // 15 seconds stale timeout
         
         // Canonical Provider Keys
+        const val PROVIDER_FYERS = "Fyers"
         const val PROVIDER_ANGEL_ONE = "Angel One"
         const val PROVIDER_MSTOCK = "m.Stock"
         const val PROVIDER_NSE = "NSE"
@@ -53,7 +54,7 @@ class ProviderHealthManager {
 
     init {
         // Initialize default health state
-        listOf(PROVIDER_ANGEL_ONE, PROVIDER_MSTOCK, PROVIDER_NSE, PROVIDER_YAHOO, PROVIDER_TRADESMART).forEach { name ->
+        listOf(PROVIDER_FYERS, PROVIDER_ANGEL_ONE, PROVIDER_MSTOCK).forEach { name ->
             healthMap[name] = ProviderHealthState(provider = name)
         }
         _providerHealthFlow.value = HashMap(healthMap)
@@ -89,7 +90,7 @@ class ProviderHealthManager {
             latency = if (latencyMs > 0) latencyMs else current.latency,
             stale = false,
             errorCount = 0,
-            healthy = current.authenticated || provider == PROVIDER_NSE || provider == PROVIDER_YAHOO
+            healthy = current.authenticated 
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
@@ -146,7 +147,7 @@ class ProviderHealthManager {
 
     fun isProviderAvailableForRest(provider: String): Boolean {
         val state = healthMap[provider] ?: return false
-        return state.errorCount < 3 && (state.authenticated || provider == PROVIDER_NSE || provider == PROVIDER_YAHOO)
+        return state.errorCount < 3 && (state.authenticated )
     }
 
     fun getHealthState(provider: String): ProviderHealthState {

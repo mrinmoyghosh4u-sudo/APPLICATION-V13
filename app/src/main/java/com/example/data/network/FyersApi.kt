@@ -7,6 +7,13 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 
+data class FyersRefreshTokenRequest(
+    val grant_type: String = "refresh_token",
+    val appIdHash: String,
+    val refresh_token: String,
+    val pin: String
+)
+
 data class FyersTokenRequest(
     val grant_type: String = "authorization_code",
     val appIdHash: String,
@@ -58,6 +65,12 @@ data class FyersQuoteValues(
 )
 
 interface FyersApi {
+    
+    @POST("api/v3/validate-refresh-token")
+    suspend fun validateRefreshToken(
+        @Body request: FyersRefreshTokenRequest
+    ): Response<FyersTokenResponse>
+
     @POST("api/v3/validate-authcode")
     suspend fun validateAuthCode(
         @Body request: FyersTokenRequest

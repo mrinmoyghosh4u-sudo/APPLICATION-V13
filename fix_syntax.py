@@ -1,16 +1,15 @@
-import re
-content = open("app/src/main/java/com/example/data/network/InstrumentMasterService.kt").read()
+import os
 
-# I will find the duplicate block and remove it
-bad_part = """    }) return uppercaseSymbol
+filepath = "app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt"
+with open(filepath, "r") as f:
+    lines = f.readlines()
 
-        // Search by symbol or name
-        val match = instrumentMap.values.find {
-            (it.symbol.equals(uppercaseSymbol, ignoreCase = true) || it.name.equals(uppercaseSymbol, ignoreCase = true)) &&
-            (exchange.isBlank() || it.exch_seg.equals(exchange, ignoreCase = true))
-        }
-        return match?.token
-    }"""
-content = content.replace(bad_part, "")
+new_lines = []
+for i, line in enumerate(lines):
+    if line.strip() == "}}":
+        new_lines.append("}\n")
+    else:
+        new_lines.append(line)
 
-open("app/src/main/java/com/example/data/network/InstrumentMasterService.kt", "w").write(content)
+with open(filepath, "w") as f:
+    f.writelines(new_lines)
