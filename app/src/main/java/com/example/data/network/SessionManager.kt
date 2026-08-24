@@ -177,6 +177,10 @@ class SessionManager(context: Context) {
     var activeOrderExecutionBroker: String = "Dhan"
 
 
+    var pendingOAuthBroker: String
+        get() = prefs.getString("pending_oauth_broker", "") ?: ""
+        set(value) = prefs.edit().putString("pending_oauth_broker", value).apply()
+
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution
         set(value) {

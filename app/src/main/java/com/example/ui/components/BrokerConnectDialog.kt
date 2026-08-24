@@ -222,6 +222,7 @@ fun BrokerConnectDialog(
                                 android.util.Log.d("UpstoxAuth", "[1] Credentials: PASS")
                                 val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                 val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri, state = "upstox")
+                                sessionManager.pendingOAuthBroker = "Upstox"
                                 try {
                                     android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
                                     android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")
@@ -401,6 +402,7 @@ fun BrokerConnectDialog(
                                 android.util.Log.d("FyersAuth", "[1] Credentials: PASS")
                                 val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
                                 val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, redirectUri, state = "fyers")
+                                sessionManager.pendingOAuthBroker = "Fyers"
                                 try {
                                     android.util.Log.d("UpstoxAuth", "[2] Authorization URL generated: PASS")
                                     android.util.Log.d("FyersAuth", "[2] Authorization URL generated: PASS")

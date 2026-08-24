@@ -1,26 +1,3 @@
-cat << 'INNER_EOF' >> app/src/main/java/com/example/viewmodel/MainViewModel_patch.kt
-    // Background polling job
-    private var marketDataJob: kotlinx.coroutines.Job? = null
+sed -i 's/val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true)/val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Upstox"/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt
 
-    private fun startMarketDataPolling() {
-        if (marketDataJob?.isActive == true) return
-        marketDataJob = viewModelScope.launch {
-            while (true) {
-                runCatching {
-                    if (sessionManager.hasValidSession()) {
-                        repository.syncWithBroker()
-                        _optionStrikes.value = repository.getOptionChainStrikes(_selectedOptionIndex.value)
-                    }
-                }.onFailure { err ->
-                    _apiError.value = err.localizedMessage ?: "Failed to refresh market data."
-                }
-                kotlinx.coroutines.delay(5000L)
-            }
-        }
-    }
-
-    private fun stopMarketDataPolling() {
-        marketDataJob?.cancel()
-        marketDataJob = null
-    }
-INNER_EOF
+sed -i 's/val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true)/val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Fyers"/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

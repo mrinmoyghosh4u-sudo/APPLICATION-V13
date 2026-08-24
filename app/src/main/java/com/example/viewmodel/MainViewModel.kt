@@ -703,17 +703,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val state = uri.getQueryParameter("state") ?: ""
             android.util.Log.d("Auth", "[6] Authorization code received: PASS (hidden)")
-            val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true)
-            val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true)
+            val isUpstox = _connectingBrokerName.value == "Upstox" || state.contains("upstox", ignoreCase = true) || fullUrl.contains("upstox", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Upstox"
+            val isFyers = _connectingBrokerName.value == "Fyers" || state.contains("fyers", ignoreCase = true) || fullUrl.contains("fyers", ignoreCase = true) || sessionManager.pendingOAuthBroker == "Fyers"
 
             if (isUpstox && !code.isNullOrBlank()) {
                 val upstoxKey = sessionManager.upstoxApiKey ?: ""
                 val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
+                sessionManager.pendingOAuthBroker = ""
                 connectUpstox(upstoxKey, upstoxSecret, code)
                 return@launch
             } else if (isFyers && !code.isNullOrBlank()) {
                 val fyersAppId = sessionManager.fyersAppId ?: ""
                 val fyersSecretId = sessionManager.fyersSecretId ?: ""
+                sessionManager.pendingOAuthBroker = ""
                 connectFyers(fyersAppId, fyersSecretId, code)
                 return@launch
             }
