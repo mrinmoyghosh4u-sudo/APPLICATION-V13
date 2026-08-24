@@ -73,14 +73,13 @@ class UpstoxAuthManager(
     }
 
     private suspend fun validateUserProfile(accessToken: String) {
-        try {
-            val authHeader = if (accessToken.startsWith("Bearer ", ignoreCase = true)) accessToken else "Bearer $accessToken"
-            val profileRes = upstoxApi.getUserProfile(authHeader)
-            if (profileRes.isSuccessful) {
-                Log.d(TAG, "Upstox profile validated: user=${profileRes.body()?.data?.userName ?: ""}")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Upstox profile validation notice: ${e.message}")
+        val authHeader = if (accessToken.startsWith("Bearer ", ignoreCase = true)) accessToken else "Bearer $accessToken"
+        val profileRes = upstoxApi.getUserProfile(authHeader)
+        if (profileRes.isSuccessful) {
+            Log.d(TAG, "Upstox profile validated: user=${profileRes.body()?.data?.userName ?: ""}")
+        } else {
+            val errBody = profileRes.errorBody()?.string() ?: "HTTP ${profileRes.code()}"
+            throw Exception("Upstox Profile Validation Failed (${profileRes.code()}): $errBody")
         }
     }
 
