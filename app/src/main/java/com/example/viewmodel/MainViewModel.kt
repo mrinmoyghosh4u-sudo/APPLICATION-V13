@@ -650,9 +650,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cleanAppId = appId.trim()
             val cleanSecretId = secretId.trim()
 
-            if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
+            if (cleanAppId.isBlank()) {
                 _isAuthInProgress.value = false
-                _authErrorMessage.value = "Fyers App ID and Secret ID are required"
+                _authErrorMessage.value = "Fyers App ID is required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
                     com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
@@ -673,7 +673,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             sessionManager.fyersAppId = cleanAppId
-            sessionManager.fyersSecretId = cleanSecretId
+            if (cleanSecretId.isNotBlank()) {
+                sessionManager.fyersSecretId = cleanSecretId
+            }
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
             brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
@@ -750,17 +752,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startFyersOAuth(appId: String, secretId: String, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
         val cleanAppId = appId.trim()
         val cleanSecretId = secretId.trim()
-        if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
+        if (cleanAppId.isBlank()) {
             brokerManager.healthManager.reportAuthFailure(
                 com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
                 com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
                 "Credentials Missing"
             )
-            onError("App ID and Secret ID are required")
+            onError("App ID is required")
             return
         }
         sessionManager.fyersAppId = cleanAppId
-        sessionManager.fyersSecretId = cleanSecretId
+        if (cleanSecretId.isNotBlank()) {
+            sessionManager.fyersSecretId = cleanSecretId
+        }
         val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
         val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
         sessionManager.pendingFyersOAuthState = randomState

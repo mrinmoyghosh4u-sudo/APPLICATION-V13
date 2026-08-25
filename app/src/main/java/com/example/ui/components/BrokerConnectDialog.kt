@@ -518,8 +518,8 @@ fun BrokerConnectDialog(
                                 val secretToUse = fyersSecretId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersSecretId
                                 val redirectUriToUse = fyersRedirectUri.trim().takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
                                 
-                                if (appToUse.isBlank() || secretToUse.isBlank()) {
-                                    localErrorMsg = "Fyers App ID & Secret are required."
+                                if (appToUse.isBlank()) {
+                                    localErrorMsg = "Fyers App ID is required."
                                 } else {
                                     localErrorMsg = null
                                     sessionManager.saveFyersCredentials(appToUse, secretToUse, redirectUriToUse)

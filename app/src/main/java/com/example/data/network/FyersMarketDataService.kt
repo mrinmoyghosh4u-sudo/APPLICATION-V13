@@ -74,6 +74,8 @@ class FyersMarketDataService(
         return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
     }
 
+    private var backoffDelayMs = 2000L
+
     suspend fun connect() {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
@@ -81,7 +83,9 @@ class FyersMarketDataService(
             Log.e(TAG, "[FYERS_AUTH_FAILED] Cannot connect: Fyers credentials missing")
             return
         }
+        _connectionState.value = "AUTHENTICATED"
         reconnectJob?.cancel()
+        backoffDelayMs = 2000L
         connectWebSocket()
     }
 
@@ -112,11 +116,13 @@ class FyersMarketDataService(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "[FYERS_WS_CONNECTED] FYERS WebSocket connected")
                 isConnected = true
+                backoffDelayMs = 2000L
                 _connectionState.value = "CONNECTED"
                 com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "CONNECTED")
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
                 healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
 
+                _connectionState.value = "AUTHENTICATED"
                 _connectionState.value = "SUBSCRIBING"
                 healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
                 
@@ -132,6 +138,7 @@ class FyersMarketDataService(
                     Log.d(TAG, "[FYERS_SUBSCRIPTION_SENT] Subscribed to default FYERS symbols")
                 }
 
+                _connectionState.value = "SUBSCRIBED"
                 _connectionState.value = "WAITING_FOR_FIRST_TICK"
                 healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
             }
@@ -150,6 +157,7 @@ class FyersMarketDataService(
                 _connectionState.value = "DISCONNECTED"
                 com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
                 healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
+                scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -166,9 +174,10 @@ class FyersMarketDataService(
     private fun scheduleReconnect() {
         if (reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            delay(5000)
-            if (!isConnected) {
-                Log.d(TAG, "Attempting reconnect...")
+            delay(backoffDelayMs)
+            backoffDelayMs = minOf(backoffDelayMs * 2, 30000L) // Exponential backoff up to 30s
+            if (!isConnected && isConfigured()) {
+                Log.d(TAG, "Attempting FYERS WebSocket reconnect...")
                 connectWebSocket()
             }
         }

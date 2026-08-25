@@ -19,23 +19,23 @@ class FyersAuthManager(
     suspend fun exchangeAuthCode(authCode: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val appId = sessionManager.fyersAppId.takeIf { it.isNotBlank() } ?: throw Exception("Fyers App ID missing")
-            val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() } ?: throw Exception("Fyers Secret ID missing")
+            val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() }
+                ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
-            val appIdHash = FyersAuthHelper.generateAppIdHash(appId, secret)
+            val backendBase = FyersAuthHelper.DEFAULT_REDIRECT_URI.substringBefore("/oauth")
+            val tokenExchangeUrl = "$backendBase/api/fyers-token-exchange"
 
-            val request = FyersTokenRequest(
-                grant_type = "authorization_code",
-                appIdHash = appIdHash,
-                code = authCode.trim()
-            )
-
-            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange...")
-            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
+            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange via backend...")
+            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange via backend...")
             val response = try {
-                fyersApi.validateAuthCode(request)
+                fyersApi.exchangeTokenSecurely(
+                    url = tokenExchangeUrl,
+                    code = authCode.trim(),
+                    redirectUri = redirectUri
+                )
             } catch (e: Exception) {
                 _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Network error during FYERS token exchange: ${e.localizedMessage}")
+                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Network error during FYERS secure token exchange: ${e.localizedMessage}")
                 throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
             }
 

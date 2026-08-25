@@ -130,6 +130,13 @@ interface FyersApi {
         @Body request: FyersTokenRequest
     ): Response<FyersTokenResponse>
 
+    @GET
+    suspend fun exchangeTokenSecurely(
+        @retrofit2.http.Url url: String,
+        @Query("code") code: String,
+        @Query("redirect_uri") redirectUri: String
+    ): Response<FyersTokenResponse>
+
     @GET("data/history")
     suspend fun getHistory(
         @Header("Authorization") auth: String,

@@ -4,6 +4,8 @@
     { "source": "/oauth", "destination": "/api/oauth" },
     { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks" },
     { "source": "/api/token-exchange", "destination": "/api/token-exchange" },
-    { "source": "/token-exchange", "destination": "/api/token-exchange" }
+    { "source": "/token-exchange", "destination": "/api/token-exchange" },
+    { "source": "/api/fyers-token-exchange", "destination": "/api/fyers-token-exchange" },
+    { "source": "/fyers-token-exchange", "destination": "/api/fyers-token-exchange" }
   ]
 }

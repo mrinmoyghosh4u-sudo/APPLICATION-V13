@@ -145,6 +145,88 @@ const handleTokenExchange = (req, res) => {
 app.all('/api/token-exchange', handleTokenExchange);
 app.all('/token-exchange', handleTokenExchange);
 
+// FYERS Token Exchange Endpoint
+const crypto = require('crypto');
+const handleFyersTokenExchange = (req, res) => {
+  let code = '';
+  let redirectUri = '';
+
+  if (req.method === 'POST') {
+    code = req.body?.code || '';
+    redirectUri = req.body?.redirect_uri || '';
+  } else {
+    code = req.query?.code || '';
+    redirectUri = req.query?.redirect_uri || '';
+  }
+
+  code = (code || '').trim();
+  redirectUri = (redirectUri || '').trim();
+
+  if (!code) {
+    return res.status(400).json({ s: "error", code: 400, message: "Missing authorization code" });
+  }
+
+  let appId = (process.env.FYERS_APP_ID || '').trim();
+  const secretId = (process.env.FYERS_SECRET_ID || '').trim();
+
+  if (!appId || !secretId) {
+    return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration" });
+  }
+
+  if (!appId.endsWith('-100')) {
+    appId = `${appId}-100`;
+  }
+
+  const hashInput = `${appId}:${secretId}`;
+  const appIdHash = crypto.createHash('sha256').update(hashInput).digest('hex');
+
+  const postPayload = JSON.stringify({
+    grant_type: 'authorization_code',
+    appIdHash: appIdHash,
+    code: code
+  });
+
+  const options = {
+    hostname: 'api-t1.fyers.in',
+    port: 443,
+    path: '/api/v3/validate-authcode',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Content-Length': Buffer.byteLength(postPayload)
+    }
+  };
+
+  const postReq = https.request(options, (postRes) => {
+    let body = '';
+    postRes.setEncoding('utf8');
+    postRes.on('data', (chunk) => {
+      body += chunk;
+    });
+    postRes.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const jsonResponse = JSON.parse(body);
+        res.status(postRes.statusCode).json(jsonResponse);
+      } catch (e) {
+        res.status(postRes.statusCode).send(body);
+      }
+    });
+  });
+
+  postReq.on('error', (e) => {
+    console.error(`FYERS Token exchange error: ${e.message}`);
+    res.status(500).json({ s: "error", code: 500, message: `Internal connection error: ${e.message}` });
+  });
+
+  postReq.write(postPayload);
+  postReq.end();
+};
+
+app.all('/api/fyers-token-exchange', handleFyersTokenExchange);
+app.all('/fyers-token-exchange', handleFyersTokenExchange);
+
 app.get('/', (req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.status(200).send(`
