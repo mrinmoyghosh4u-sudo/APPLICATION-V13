@@ -61,13 +61,17 @@ class FyersAuthManager(
                     if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {
                         val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
                         Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
-                        throw Exception("TOKEN_INVALID: $pErr")
+                        throw Exception("PROFILE_VALIDATION_FAILED: $pErr")
                     }
                     Log.i(TAG, "[PROFILE_VALIDATED] FYERS token profile validation passed")
                     Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
                 } catch (e: Exception) {
-                    if (e.message?.startsWith("TOKEN_INVALID") == true) throw e
-                    Log.w(TAG, "[FYERS_TOKEN_VALID] Profile check warning (proceeding): ${e.localizedMessage}")
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    if (e.message?.startsWith("PROFILE_VALIDATION_FAILED") == true) {
+                        throw e
+                    } else {
+                        throw Exception("PROFILE_VALIDATION_FAILED: ${e.localizedMessage}")
+                    }
                 }
 
                 sessionManager.fyersAccessToken = accessToken

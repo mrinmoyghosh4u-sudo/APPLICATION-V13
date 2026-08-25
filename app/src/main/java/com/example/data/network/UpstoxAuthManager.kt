@@ -69,8 +69,8 @@ class UpstoxAuthManager(
                 validateUserProfile(accessToken)
             } catch (e: Exception) {
                 _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[UPSTOX_TOKEN_INVALID] Token validation failed: ${e.message}")
-                throw Exception("TOKEN_INVALID: ${e.message}")
+                Log.e(TAG, "[UPSTOX_PROFILE_VALIDATION_FAILED] Token validation failed: ${e.message}")
+                throw Exception("PROFILE_VALIDATION_FAILED: ${e.message}")
             }
 
             Log.i(TAG, "[PROFILE_VALIDATED] Upstox token profile validation passed")

@@ -193,6 +193,44 @@ class SessionManager(context: Context) {
         get() = prefs.getString("pending_fyers_oauth_state", "") ?: ""
         set(value) = prefs.edit().putString("pending_fyers_oauth_state", value).apply()
 
+    data class PendingOAuthSession(
+        val provider: String,
+        val state: String,
+        val createdAt: Long,
+        val redirectUri: String,
+        val consumed: Boolean = false
+    )
+
+    var pendingOAuthSession: PendingOAuthSession?
+        get() {
+            val provider = prefs.getString("pending_session_provider", "") ?: ""
+            val state = prefs.getString("pending_session_state", "") ?: ""
+            val createdAt = prefs.getLong("pending_session_created_at", 0L)
+            val redirectUri = prefs.getString("pending_session_redirect_uri", "") ?: ""
+            val consumed = prefs.getBoolean("pending_session_consumed", false)
+            if (provider.isBlank() || state.isBlank()) return null
+            return PendingOAuthSession(provider, state, createdAt, redirectUri, consumed)
+        }
+        set(value) {
+            if (value == null) {
+                prefs.edit()
+                    .remove("pending_session_provider")
+                    .remove("pending_session_state")
+                    .remove("pending_session_created_at")
+                    .remove("pending_session_redirect_uri")
+                    .remove("pending_session_consumed")
+                    .apply()
+            } else {
+                prefs.edit()
+                    .putString("pending_session_provider", value.provider)
+                    .putString("pending_session_state", value.state)
+                    .putLong("pending_session_created_at", value.createdAt)
+                    .putString("pending_session_redirect_uri", value.redirectUri)
+                    .putBoolean("pending_session_consumed", value.consumed)
+                    .apply()
+            }
+        }
+
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution
         set(value) {

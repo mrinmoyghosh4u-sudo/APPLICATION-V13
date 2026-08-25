@@ -196,23 +196,45 @@ class BrokerAuthManager(
         val timestamp = sessionManager.upstoxTokenTimestamp
         val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
 
-        if (hasSession && !isExpired) {
-            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        if (isExpired) {
+            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, "TOKEN_EXPIRED")
+            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+            return
+        }
+
+        if (hasSession) {
             try {
                 val token = sessionManager.upstoxAccessToken ?: ""
                 val authHeader = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
                 val profileRes = brokerManager.networkClient.upstoxApi.getUserProfile(token = authHeader)
                 if (profileRes.isSuccessful && profileRes.body()?.status?.equals("success", ignoreCase = true) == true) {
+                    brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
                     updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
                     brokerManager.upstoxMarketDataService.connect()
                     return
+                } else {
+                    val code = profileRes.code()
+                    val msg = profileRes.errorBody()?.string() ?: "HTTP $code"
+                    if (code == 401 || code == 403) {
+                        sessionManager.clearUpstoxSession()
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "TOKEN_INVALID", "TOKEN_INVALID: $msg")
+                        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                    } else {
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "AUTH_FAILED", "AUTH_FAILED: $msg")
+                        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Profile Validation Failed: $msg")
+                    }
+                    return
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Upstox profile check warning: ${e.message}")
+                Log.e(TAG, "Upstox profile validation network error: ${e.message}")
+                brokerManager.healthManager.reportAuthFailure(
+                    ProviderHealthManager.PROVIDER_UPSTOX,
+                    "TEMPORARY_NETWORK_ERROR",
+                    "TEMPORARY_NETWORK_ERROR: ${e.localizedMessage}"
+                )
+                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                return
             }
-            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
-            brokerManager.upstoxMarketDataService.connect()
-            return
         }
 
         updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Authentication Required. Tap LOGIN VIA BROWSER.")
@@ -227,7 +249,9 @@ class BrokerAuthManager(
             brokerManager.upstoxMarketDataService.connect()
         } else {
             val err = res.exceptionOrNull()?.message ?: "Exchange failed"
-            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, err)
+            val failureState = if (err.contains("PROFILE_VALIDATION_FAILED")) "PROFILE_VALIDATION_FAILED" else "TOKEN_EXCHANGE_FAILED"
+            brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, failureState, err)
+            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Authentication failed: $err")
         }
         res
     }
@@ -243,7 +267,7 @@ class BrokerAuthManager(
         
         brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, isConfigured || hasSession)
 
-        if (!hasSession && !hasRefreshToken) {
+        if (!isConfigured && !hasSession) {
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
             return
         }
@@ -271,11 +295,28 @@ class BrokerAuthManager(
                     brokerManager.fyersMarketDataService.connect()
                     return
                 } else {
-                    val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                    val code = profileRes.code()
+                    val pErr = profileRes.body()?.message ?: "HTTP $code"
                     Log.e(TAG, "Fyers profile validation failed: $pErr")
+                    if (code == 401 || code == 403 || pErr.contains("invalid", ignoreCase = true) || pErr.contains("expire", ignoreCase = true)) {
+                        sessionManager.clearFyersSession()
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, "TOKEN_INVALID", "TOKEN_INVALID: $pErr")
+                        updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                    } else {
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, "AUTH_FAILED", "AUTH_FAILED: $pErr")
+                        updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Profile Validation Failed: $pErr")
+                    }
+                    return
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Fyers profile validation request failed: ${e.message}")
+                brokerManager.healthManager.reportAuthFailure(
+                    ProviderHealthManager.PROVIDER_FYERS,
+                    "TEMPORARY_NETWORK_ERROR",
+                    "TEMPORARY_NETWORK_ERROR: ${e.localizedMessage}"
+                )
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                return
             }
         }
         
@@ -293,9 +334,17 @@ class BrokerAuthManager(
                         updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
                         brokerManager.fyersMarketDataService.connect()
                         return
+                    } else {
+                        val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, "AUTH_FAILED", "AUTH_FAILED: $pErr")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Fyers refreshed profile check failed: ${e.message}")
+                    brokerManager.healthManager.reportAuthFailure(
+                        ProviderHealthManager.PROVIDER_FYERS,
+                        "TEMPORARY_NETWORK_ERROR",
+                        "TEMPORARY_NETWORK_ERROR: ${e.localizedMessage}"
+                    )
                 }
             }
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
