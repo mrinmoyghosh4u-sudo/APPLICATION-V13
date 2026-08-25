@@ -93,14 +93,37 @@ class FyersAuthManager(
         _authStatus.value = BrokerAuthStatus.OFFLINE
     }
 
-    fun validateSession(): Boolean {
-        return if (!sessionManager.fyersAccessToken.isNullOrBlank()) {
-            android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
+    suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
+        val token = sessionManager.fyersAccessToken
+        val appId = sessionManager.fyersAppId
+        if (token.isNullOrBlank() || appId.isBlank()) {
+            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+            return@withContext false
+        }
+
+        // Check if token is older than 20 hours (expires daily)
+        val timestamp = sessionManager.fyersTokenTimestamp
+        val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
+        if (isExpired) {
+            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+            return@withContext false
+        }
+
+        val authHeader = "$appId:$token"
+        try {
+            val profileRes = fyersApi.getProfile(authHeader)
+            if (profileRes.isSuccessful && profileRes.body()?.s == "ok") {
+                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
                 android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
-            true
-        } else {
-            _authStatus.value = BrokerAuthStatus.CONFIGURE
+                true
+            } else {
+                _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fyers validateSession profile call failed: ${e.message}")
+            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
             false
         }
     }

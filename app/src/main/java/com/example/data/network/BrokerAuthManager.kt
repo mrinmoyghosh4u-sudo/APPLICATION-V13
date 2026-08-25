@@ -247,28 +247,58 @@ class BrokerAuthManager(
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
             return
         }
+
+        val currentHealth = brokerManager.healthManager.getHealthState(ProviderHealthManager.PROVIDER_FYERS)
+        if (!hasSession && (currentHealth.authenticationState == ProviderHealthManager.STATE_AUTHENTICATING || currentHealth.authenticationState == ProviderHealthManager.STATE_WAITING_FOR_CALLBACK || currentHealth.authenticationState == ProviderHealthManager.STATE_TOKEN_EXCHANGE)) {
+            Log.d(TAG, "Fyers OAuth currently in progress: preserving active state '${currentHealth.authenticationState}'")
+            return
+        }
         
         // Check if token is older than 20 hours (expires daily)
         val timestamp = sessionManager.fyersTokenTimestamp
         val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
         
         if (hasSession && !isExpired) {
-            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
-            // Reconnect WebSocket
-            brokerManager.fyersMarketDataService.connect()
-            return
+            try {
+                val token = sessionManager.fyersAccessToken ?: ""
+                val appId = sessionManager.fyersAppId
+                val authHeader = "$appId:$token"
+                val profileRes = brokerManager.networkClient.fyersApi.getProfile(authHeader)
+                if (profileRes.isSuccessful && profileRes.body()?.s == "ok") {
+                    brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
+                    // Reconnect WebSocket
+                    brokerManager.fyersMarketDataService.connect()
+                    return
+                } else {
+                    val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                    Log.e(TAG, "Fyers profile validation failed: $pErr")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Fyers profile validation request failed: ${e.message}")
+            }
         }
         
         if (hasRefreshToken) {
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
             val result = reconnectBroker("Fyers")
             if (result.isSuccess) {
-                brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
-            } else {
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                try {
+                    val token = sessionManager.fyersAccessToken ?: ""
+                    val appId = sessionManager.fyersAppId
+                    val authHeader = "$appId:$token"
+                    val profileRes = brokerManager.networkClient.fyersApi.getProfile(authHeader)
+                    if (profileRes.isSuccessful && profileRes.body()?.s == "ok") {
+                        brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+                        updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
+                        brokerManager.fyersMarketDataService.connect()
+                        return
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Fyers refreshed profile check failed: ${e.message}")
+                }
             }
+            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
         } else {
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
         }
