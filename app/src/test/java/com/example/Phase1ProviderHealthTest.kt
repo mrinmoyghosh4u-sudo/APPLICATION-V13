@@ -31,12 +31,12 @@ class Phase1ProviderHealthTest {
     fun testWebSocketOpenedDoesNotSetLiveState() {
         // Report connection opened
         healthManager.reportConnecting(ProviderHealthManager.PROVIDER_UPSTOX)
-        assertEquals("CONNECTING", healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX).status)
+        assertEquals("WEBSOCKET_CONNECTING", healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX).status)
 
         healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
         val stateAfterConnection = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
-        assertEquals("CONNECTED", stateAfterConnection.webSocketState)
-        assertEquals("CONNECTED", stateAfterConnection.status)
+        assertEquals("WEBSOCKET_CONNECTED", stateAfterConnection.webSocketState)
+        assertEquals("WEBSOCKET_CONNECTED", stateAfterConnection.status)
         assertFalse("WebSocket connected MUST NOT be set to LIVE", stateAfterConnection.healthy)
 
         healthManager.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)

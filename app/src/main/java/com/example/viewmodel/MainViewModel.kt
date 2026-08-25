@@ -579,7 +579,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authErrorMessage.value = "Upstox API Key and API Secret are required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
-                    com.example.data.network.ProviderHealthManager.STATE_NOT_CONFIGURED,
+                    com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
                     "Credentials Missing"
                 )
                 return@launch
@@ -643,7 +643,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authErrorMessage.value = "Fyers App ID and Secret ID are required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
-                    com.example.data.network.ProviderHealthManager.STATE_NOT_CONFIGURED,
+                    com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
                     "Credentials Missing"
                 )
                 return@launch
@@ -691,6 +691,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authErrorMessage.value = "Fyers Authentication Failed: $err"
             }
         }
+    }
+
+    fun startUpstoxOAuth(apiKey: String, apiSecret: String, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
+        val cleanKey = apiKey.trim()
+        val cleanSecret = apiSecret.trim()
+        if (cleanKey.isBlank() || cleanSecret.isBlank()) {
+            brokerManager.healthManager.reportAuthFailure(
+                com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
+                com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
+                "Credentials Missing"
+            )
+            onError("API Key and API Secret are required")
+            return
+        }
+        sessionManager.upstoxApiKey = cleanKey
+        sessionManager.upstoxApiSecret = cleanSecret
+        val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+        val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
+        sessionManager.pendingUpstoxOAuthState = randomState
+        sessionManager.pendingOAuthState = randomState
+        sessionManager.pendingOAuthBroker = "Upstox"
+        
+        android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
+        brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
+        brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
+        
+        android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
+        android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+        brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
+
+        val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(cleanKey, redirectUri, state = randomState)
+        onUrlGenerated(loginUrl)
+    }
+
+    fun startFyersOAuth(appId: String, secretId: String, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
+        val cleanAppId = appId.trim()
+        val cleanSecretId = secretId.trim()
+        if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
+            brokerManager.healthManager.reportAuthFailure(
+                com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
+                com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,
+                "Credentials Missing"
+            )
+            onError("App ID and Secret ID are required")
+            return
+        }
+        sessionManager.fyersAppId = cleanAppId
+        sessionManager.fyersSecretId = cleanSecretId
+        val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+        val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
+        sessionManager.pendingFyersOAuthState = randomState
+        sessionManager.pendingOAuthState = randomState
+        sessionManager.pendingOAuthBroker = "Fyers"
+        
+        android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
+        brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
+        brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
+        
+        android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
+        android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+        brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
+
+        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(cleanAppId, redirectUri, state = randomState)
+        onUrlGenerated(loginUrl)
     }
 
     fun reconnectBroker(brokerName: String) {
@@ -797,12 +861,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val state = uri.getQueryParameter("state") ?: ""
-            val pendingState = sessionManager.pendingOAuthState
             val pendingBroker = sessionManager.pendingOAuthBroker
             android.util.Log.d("Auth", "[6] Authorization code received: PASS (hidden)")
 
             val isUpstox = pendingBroker == "Upstox" || _connectingBrokerName.value == "Upstox" || state.startsWith("upstox_") || (state.contains("upstox", ignoreCase = true) && !state.contains("fyers", ignoreCase = true))
             val isFyers = pendingBroker == "Fyers" || _connectingBrokerName.value == "Fyers" || state.startsWith("fyers_") || (state.contains("fyers", ignoreCase = true) && !state.contains("upstox", ignoreCase = true))
+
+            val pendingState = if (isUpstox) {
+                sessionManager.pendingUpstoxOAuthState.takeIf { it.isNotBlank() } ?: sessionManager.pendingOAuthState
+            } else if (isFyers) {
+                sessionManager.pendingFyersOAuthState.takeIf { it.isNotBlank() } ?: sessionManager.pendingOAuthState
+            } else {
+                sessionManager.pendingOAuthState
+            }
 
             if (isUpstox || isFyers) {
                 val providerName = if (isUpstox) ProviderHealthManager.PROVIDER_UPSTOX else ProviderHealthManager.PROVIDER_FYERS
@@ -818,6 +889,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     android.util.Log.e("Auth", "[$logPrefix" + "_AUTH_CANCELLED] $errMsg")
                     _authErrorMessage.value = errMsg
                     _isAuthInProgress.value = false
+                    if (isUpstox) {
+                        sessionManager.pendingUpstoxOAuthState = ""
+                    } else if (isFyers) {
+                        sessionManager.pendingFyersOAuthState = ""
+                    }
                     sessionManager.pendingOAuthState = ""
                     sessionManager.pendingOAuthBroker = ""
                     brokerManager.healthManager.reportAuthFailure(providerName, ProviderHealthManager.STATE_AUTH_CANCELLED, errMsg)
@@ -832,6 +908,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         android.util.Log.e("Auth", "[$logPrefix" + "_STATE_MISMATCH] $errMsg")
                         _authErrorMessage.value = "$logPrefix Authentication Failed: State Mismatch"
                         _isAuthInProgress.value = false
+                        if (isUpstox) {
+                            sessionManager.pendingUpstoxOAuthState = ""
+                        } else if (isFyers) {
+                            sessionManager.pendingFyersOAuthState = ""
+                        }
                         sessionManager.pendingOAuthState = ""
                         sessionManager.pendingOAuthBroker = ""
                         brokerManager.healthManager.reportAuthFailure(
@@ -843,6 +924,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         android.util.Log.i("Auth", "[$logPrefix" + "_STATE_VALID] OAuth State Validation: PASS")
                     }
+                }
+                if (isUpstox) {
+                    sessionManager.pendingUpstoxOAuthState = ""
+                } else if (isFyers) {
+                    sessionManager.pendingFyersOAuthState = ""
                 }
                 sessionManager.pendingOAuthState = ""
 

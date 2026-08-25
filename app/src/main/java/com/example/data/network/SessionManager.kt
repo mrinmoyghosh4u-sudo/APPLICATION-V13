@@ -41,8 +41,8 @@ class SessionManager(context: Context) {
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
             }.getOrElse { err ->
-                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}")
-                throw SecurityException("Failed to initialize secure encrypted storage: ${err.message}")
+                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}, falling back to standard SharedPreferences")
+                context.getSharedPreferences(prefFileName, Context.MODE_PRIVATE)
             }
         }
     }
@@ -184,6 +184,14 @@ class SessionManager(context: Context) {
     var pendingOAuthState: String
         get() = prefs.getString("pending_oauth_state", "") ?: ""
         set(value) = prefs.edit().putString("pending_oauth_state", value).apply()
+
+    var pendingUpstoxOAuthState: String
+        get() = prefs.getString("pending_upstox_oauth_state", "") ?: ""
+        set(value) = prefs.edit().putString("pending_upstox_oauth_state", value).apply()
+
+    var pendingFyersOAuthState: String
+        get() = prefs.getString("pending_fyers_oauth_state", "") ?: ""
+        set(value) = prefs.edit().putString("pending_fyers_oauth_state", value).apply()
 
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution

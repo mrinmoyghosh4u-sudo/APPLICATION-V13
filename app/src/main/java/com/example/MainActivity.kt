@@ -727,7 +727,35 @@ class MainActivity : FragmentActivity() {
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
                                 onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },
                                 onFyersLogin = { appId, secretId, authCode -> viewModel.connectFyers(appId, secretId, authCode) },
-                                onUpstoxLogin = { apiKey, apiSecret, authCode -> viewModel.connectUpstox(apiKey, apiSecret, authCode) }
+                                onUpstoxLogin = { apiKey, apiSecret, authCode -> viewModel.connectUpstox(apiKey, apiSecret, authCode) },
+                                onStartUpstoxOAuth = { apiKey, apiSecret ->
+                                    viewModel.startUpstoxOAuth(apiKey, apiSecret,
+                                        onUrlGenerated = { loginUrl ->
+                                            try {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                                this@MainActivity.startActivity(intent)
+                                                viewModel.closeConnectDialog()
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("Auth", "Failed to open browser: ${e.message}")
+                                            }
+                                        },
+                                        onError = { /* error reported via live data/diagnostics */ }
+                                    )
+                                },
+                                onStartFyersOAuth = { appId, secretId ->
+                                    viewModel.startFyersOAuth(appId, secretId,
+                                        onUrlGenerated = { loginUrl ->
+                                            try {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                                this@MainActivity.startActivity(intent)
+                                                viewModel.closeConnectDialog()
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("Auth", "Failed to open browser: ${e.message}")
+                                            }
+                                        },
+                                        onError = { /* error reported via live data/diagnostics */ }
+                                    )
+                                }
                             )
                         }
 

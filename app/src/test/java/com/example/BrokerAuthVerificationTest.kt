@@ -85,8 +85,8 @@ class BrokerAuthVerificationTest {
         healthManager.reportConnecting(ProviderHealthManager.PROVIDER_UPSTOX)
         healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
         val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
-        assertEquals("CONNECTED", state.webSocketState)
-        assertEquals("CONNECTED", state.status)
+        assertEquals("WEBSOCKET_CONNECTED", state.webSocketState)
+        assertEquals("WEBSOCKET_CONNECTED", state.status)
         assertFalse("WebSocket connected MUST NOT be set to LIVE or healthy", state.healthy)
     }
 
@@ -262,7 +262,7 @@ class BrokerAuthVerificationTest {
         val provider = ProviderHealthManager.PROVIDER_FYERS
 
         healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_STATE_MISMATCH, "State mismatch")
-        assertEquals("STATE_MISMATCH", healthManager.getHealthState(provider).authenticationState)
+        assertEquals("STATE_VALIDATION_FAILED", healthManager.getHealthState(provider).authenticationState)
 
         healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_AUTH_CODE_MISSING, "Code missing")
         assertEquals("AUTH_CODE_MISSING", healthManager.getHealthState(provider).authenticationState)

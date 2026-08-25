@@ -18,4 +18,30 @@ class ExampleRobolectricTest {
     val appName = context.getString(R.string.app_name)
     assertEquals("KING KHAN AI TRADE", appName)
   }
+
+  @Test
+  fun `verify Upstox and Fyers OAuth states and credentials are completely isolated`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val sessionManager = com.example.data.network.SessionManager(context)
+
+    // Reset initially
+    sessionManager.pendingUpstoxOAuthState = ""
+    sessionManager.pendingFyersOAuthState = ""
+
+    // 1. Assert initial states are blank
+    assertEquals("", sessionManager.pendingUpstoxOAuthState)
+    assertEquals("", sessionManager.pendingFyersOAuthState)
+
+    // 2. Set Upstox state and verify Fyers state is untouched
+    val upstoxState = "upstox_test_123"
+    sessionManager.pendingUpstoxOAuthState = upstoxState
+    assertEquals(upstoxState, sessionManager.pendingUpstoxOAuthState)
+    assertEquals("", sessionManager.pendingFyersOAuthState)
+
+    // 3. Set Fyers state and verify Upstox state is untouched
+    val fyersState = "fyers_test_456"
+    sessionManager.pendingFyersOAuthState = fyersState
+    assertEquals(fyersState, sessionManager.pendingFyersOAuthState)
+    assertEquals(upstoxState, sessionManager.pendingUpstoxOAuthState) // Must remain unchanged!
+  }
 }
