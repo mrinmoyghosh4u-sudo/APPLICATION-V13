@@ -22,8 +22,14 @@ val dhanRedirectUriVal = getSecret("DHAN_REDIRECT_URI", "kingkhan://oauth/callba
 val angelApiKeyVal = getSecret("ANGEL_ONE_API_KEY")
 val angelRedirectUriVal = getSecret("ANGEL_REDIRECT_URI", "kingkhan://oauth/callback")
 val githubTokenVal = getSecret("GITHUB_TOKEN", getSecret("GH_TOKEN", ""))
+val upstoxApiKeyVal = getSecret("UPSTOX_API_KEY")
+val upstoxApiSecretVal = getSecret("UPSTOX_API_SECRET")
+val upstoxRedirectUriVal = getSecret("UPSTOX_REDIRECT_URI", "https://application-beige-psi.vercel.app/oauth")
+val fyersAppIdVal = getSecret("FYERS_APP_ID")
+val fyersSecretIdVal = getSecret("FYERS_SECRET_ID")
+val fyersRedirectUriVal = getSecret("FYERS_REDIRECT_URI", "https://application-beige-psi.vercel.app/oauth")
 
-if (dhanClientIdVal.isNotBlank() || dhanApiKeyVal.isNotBlank() || angelApiKeyVal.isNotBlank()) {
+if (dhanClientIdVal.isNotBlank() || dhanApiKeyVal.isNotBlank() || angelApiKeyVal.isNotBlank() || upstoxApiKeyVal.isNotBlank() || fyersAppIdVal.isNotBlank()) {
     envFile.writeText("""
         DHAN_API_KEY=$dhanApiKeyVal
         DHAN_CLIENT_ID=$dhanClientIdVal
@@ -31,6 +37,12 @@ if (dhanClientIdVal.isNotBlank() || dhanApiKeyVal.isNotBlank() || angelApiKeyVal
         DHAN_REDIRECT_URI=$dhanRedirectUriVal
         ANGEL_ONE_API_KEY=$angelApiKeyVal
         ANGEL_REDIRECT_URI=$angelRedirectUriVal
+        UPSTOX_API_KEY=$upstoxApiKeyVal
+        UPSTOX_API_SECRET=$upstoxApiSecretVal
+        UPSTOX_REDIRECT_URI=$upstoxRedirectUriVal
+        FYERS_APP_ID=$fyersAppIdVal
+        FYERS_SECRET_ID=$fyersSecretIdVal
+        FYERS_REDIRECT_URI=$fyersRedirectUriVal
     """.trimIndent())
 }
 
@@ -66,6 +78,12 @@ android {
     buildConfigField("String", "ANGEL_ONE_API_KEY", "\"${angelApiKeyVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "ANGEL_REDIRECT_URI", "\"${angelRedirectUriVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "GITHUB_TOKEN", "\"${githubTokenVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "UPSTOX_API_KEY", "\"${upstoxApiKeyVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "UPSTOX_API_SECRET", "\"${upstoxApiSecretVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "UPSTOX_REDIRECT_URI", "\"${upstoxRedirectUriVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "FYERS_APP_ID", "\"${fyersAppIdVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "FYERS_SECRET_ID", "\"${fyersSecretIdVal.replace("\"", "\\\"")}\"")
+    buildConfigField("String", "FYERS_REDIRECT_URI", "\"${fyersRedirectUriVal.replace("\"", "\\\"")}\"")
   }
 
   signingConfigs {
@@ -170,6 +188,12 @@ secrets {
   ignoreList.add("DHAN_REDIRECT_URI")
   ignoreList.add("ANGEL_ONE_API_KEY")
   ignoreList.add("ANGEL_REDIRECT_URI")
+  ignoreList.add("UPSTOX_API_KEY")
+  ignoreList.add("UPSTOX_API_SECRET")
+  ignoreList.add("UPSTOX_REDIRECT_URI")
+  ignoreList.add("FYERS_APP_ID")
+  ignoreList.add("FYERS_SECRET_ID")
+  ignoreList.add("FYERS_REDIRECT_URI")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }

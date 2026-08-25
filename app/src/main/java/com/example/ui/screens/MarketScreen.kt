@@ -156,6 +156,7 @@ fun MarketScreen(
             ExchangeIndicesSection(
                 exchange = selectedExchange,
                 marketDataMap = marketDataMap,
+                watchlist = watchlist,
                 onNavigateToIndexDetails = onNavigateToIndexDetails,
                 onOpenOrderDialog = onOpenOrderDialog,
                 onOpenChartDialog = { name, exch, ltp, change, changePct, lot ->
@@ -499,8 +500,10 @@ private fun SearchResultsCard(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     results.forEach { item ->
                         val tick = marketDataMap[item.symbol]
-                        val ltp = tick?.ltp ?: 0.0
-                        val changePct = tick?.changePercent ?: 0.0
+                            ?: marketDataMap.values.find { it.symbol.equals(item.symbol, ignoreCase = true) }
+                        val watchItem = watchlist.find { it.symbol.equals(item.symbol, ignoreCase = true) }
+                        val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
+                        val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else (watchItem?.changePercent ?: 0.0)
                         val hasPrice = ltp > 0.0
                         val isPositive = changePct >= 0
                         val isFav = watchlist.any { it.symbol.equals(item.symbol, ignoreCase = true) }
@@ -651,6 +654,7 @@ private fun ExchangeSegmentTabs(
 private fun ExchangeIndicesSection(
     exchange: String,
     marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    watchlist: List<com.example.data.model.WatchlistItem> = emptyList(),
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
     onOpenChartDialog: (name: String, exchange: String, ltp: Double, change: Double, changePct: Double, lotSize: Int) -> Unit
@@ -731,9 +735,12 @@ private fun ExchangeIndicesSection(
                 ) {
                     rowItems.forEach { item ->
                         val tick = marketDataMap[item.name]
-                        val ltp = tick?.ltp ?: item.price
-                        val change = tick?.change ?: item.change
-                        val changePct = tick?.changePercent ?: item.changePct
+                            ?: marketDataMap.values.find { it.symbol.equals(item.name, ignoreCase = true) }
+                        val watchItem = watchlist.find { it.symbol.equals(item.name, ignoreCase = true) }
+                        
+                        val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.ltp else item.price
+                        val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.change else item.change
+                        val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.changePercent else item.changePct
 
                         IndexGridCard(
                             name = item.name,

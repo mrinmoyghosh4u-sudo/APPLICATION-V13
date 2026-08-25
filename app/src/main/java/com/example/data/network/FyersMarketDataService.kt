@@ -113,6 +113,7 @@ class FyersMarketDataService(
                 Log.i(TAG, "[FYERS_WS_CONNECTED] FYERS WebSocket connected")
                 isConnected = true
                 _connectionState.value = "CONNECTED"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "CONNECTED")
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
                 healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
 
@@ -147,6 +148,7 @@ class FyersMarketDataService(
                 Log.w(TAG, "[FYERS_DISCONNECTED] WebSocket closed: $code / $reason")
                 isConnected = false
                 _connectionState.value = "DISCONNECTED"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
                 healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
             }
 
@@ -154,6 +156,7 @@ class FyersMarketDataService(
                 Log.e(TAG, "[FYERS_DISCONNECTED] WebSocket failure: ${t.message}")
                 isConnected = false
                 _connectionState.value = "ERROR"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
                 healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS, t.message ?: "WebSocket failure")
                 scheduleReconnect()
             }
@@ -177,6 +180,7 @@ class FyersMarketDataService(
         webSocket = null
         isConnected = false
         _connectionState.value = "DISCONNECTED"
+        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
         subscribedSymbols.clear()
         Log.d(TAG, "FYERS WebSocket disconnected")
     }

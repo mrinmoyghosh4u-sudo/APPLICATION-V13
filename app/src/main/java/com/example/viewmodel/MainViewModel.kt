@@ -237,7 +237,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(repository.watchlistAll, com.example.data.model.MarketDataStore.marketData) { dbList, liveData ->
-                dbList.map { item ->
+                var changed = false
+                val updatedList = dbList.map { item ->
                     val dbSymbol = item.symbol.uppercase().trim()
                     val live = liveData.values.find { liveItem ->
                         val liveSymbol = liveItem.symbol.uppercase().trim()
@@ -253,10 +254,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             else -> liveSymbol == dbSymbol
                         }
                     }
-                    if (live != null && live.ltp > 0) {
+                    if (live != null && live.ltp > 0 && live.ltp != item.ltp) {
                         val prevClose = if (item.ltp > 0) item.ltp - item.change else 0.0
                         val newChange = if (prevClose > 0) live.ltp - prevClose else live.change
-                        val newChangePct = if (prevClose > 0) (newChange / prevClose) * 100 else live.changePercent
+                        val newChangePct = if (prevClose > 0) (newChange / prevClose) * 100.0 else live.changePercent
+                        changed = true
                         item.copy(
                             ltp = live.ltp,
                             change = newChange,
@@ -267,8 +269,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         item
                     }
                 }
-            }.collectLatest { combinedList ->
+                Pair(updatedList, changed)
+            }.collectLatest { (combinedList, changed) ->
                 _watchlist.value = combinedList
+                if (changed) {
+                    val onlyWithLtp = combinedList.filter { it.ltp > 0.0 }
+                    if (onlyWithLtp.isNotEmpty()) {
+                        repository.updateWatchlistQuotes(onlyWithLtp)
+                    }
+                }
             }
         }
     }
@@ -608,6 +617,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionManager.pendingOAuthSession = sessionManager.pendingOAuthSession?.copy(consumed = true)
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
+                brokerAuthManager.updateStatus("Upstox", "Primary Market Data", com.example.data.network.BrokerAuthStatus.CONNECTED, "Live Market Data Active")
                 _brokerSwitchStatus.value = "✓ UPSTOX CONNECTED"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
@@ -615,6 +625,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 alertService.notifyBrokerConnected("Upstox", account = cleanKey)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                brokerAuthManager.updateStatus("Upstox", "Primary Market Data", com.example.data.network.BrokerAuthStatus.ERROR, "Authentication failed: $err")
                 val failureState = when {
                     err.contains("TOKEN_INVALID") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_INVALID
                     err.contains("TOKEN_EXCHANGE_FAILED") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED
@@ -673,6 +684,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionManager.pendingOAuthSession = sessionManager.pendingOAuthSession?.copy(consumed = true)
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
+                brokerAuthManager.updateStatus("Fyers", "Fallback #1 Market Data", com.example.data.network.BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
                 _brokerSwitchStatus.value = "✓ FYERS CONNECTED"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
@@ -680,6 +692,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 alertService.notifyBrokerConnected("Fyers", account = cleanAppId)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                brokerAuthManager.updateStatus("Fyers", "Fallback #1 Market Data", com.example.data.network.BrokerAuthStatus.ERROR, "Authentication failed: $err")
                 val failureState = when {
                     err.contains("TOKEN_INVALID") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_INVALID
                     err.contains("TOKEN_EXCHANGE_FAILED") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED
@@ -983,12 +996,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionManager.pendingOAuthBroker = ""
                 // Process ONLY the broker stored in pendingSession.provider (UPSTOX or FYERS)
                 if (rawProvider == "UPSTOX") {
-                    val upstoxKey = sessionManager.upstoxApiKey ?: ""
-                    val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
+                    var upstoxKey = sessionManager.upstoxApiKey ?: ""
+                    var upstoxSecret = sessionManager.upstoxApiSecret ?: ""
+                    if (upstoxKey.isBlank() || upstoxSecret.isBlank()) {
+                        upstoxKey = com.example.util.BrokerConfig.upstoxApiKey
+                        upstoxSecret = com.example.util.BrokerConfig.upstoxApiSecret
+                        sessionManager.upstoxApiKey = upstoxKey
+                        sessionManager.upstoxApiSecret = upstoxSecret
+                    }
                     connectUpstox(upstoxKey, upstoxSecret, cleanedCode)
                 } else if (rawProvider == "FYERS") {
-                    val fyersAppId = sessionManager.fyersAppId ?: ""
-                    val fyersSecretId = sessionManager.fyersSecretId ?: ""
+                    var fyersAppId = sessionManager.fyersAppId ?: ""
+                    var fyersSecretId = sessionManager.fyersSecretId ?: ""
+                    if (fyersAppId.isBlank() || fyersSecretId.isBlank()) {
+                        fyersAppId = com.example.util.BrokerConfig.fyersAppId
+                        fyersSecretId = com.example.util.BrokerConfig.fyersSecretId
+                        sessionManager.fyersAppId = fyersAppId
+                        sessionManager.fyersSecretId = fyersSecretId
+                    }
                     connectFyers(fyersAppId, fyersSecretId, cleanedCode)
                 }
                 return@launch

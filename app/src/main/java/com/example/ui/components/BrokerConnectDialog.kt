@@ -69,10 +69,12 @@ fun BrokerConnectDialog(
 
     var fyersAppId by remember { mutableStateOf(sessionManager.fyersAppId ?: "") }
     var fyersSecretId by remember { mutableStateOf(sessionManager.fyersSecretId ?: "") }
+    var fyersRedirectUri by remember { mutableStateOf(sessionManager.fyersRedirectUri) }
     var fyersAuthCode by remember { mutableStateOf("") }
 
     var upstoxApiKey by remember { mutableStateOf(sessionManager.upstoxApiKey ?: "") }
     var upstoxApiSecret by remember { mutableStateOf(sessionManager.upstoxApiSecret ?: "") }
+    var upstoxRedirectUri by remember { mutableStateOf(sessionManager.upstoxRedirectUri) }
     var upstoxAuthCode by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
@@ -94,6 +96,11 @@ fun BrokerConnectDialog(
         } else if (selectedBroker == "Upstox") {
             if (upstoxApiKey.isBlank()) upstoxApiKey = sessionManager.upstoxApiKey ?: ""
             if (upstoxApiSecret.isBlank()) upstoxApiSecret = sessionManager.upstoxApiSecret ?: ""
+            upstoxRedirectUri = sessionManager.upstoxRedirectUri
+        } else if (selectedBroker == "Fyers") {
+            if (fyersAppId.isBlank()) fyersAppId = sessionManager.fyersAppId ?: ""
+            if (fyersSecretId.isBlank()) fyersSecretId = sessionManager.fyersSecretId ?: ""
+            fyersRedirectUri = sessionManager.fyersRedirectUri
         }
     }
 
@@ -183,116 +190,140 @@ fun BrokerConnectDialog(
 
                 when (selectedBroker) {
                     "Upstox" -> {
-                        Text("Connect Upstox (Primary Market Data)", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("Provides Live Quotes and Historical Data (API V2/V3)", color = TextGray, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (showUpstoxCreds) {
-                            OutlinedTextField(
-                                value = upstoxApiKey,
-                                onValueChange = { upstoxApiKey = it },
-                                label = { Text("API Key / Client ID", color = TextGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF673AB7),
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                ),
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = upstoxApiSecret,
-                                onValueChange = { upstoxApiSecret = it },
-                                label = { Text("API Secret", color = TextGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF673AB7),
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                ),
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            if (sessionManager.upstoxApiKey.isNotBlank() && sessionManager.upstoxApiSecret.isNotBlank()) {
-                                TextButton(
-                                    onClick = { showUpstoxCreds = false },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text("Use Configured Credentials", color = Color(0xFFBB86FC), fontSize = 12.sp)
-                                }
-                            }
-                        } else {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF241C35)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF673AB7).copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(8.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF673AB7), RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text("API Credentials", color = TextGray, fontSize = 11.sp)
-                                        Text("CONFIGURED", color = Color(0xFFBB86FC), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    }
-                                    TextButton(onClick = { showUpstoxCreds = true }) {
-                                        Text("Change", color = Color(0xFFBB86FC), fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                                    }
-                                }
+                                Text("U", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Upstox (Primary Market Data)",
+                                color = TextWhite,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        OutlinedTextField(
+                            value = upstoxApiKey,
+                            onValueChange = { upstoxApiKey = it },
+                            label = { Text("API Key / Client ID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = Color(0xFF673AB7),
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = upstoxApiSecret,
+                            onValueChange = { upstoxApiSecret = it },
+                            label = { Text("API Secret") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = Color(0xFF673AB7),
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = upstoxRedirectUri,
+                            onValueChange = { upstoxRedirectUri = it },
+                            label = { Text("Redirect URI") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = Color(0xFF673AB7),
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
-                                val cleanKey = upstoxApiKey.trim()
-                                val cleanSecret = upstoxApiSecret.trim()
-                                if (cleanKey.isBlank() || cleanSecret.isBlank()) {
-                                    localErrorMsg = "API Key and API Secret are required"
-                                    return@Button
-                                }
-                                localErrorMsg = null
-                                if (onStartUpstoxOAuth != null) {
-                                    onStartUpstoxOAuth(cleanKey, cleanSecret)
+                                val keyToUse = upstoxApiKey.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiKey
+                                val secretToUse = upstoxApiSecret.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiSecret
+                                val redirectUriToUse = upstoxRedirectUri.trim().takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                
+                                if (keyToUse.isBlank() || secretToUse.isBlank()) {
+                                    localErrorMsg = "Upstox API Key & Secret are required."
                                 } else {
-                                    sessionManager.upstoxApiKey = cleanKey
-                                    sessionManager.upstoxApiSecret = cleanSecret
-                                    val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-                                    val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
-                                    sessionManager.pendingOAuthState = randomState
-                                    sessionManager.pendingOAuthBroker = "Upstox"
-                                    android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
-                                    android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
-                                    android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+                                    localErrorMsg = null
+                                    sessionManager.saveUpstoxCredentials(keyToUse, secretToUse, redirectUriToUse)
+                                    
+                                    if (onStartUpstoxOAuth != null) {
+                                        onStartUpstoxOAuth(keyToUse, secretToUse)
+                                    } else {
+                                        val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
+                                        sessionManager.pendingOAuthState = randomState
+                                        sessionManager.pendingOAuthBroker = "Upstox"
+                                        sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
+                                            provider = "UPSTOX",
+                                            state = randomState,
+                                            createdAt = System.currentTimeMillis(),
+                                            redirectUri = redirectUriToUse,
+                                            consumed = false
+                                        )
+                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
+                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
+                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
 
-                                    val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(cleanKey, redirectUri, state = randomState)
-                                    try {
-                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                                        context.startActivity(intent)
-                                        onDismiss()
-                                    } catch (e: Exception) {
-                                        localErrorMsg = "Failed to open browser: ${e.message}"
+                                        val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(keyToUse, redirectUriToUse, state = randomState)
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                            context.startActivity(intent)
+                                            onDismiss()
+                                        } catch (e: Exception) {
+                                            localErrorMsg = "Failed to open browser: ${e.message}"
+                                        }
                                     }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             enabled = !isAuthInProgress,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
                         ) {
-                            Text("LOGIN VIA BROWSER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        if (!localErrorMsg.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(localErrorMsg!!, color = Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            if (isAuthInProgress) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("U", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("LOGIN WITH UPSTOX", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
                         }
                     }
                     "m.Stock" -> {
@@ -408,115 +439,140 @@ fun BrokerConnectDialog(
                     }
 
                     "Fyers" -> {
-                        Text("Connect Fyers API V3", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("Provides Live Quotes and Historical Data", color = TextGray, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (showFyersCreds) {
-                            OutlinedTextField(
-                                value = fyersAppId,
-                                onValueChange = { fyersAppId = it },
-                                label = { Text("App ID", color = TextGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = ProfitGreen,
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                ),
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = fyersSecretId,
-                                onValueChange = { fyersSecretId = it },
-                                label = { Text("Secret ID", color = TextGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = ProfitGreen,
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                ),
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            if (sessionManager.fyersAppId.isNotBlank() && sessionManager.fyersSecretId.isNotBlank()) {
-                                TextButton(
-                                    onClick = { showFyersCreds = false },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text("Use Configured Credentials", color = ProfitGreen, fontSize = 12.sp)
-                                }
-                            }
-                        } else {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF13271A)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(8.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(ProfitGreen, RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text("API Credentials", color = TextGray, fontSize = 11.sp)
-                                        Text("CONFIGURED", color = ProfitGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    }
-                                    TextButton(onClick = { showFyersCreds = true }) {
-                                        Text("Change", color = ProfitGreen, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                                    }
-                                }
+                                Text("F", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Fyers (Alternative Market Data)",
+                                color = TextWhite,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        OutlinedTextField(
+                            value = fyersAppId,
+                            onValueChange = { fyersAppId = it },
+                            label = { Text("App ID / Client ID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = ProfitGreen,
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = fyersSecretId,
+                            onValueChange = { fyersSecretId = it },
+                            label = { Text("Secret ID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = ProfitGreen,
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = fyersRedirectUri,
+                            onValueChange = { fyersRedirectUri = it },
+                            label = { Text("Redirect URI") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = ProfitGreen,
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
-                                val cleanAppId = fyersAppId.trim()
-                                val cleanSecretId = fyersSecretId.trim()
-                                if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
-                                    localErrorMsg = "App ID and Secret ID are required"
-                                    return@Button
-                                }
-                                localErrorMsg = null
-                                if (onStartFyersOAuth != null) {
-                                    onStartFyersOAuth(cleanAppId, cleanSecretId)
+                                val appToUse = fyersAppId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersAppId
+                                val secretToUse = fyersSecretId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersSecretId
+                                val redirectUriToUse = fyersRedirectUri.trim().takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+                                
+                                if (appToUse.isBlank() || secretToUse.isBlank()) {
+                                    localErrorMsg = "Fyers App ID & Secret are required."
                                 } else {
-                                    sessionManager.fyersAppId = cleanAppId
-                                    sessionManager.fyersSecretId = cleanSecretId
-                                    val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
-                                    val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
-                                    sessionManager.pendingOAuthState = randomState
-                                    sessionManager.pendingOAuthBroker = "Fyers"
-                                    android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
-                                    android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
-                                    android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+                                    localErrorMsg = null
+                                    sessionManager.saveFyersCredentials(appToUse, secretToUse, redirectUriToUse)
+                                    
+                                    if (onStartFyersOAuth != null) {
+                                        onStartFyersOAuth(appToUse, secretToUse)
+                                    } else {
+                                        val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
+                                        sessionManager.pendingOAuthState = randomState
+                                        sessionManager.pendingOAuthBroker = "Fyers"
+                                        sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
+                                            provider = "FYERS",
+                                            state = randomState,
+                                            createdAt = System.currentTimeMillis(),
+                                            redirectUri = redirectUriToUse,
+                                            consumed = false
+                                        )
+                                        android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
+                                        android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
+                                        android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
 
-                                    val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(cleanAppId, redirectUri, state = randomState)
-                                    try {
-                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                                        context.startActivity(intent)
-                                        onDismiss()
-                                    } catch (e: Exception) {
-                                        localErrorMsg = "Failed to open browser: ${e.message}"
+                                        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(appToUse, redirectUriToUse, state = randomState)
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                                            context.startActivity(intent)
+                                            onDismiss()
+                                        } catch (e: Exception) {
+                                            localErrorMsg = "Failed to open browser: ${e.message}"
+                                        }
                                     }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             enabled = !isAuthInProgress,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen)
                         ) {
-                            Text("LOGIN VIA BROWSER", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        if (!localErrorMsg.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(localErrorMsg!!, color = Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            if (isAuthInProgress) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("F", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("LOGIN WITH FYERS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            }
                         }
                     }
                     "Angel One" -> {

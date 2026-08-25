@@ -130,6 +130,7 @@ class UpstoxMarketDataService(
                         Log.i(TAG, "[UPSTOX_WS_CONNECTED] Upstox WebSocket V3 Connected")
                         isConnected = true
                         _connectionState.value = "CONNECTED"
+                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "CONNECTED")
                         healthManager?.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
                         backoffDelayMs = 1000L
 
@@ -164,6 +165,7 @@ class UpstoxMarketDataService(
                         Log.w(TAG, "[UPSTOX_DISCONNECTED] Upstox WebSocket closed: $code / $reason")
                         isConnected = false
                         _connectionState.value = "DISCONNECTED"
+                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
                         healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
                     }
 
@@ -171,6 +173,7 @@ class UpstoxMarketDataService(
                         Log.e(TAG, "[UPSTOX_DISCONNECTED] Upstox WebSocket failure: ${t.message}")
                         isConnected = false
                         _connectionState.value = "ERROR"
+                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
                         healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, t.message ?: "WebSocket failure")
                         scheduleReconnect()
                     }
@@ -290,6 +293,7 @@ class UpstoxMarketDataService(
         webSocket = null
         isConnected = false
         _connectionState.value = "DISCONNECTED"
+        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
         subscribedInstrumentKeys.clear()
         Log.d(TAG, "Upstox WebSocket disconnected")
     }

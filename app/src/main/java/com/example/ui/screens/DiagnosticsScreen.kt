@@ -118,25 +118,45 @@ fun DiagnosticsScreen(
 @Composable
 fun TopLiveStatusCard(providerState: MarketDataProviderState, marketDataSize: Int) {
     val isLive = providerState.live
+    val isConnected = providerState.connected
     
+    val containerColor = when {
+        isLive -> Color(0xFF1B382B) // Deep green
+        isConnected -> Color(0xFF2C2417) // Deep Amber
+        else -> Color(0xFF381B1B) // Deep Red
+    }
+    
+    val statusText = when {
+        isLive -> "🟢 LIVE MARKET DATA"
+        isConnected -> "🟡 CONNECTED • STANDBY (Market Closed / Idle)"
+        else -> "🔴 NO LIVE MARKET DATA"
+    }
+    
+    val iconVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.ErrorOutline
+    val iconColor = when {
+        isLive -> Color(0xFF00E676)
+        isConnected -> Color(0xFFFFB300)
+        else -> Color(0xFFFF5252)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isLive) Color(0xFF1B382B) else Color(0xFF381B1B)
+            containerColor = containerColor
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (isLive) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                    imageVector = iconVector,
                     contentDescription = "Status",
-                    tint = if (isLive) Color(0xFF00E676) else Color(0xFFFF5252),
+                    tint = iconColor,
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = if (isLive) "🟢 LIVE MARKET DATA" else "🔴 NO LIVE MARKET DATA",
+                    text = statusText,
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold

@@ -505,8 +505,9 @@ class SessionManager(context: Context) {
     var fyersAppId: String
         get() = safeGetToken("fyers_app_id_enc") ?: ""
         set(value) {
-            safeSetToken("fyers_app_id_enc", value)
-            
+            val trimmed = value.trim()
+            val sanitized = if (trimmed.isNotBlank() && !trimmed.contains("-100")) "$trimmed-100" else trimmed
+            safeSetToken("fyers_app_id_enc", sanitized)
         }
 
     var fyersSecretId: String
@@ -543,6 +544,12 @@ class SessionManager(context: Context) {
 
     fun isFyersConfigured(): Boolean {
         return !fyersAppId.isBlank() && (!fyersSecretId.isBlank() || !fyersAccessToken.isNullOrBlank())
+    }
+
+    fun saveFyersCredentials(appId: String, secretId: String = "", redirectUri: String = com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI) {
+        if (appId.isNotBlank()) fyersAppId = appId.trim()
+        if (secretId.isNotBlank()) fyersSecretId = secretId.trim()
+        if (redirectUri.isNotBlank()) fyersRedirectUri = redirectUri.trim()
     }
 
     fun clearFyersSession() {

@@ -1587,19 +1587,17 @@ private fun BrokerStatusRow(
             when (status) {
                 com.example.data.network.BrokerAuthStatus.CONNECTED,
                 com.example.data.network.BrokerAuthStatus.STANDBY -> {
-                    if (name == "Angel One" || name == "m.Stock") {
-                        OutlinedButton(
-                            onClick = onConnect,
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, ProfitGreen),
-                            modifier = Modifier.height(30.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
+                    OutlinedButton(
+                        onClick = onConnect,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, ProfitGreen),
+                        modifier = Modifier.height(30.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
                     }
+                    Spacer(modifier = Modifier.width(4.dp))
                     OutlinedButton(
                         onClick = onDisconnect,
                         shape = RoundedCornerShape(6.dp),

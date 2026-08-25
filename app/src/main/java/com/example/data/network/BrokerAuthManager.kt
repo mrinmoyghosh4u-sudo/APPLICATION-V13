@@ -232,7 +232,11 @@ class BrokerAuthManager(
                     "TEMPORARY_NETWORK_ERROR",
                     "TEMPORARY_NETWORK_ERROR: ${e.localizedMessage}"
                 )
-                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                if (sessionManager.isUpstoxConnected) {
+                    updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active (Offline Cache)")
+                } else {
+                    updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                }
                 return
             }
         }
@@ -315,7 +319,11 @@ class BrokerAuthManager(
                     "TEMPORARY_NETWORK_ERROR",
                     "TEMPORARY_NETWORK_ERROR: ${e.localizedMessage}"
                 )
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                if (sessionManager.isFyersConnected) {
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Offline Cache)")
+                } else {
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Temporary Network Error during Validation")
+                }
                 return
             }
         }
@@ -861,7 +869,7 @@ class BrokerAuthManager(
         _statuses.value = current
     }
 
-    private fun updateStatus(brokerName: String, role: String, status: BrokerAuthStatus, message: String) {
+    fun updateStatus(brokerName: String, role: String, status: BrokerAuthStatus, message: String) {
         val current = _statuses.value.toMutableMap()
         val effectiveRole = getBrokerRole(brokerName)
         current[brokerName] = BrokerConnectionState(

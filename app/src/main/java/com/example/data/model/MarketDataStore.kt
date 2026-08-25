@@ -213,6 +213,51 @@ object MarketDataStore {
                     displayStatus = "LIVE • m.STOCK"
                 )
             }
+            // 4.5. Connected / Standby (connected successfully, but waiting for ticks / market closed)
+            _upstoxHealth.value == "CONNECTED" || _upstoxHealth.value == "STANDBY" -> {
+                _providerState.value = MarketDataProviderState(
+                    provider = "UPSTOX",
+                    authenticated = true,
+                    connected = true,
+                    lastTickTimestamp = 0L,
+                    stale = false,
+                    live = false,
+                    displayStatus = "CONNECTED • Idle (Market Closed)"
+                )
+            }
+            _fyersHealth.value == "CONNECTED" || _fyersHealth.value == "STANDBY" -> {
+                _providerState.value = MarketDataProviderState(
+                    provider = "FYERS",
+                    authenticated = true,
+                    connected = true,
+                    lastTickTimestamp = 0L,
+                    stale = false,
+                    live = false,
+                    displayStatus = "CONNECTED • Idle (Market Closed)"
+                )
+            }
+            _angelOneHealth.value == "CONNECTED" || _angelOneHealth.value == "STANDBY" -> {
+                _providerState.value = MarketDataProviderState(
+                    provider = "ANGEL ONE",
+                    authenticated = true,
+                    connected = true,
+                    lastTickTimestamp = 0L,
+                    stale = false,
+                    live = false,
+                    displayStatus = "CONNECTED • Idle (Market Closed)"
+                )
+            }
+            _mStockHealth.value == "CONNECTED" || _mStockHealth.value == "STANDBY" -> {
+                _providerState.value = MarketDataProviderState(
+                    provider = "m.STOCK",
+                    authenticated = true,
+                    connected = true,
+                    lastTickTimestamp = 0L,
+                    stale = false,
+                    live = false,
+                    displayStatus = "CONNECTED • Idle (Market Closed)"
+                )
+            }
             // 5. Stale States
             lastUpstox > 0 && (now - lastUpstox > staleThreshold) && _providerState.value.provider == "UPSTOX" -> {
                 _providerState.value = _providerState.value.copy(

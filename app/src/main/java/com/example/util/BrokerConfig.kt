@@ -38,5 +38,41 @@ object BrokerConfig {
             ?.takeIf { it != "ANGEL_REDIRECT_URI_DEFAULT_VALUE" && it.isNotBlank() }
             ?: System.getenv("ANGEL_REDIRECT_URI")
             ?: "kingkhan://oauth/callback"
+
+    val upstoxApiKey: String
+        get() = runCatching { BuildConfig.UPSTOX_API_KEY }.getOrNull()
+            ?.takeIf { it != "UPSTOX_API_KEY_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("UPSTOX_API_KEY")
+            ?: ""
+
+    val upstoxApiSecret: String
+        get() = runCatching { BuildConfig.UPSTOX_API_SECRET }.getOrNull()
+            ?.takeIf { it != "UPSTOX_API_SECRET_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("UPSTOX_API_SECRET")
+            ?: ""
+
+    val upstoxRedirectUri: String
+        get() = runCatching { BuildConfig.UPSTOX_REDIRECT_URI }.getOrNull()
+            ?.takeIf { it != "UPSTOX_REDIRECT_URI_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("UPSTOX_REDIRECT_URI")
+            ?: "https://application-beige-psi.vercel.app/oauth"
+
+    val fyersAppId: String
+        get() = runCatching { BuildConfig.FYERS_APP_ID }.getOrNull()
+            ?.takeIf { it != "FYERS_APP_ID_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("FYERS_APP_ID")
+            ?: ""
+
+    val fyersSecretId: String
+        get() = runCatching { BuildConfig.FYERS_SECRET_ID }.getOrNull()
+            ?.takeIf { it != "FYERS_SECRET_ID_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("FYERS_SECRET_ID")
+            ?: ""
+
+    val fyersRedirectUri: String
+        get() = runCatching { BuildConfig.FYERS_REDIRECT_URI }.getOrNull()
+            ?.takeIf { it != "FYERS_REDIRECT_URI_DEFAULT_VALUE" && it.isNotBlank() }
+            ?: System.getenv("FYERS_REDIRECT_URI")
+            ?: "https://application-beige-psi.vercel.app/oauth"
 }
 
