@@ -124,8 +124,10 @@ class MainActivity : FragmentActivity() {
 
                 LaunchedEffect(authSuccessEvent) {
                     if (authSuccessEvent) {
-                        navController.navigate("main") {
-                            popUpTo(navController.graph.id) { inclusive = true }
+                        if (currentRoute != "main") {
+                            navController.navigate("main") {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = false }
+                            }
                         }
                         viewModel.consumeAuthSuccessEvent()
                     }
@@ -771,6 +773,7 @@ class MainActivity : FragmentActivity() {
             val scheme = uri.scheme ?: ""
             val host = uri.host ?: ""
             if (scheme == "kingkhan" || host.contains("kingkhan") || host.contains("application-beige-psi.vercel.app") || host.contains("vercel.app")) {
+                intent.data = null
                 viewModel.handleOAuthRedirect(uri)
             }
         }

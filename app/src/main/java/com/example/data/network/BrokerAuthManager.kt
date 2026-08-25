@@ -188,7 +188,7 @@ class BrokerAuthManager(
         }
 
         val currentHealth = brokerManager.healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
-        if (!hasSession && (currentHealth.authenticationState == ProviderHealthManager.STATE_AUTHENTICATING || currentHealth.authenticationState == ProviderHealthManager.STATE_WAITING_FOR_CALLBACK || currentHealth.authenticationState == ProviderHealthManager.STATE_EXCHANGING_TOKEN)) {
+        if (!hasSession && (currentHealth.authenticationState == ProviderHealthManager.STATE_AUTHENTICATING || currentHealth.authenticationState == ProviderHealthManager.STATE_WAITING_FOR_CALLBACK || currentHealth.authenticationState == ProviderHealthManager.STATE_TOKEN_EXCHANGE)) {
             Log.d(TAG, "Upstox OAuth currently in progress: preserving active state '${currentHealth.authenticationState}'")
             return
         }

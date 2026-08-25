@@ -59,11 +59,25 @@ class ProviderHealthManager {
         // Required Phase 1 States
         const val STATE_NOT_CONFIGURED = "NOT_CONFIGURED"
         const val STATE_CONFIGURED = "CONFIGURED"
+        const val STATE_READY = "READY"
         const val STATE_AUTHENTICATING = "AUTHENTICATING"
         const val STATE_WAITING_FOR_CALLBACK = "WAITING_FOR_CALLBACK"
-        const val STATE_EXCHANGING_TOKEN = "EXCHANGING_TOKEN"
+        const val STATE_CALLBACK_RECEIVED = "CALLBACK_RECEIVED"
+        const val STATE_VALIDATING_STATE = "VALIDATING_STATE"
+        const val STATE_AUTH_CODE_RECEIVED = "AUTH_CODE_RECEIVED"
+        const val STATE_TOKEN_EXCHANGE = "TOKEN_EXCHANGE"
+        const val STATE_TOKEN_VALIDATED = "TOKEN_VALIDATED"
         const val STATE_AUTHENTICATED = "AUTHENTICATED"
+
+        // Failure States
         const val STATE_AUTH_FAILED = "AUTH_FAILED"
+        const val STATE_CALLBACK_FAILED = "CALLBACK_FAILED"
+        const val STATE_STATE_MISMATCH = "STATE_MISMATCH"
+        const val STATE_AUTH_CODE_MISSING = "AUTH_CODE_MISSING"
+        const val STATE_TOKEN_EXCHANGE_FAILED = "TOKEN_EXCHANGE_FAILED"
+        const val STATE_TOKEN_INVALID = "TOKEN_INVALID"
+        const val STATE_AUTH_CANCELLED = "AUTH_CANCELLED"
+
         const val STATE_CONNECTING = "CONNECTING"
         const val STATE_CONNECTED = "CONNECTED"
         const val STATE_SUBSCRIBING = "SUBSCRIBING"
@@ -103,6 +117,79 @@ class ProviderHealthManager {
         val updated = current.copy(
             status = STATE_AUTHENTICATING,
             authenticationState = STATE_AUTHENTICATING
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportWaitingForCallback(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_WAITING_FOR_CALLBACK,
+            authenticationState = STATE_WAITING_FOR_CALLBACK
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportCallbackReceived(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_CALLBACK_RECEIVED,
+            authenticationState = STATE_CALLBACK_RECEIVED
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportValidatingState(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_VALIDATING_STATE,
+            authenticationState = STATE_VALIDATING_STATE
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportAuthCodeReceived(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_AUTH_CODE_RECEIVED,
+            authenticationState = STATE_AUTH_CODE_RECEIVED
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportTokenExchange(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_TOKEN_EXCHANGE,
+            authenticationState = STATE_TOKEN_EXCHANGE
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportTokenValidated(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            status = STATE_TOKEN_VALIDATED,
+            authenticationState = STATE_TOKEN_VALIDATED
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportAuthFailure(provider: String, failureState: String, errorMessage: String = "") {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            authenticated = false,
+            authenticationState = failureState,
+            status = failureState,
+            lastError = if (errorMessage.isNotBlank()) errorMessage else current.lastError,
+            healthy = false
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)

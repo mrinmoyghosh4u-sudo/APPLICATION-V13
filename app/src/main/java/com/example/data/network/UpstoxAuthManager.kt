@@ -28,32 +28,50 @@ class UpstoxAuthManager(
             val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
                 ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
-            Log.i(TAG, "[UPSTOX_AUTH_START] Exchanging Upstox authorization code...")
+            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE_START] Initiating Upstox authorization code exchange...")
 
-            android.util.Log.d("UpstoxAuth", "[7] Token exchange initiated...")
-            val response = upstoxApi.getAccessToken(
-                code = authCode.trim(),
-                clientId = apiKey,
-                clientSecret = apiSecret,
-                redirectUri = redirectUri
-            )
+            val response = try {
+                upstoxApi.getAccessToken(
+                    code = authCode.trim(),
+                    clientId = apiKey,
+                    clientSecret = apiSecret,
+                    redirectUri = redirectUri
+                )
+            } catch (e: Exception) {
+                _authStatus.value = BrokerAuthStatus.ERROR
+                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Network error during token exchange: ${e.localizedMessage}")
+                throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+            }
 
             if (!response.isSuccessful) {
                 _authStatus.value = BrokerAuthStatus.ERROR
-                val errBody = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                throw Exception("Upstox Token Exchange Failed: $errBody")
+                val rawErr = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                val sanitizedErr = rawErr.take(150).replace("\n", " ")
+                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token Exchange Failed: $sanitizedErr")
+                throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
             }
 
-            val body = response.body() ?: throw Exception("Empty response body from Upstox")
+            val body = response.body() ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
 
-            android.util.Log.d("UpstoxAuth", "[8] Token validated: PASS")
             val accessToken = body.accessToken
             if (accessToken.isNullOrBlank()) {
                 _authStatus.value = BrokerAuthStatus.ERROR
-                throw Exception("Upstox Access Token is empty in response")
+                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Access Token is empty in response")
+                throw Exception("TOKEN_EXCHANGE_FAILED: Access token is empty")
             }
 
-            Log.i(TAG, "[UPSTOX_TOKEN_OK] Upstox Access Token obtained & validated successfully")
+            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE_SUCCESS] Upstox Access Token received successfully")
+
+            // Validate token with profile endpoint before marking authenticated
+            try {
+                validateUserProfile(accessToken)
+            } catch (e: Exception) {
+                _authStatus.value = BrokerAuthStatus.ERROR
+                Log.e(TAG, "[UPSTOX_TOKEN_INVALID] Token validation failed: ${e.message}")
+                throw Exception("TOKEN_INVALID: ${e.message}")
+            }
+
+            Log.i(TAG, "[UPSTOX_TOKEN_VALID] Upstox token profile validation: PASS")
 
             // Securely store credentials and tokens in encrypted storage
             sessionManager.upstoxAccessToken = accessToken
@@ -63,13 +81,8 @@ class UpstoxAuthManager(
             sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
             sessionManager.isUpstoxConnected = true
 
-            // Validate with user profile check
-            validateUserProfile(accessToken)
-
-            android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
-                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
-                _authStatus.value = BrokerAuthStatus.CONNECTED
-            Log.d(TAG, "Upstox authenticated successfully")
+            Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox OAuth session successfully authenticated")
+            _authStatus.value = BrokerAuthStatus.CONNECTED
             accessToken
         }
     }

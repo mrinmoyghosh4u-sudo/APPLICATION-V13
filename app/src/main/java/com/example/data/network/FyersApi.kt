@@ -92,7 +92,25 @@ data class FyersOptionContract(
     val ask: Double?
 )
 
+data class FyersProfileResponse(
+    val s: String?,
+    val code: Int?,
+    val message: String?,
+    val data: FyersProfileData?
+)
+
+data class FyersProfileData(
+    val name: String?,
+    val fy_id: String?,
+    val email_id: String?
+)
+
 interface FyersApi {
+    @GET("api/v3/profile")
+    suspend fun getProfile(
+        @Header("Authorization") auth: String
+    ): Response<FyersProfileResponse>
+
     @GET("data/options-chain-v3")
     suspend fun getOptionChain(
         @Header("Authorization") auth: String,

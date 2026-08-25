@@ -224,4 +224,56 @@ class BrokerAuthVerificationTest {
         assertTrue(fyersState.healthy)
         assertEquals("LIVE", fyersState.status)
     }
+
+    @Test
+    fun test17_fullIntermediateOAuthStateTransitions() {
+        val provider = ProviderHealthManager.PROVIDER_UPSTOX
+
+        healthManager.reportConfigured(provider, true)
+        assertEquals("CONFIGURED", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthenticating(provider)
+        assertEquals("AUTHENTICATING", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportWaitingForCallback(provider)
+        assertEquals("WAITING_FOR_CALLBACK", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportCallbackReceived(provider)
+        assertEquals("CALLBACK_RECEIVED", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportValidatingState(provider)
+        assertEquals("VALIDATING_STATE", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthCodeReceived(provider)
+        assertEquals("AUTH_CODE_RECEIVED", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportTokenExchange(provider)
+        assertEquals("TOKEN_EXCHANGE", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportTokenValidated(provider)
+        assertEquals("TOKEN_VALIDATED", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthentication(provider, true)
+        assertEquals("AUTHENTICATED", healthManager.getHealthState(provider).authenticationState)
+    }
+
+    @Test
+    fun test18_specificOAuthFailureStates() {
+        val provider = ProviderHealthManager.PROVIDER_FYERS
+
+        healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_STATE_MISMATCH, "State mismatch")
+        assertEquals("STATE_MISMATCH", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_AUTH_CODE_MISSING, "Code missing")
+        assertEquals("AUTH_CODE_MISSING", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED, "HTTP 400")
+        assertEquals("TOKEN_EXCHANGE_FAILED", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_TOKEN_INVALID, "Invalid profile")
+        assertEquals("TOKEN_INVALID", healthManager.getHealthState(provider).authenticationState)
+
+        healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_AUTH_CANCELLED, "User cancelled")
+        assertEquals("AUTH_CANCELLED", healthManager.getHealthState(provider).authenticationState)
+    }
 }

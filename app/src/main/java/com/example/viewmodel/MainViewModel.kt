@@ -121,6 +121,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authSuccessEvent = MutableStateFlow(false)
     val authSuccessEvent: StateFlow<Boolean> = _authSuccessEvent.asStateFlow()
 
+    private var lastProcessedOAuthCode: String? = null
+    private var lastProcessedOAuthTime: Long = 0L
+
     private val _selectedExchange = MutableStateFlow("NSE")
     val selectedExchange: StateFlow<String> = _selectedExchange.asStateFlow()
 
@@ -574,24 +577,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (cleanKey.isBlank() || cleanSecret.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Upstox API Key and API Secret are required"
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
+                    com.example.data.network.ProviderHealthManager.STATE_NOT_CONFIGURED,
+                    "Credentials Missing"
+                )
                 return@launch
             }
 
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Upstox Auth Code is required"
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
+                    com.example.data.network.ProviderHealthManager.STATE_AUTH_CODE_MISSING,
+                    "Auth code is missing"
+                )
                 return@launch
             }
 
             sessionManager.upstoxApiKey = cleanKey
             sessionManager.upstoxApiSecret = cleanSecret
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
-            brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
+            brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
 
             val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
                 _brokerSwitchStatus.value = "Upstox Feed Connected • Primary Market Data"
                 _authSuccessEvent.value = true
@@ -600,7 +614,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 alertService.notifyBrokerConnected("Upstox", account = cleanKey)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
-                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, false, err)
+                val failureState = when {
+                    err.contains("TOKEN_INVALID") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_INVALID
+                    err.contains("TOKEN_EXCHANGE_FAILED") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED
+                    else -> com.example.data.network.ProviderHealthManager.STATE_AUTH_FAILED
+                }
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
+                    failureState,
+                    err
+                )
                 _authErrorMessage.value = "Upstox Authentication Failed: $err"
             }
         }
@@ -618,24 +641,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Fyers App ID and Secret ID are required"
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
+                    com.example.data.network.ProviderHealthManager.STATE_NOT_CONFIGURED,
+                    "Credentials Missing"
+                )
                 return@launch
             }
 
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Fyers Auth Code is required"
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
+                    com.example.data.network.ProviderHealthManager.STATE_AUTH_CODE_MISSING,
+                    "Auth code is missing"
+                )
                 return@launch
             }
 
             sessionManager.fyersAppId = cleanAppId
             sessionManager.fyersSecretId = cleanSecretId
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
-            brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
+            brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
             val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
                 _brokerSwitchStatus.value = "Broker Connected • Fyers (Market Data)"
                 _authSuccessEvent.value = true
@@ -644,7 +678,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 alertService.notifyBrokerConnected("Fyers", account = cleanAppId)
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
-                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, false, err)
+                val failureState = when {
+                    err.contains("TOKEN_INVALID") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_INVALID
+                    err.contains("TOKEN_EXCHANGE_FAILED") -> com.example.data.network.ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED
+                    else -> com.example.data.network.ProviderHealthManager.STATE_AUTH_FAILED
+                }
+                brokerManager.healthManager.reportAuthFailure(
+                    com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
+                    failureState,
+                    err
+                )
                 _authErrorMessage.value = "Fyers Authentication Failed: $err"
             }
         }
@@ -765,55 +808,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val providerName = if (isUpstox) ProviderHealthManager.PROVIDER_UPSTOX else ProviderHealthManager.PROVIDER_FYERS
                 val logPrefix = if (isUpstox) "UPSTOX" else "FYERS"
 
-                android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with code")
+                brokerManager.healthManager.reportCallbackReceived(providerName)
+                android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
 
+                // Check for cancellation or OAuth error query parameters
+                val oauthError = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description")
+                if (!oauthError.isNullOrBlank()) {
+                    val errMsg = "$logPrefix Authorization Failed/Cancelled: $oauthError"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_AUTH_CANCELLED] $errMsg")
+                    _authErrorMessage.value = errMsg
+                    _isAuthInProgress.value = false
+                    sessionManager.pendingOAuthState = ""
+                    sessionManager.pendingOAuthBroker = ""
+                    brokerManager.healthManager.reportAuthFailure(providerName, ProviderHealthManager.STATE_AUTH_CANCELLED, errMsg)
+                    return@launch
+                }
+
+                // State Machine Step 6: Validate OAuth State
+                brokerManager.healthManager.reportValidatingState(providerName)
                 if (pendingState.isNotBlank()) {
-                    if (state.isNotBlank() && state != pendingState) {
+                    if (state.isBlank() || state != pendingState) {
                         val errMsg = "$logPrefix OAuth State Mismatch Rejection! Expected state='$pendingState', got '$state'."
-                        android.util.Log.e("Auth", "[$logPrefix" + "_STATE_REJECTED] $errMsg")
-                        _authErrorMessage.value = errMsg
+                        android.util.Log.e("Auth", "[$logPrefix" + "_STATE_MISMATCH] $errMsg")
+                        _authErrorMessage.value = "$logPrefix Authentication Failed: State Mismatch"
                         _isAuthInProgress.value = false
                         sessionManager.pendingOAuthState = ""
                         sessionManager.pendingOAuthBroker = ""
-                        brokerManager.healthManager.reportAuthentication(providerName, false, errMsg)
+                        brokerManager.healthManager.reportAuthFailure(
+                            providerName,
+                            ProviderHealthManager.STATE_STATE_MISMATCH,
+                            errMsg
+                        )
                         return@launch
-                    } else if (state.isBlank()) {
-                        android.util.Log.w("Auth", "[$logPrefix" + "_STATE_OMITTED] Callback state parameter omitted; proceeding with code exchange")
                     } else {
-                        android.util.Log.i("Auth", "[$logPrefix" + "_STATE_OK] OAuth State Validation: PASS")
+                        android.util.Log.i("Auth", "[$logPrefix" + "_STATE_VALID] OAuth State Validation: PASS")
                     }
                 }
                 sessionManager.pendingOAuthState = ""
-            }
 
-            if (isUpstox) {
-                if (!code.isNullOrBlank()) {
+                // Extract Authorization Code
+                if (code.isNullOrBlank()) {
+                    val errMsg = "$logPrefix Authorization code missing from callback response"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_AUTH_CODE_MISSING] $errMsg")
+                    _authErrorMessage.value = "$logPrefix Login Failed: Authorization Code Missing"
+                    _isAuthInProgress.value = false
+                    sessionManager.pendingOAuthBroker = ""
+                    brokerManager.healthManager.reportAuthFailure(
+                        providerName,
+                        ProviderHealthManager.STATE_AUTH_CODE_MISSING,
+                        errMsg
+                    )
+                    return@launch
+                }
+
+                val cleanedCode = code.trim()
+                // Deduplication Check
+                if (cleanedCode == lastProcessedOAuthCode && System.currentTimeMillis() - lastProcessedOAuthTime < 60_000L) {
+                    android.util.Log.w("Auth", "[$logPrefix" + "_DUPLICATE_CALLBACK_IGNORED] Ignoring duplicate authorization code within 60 seconds")
+                    _isAuthInProgress.value = false
+                    return@launch
+                }
+                lastProcessedOAuthCode = cleanedCode
+                lastProcessedOAuthTime = System.currentTimeMillis()
+
+                // State Machine Step 7: Auth Code Received
+                brokerManager.healthManager.reportAuthCodeReceived(providerName)
+                android.util.Log.i("Auth", "[$logPrefix" + "_AUTH_CODE_RECEIVED] Authorization code received successfully")
+
+                sessionManager.pendingOAuthBroker = ""
+                if (isUpstox) {
                     val upstoxKey = sessionManager.upstoxApiKey ?: ""
                     val upstoxSecret = sessionManager.upstoxApiSecret ?: ""
-                    sessionManager.pendingOAuthBroker = ""
-                    connectUpstox(upstoxKey, upstoxSecret, code)
-                    return@launch
+                    connectUpstox(upstoxKey, upstoxSecret, cleanedCode)
                 } else {
-                    val err = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description") ?: "No code received from Upstox"
-                    _authErrorMessage.value = "Upstox Login Failed: $err"
-                    _isAuthInProgress.value = false
-                    sessionManager.pendingOAuthBroker = ""
-                    return@launch
-                }
-            } else if (isFyers) {
-                if (!code.isNullOrBlank()) {
                     val fyersAppId = sessionManager.fyersAppId ?: ""
                     val fyersSecretId = sessionManager.fyersSecretId ?: ""
-                    sessionManager.pendingOAuthBroker = ""
-                    connectFyers(fyersAppId, fyersSecretId, code)
-                    return@launch
-                } else {
-                    val err = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description") ?: "No auth_code received from Fyers"
-                    _authErrorMessage.value = "Fyers Login Failed: $err"
-                    _isAuthInProgress.value = false
-                    sessionManager.pendingOAuthBroker = ""
-                    return@launch
+                    connectFyers(fyersAppId, fyersSecretId, cleanedCode)
                 }
+                return@launch
             }
 
             val hasTokenId = !code.isNullOrBlank() || !token.isNullOrBlank()

@@ -342,6 +342,10 @@ fun BrokerDiagnosticsSection(
     mStockHealth: String,
     providerState: MarketDataProviderState
 ) {
+    val providerHealthMap by viewModel.brokerManager.healthManager.providerHealthFlow.collectAsStateWithLifecycle()
+    val upstoxHealthState = providerHealthMap["Upstox"]
+    val fyersHealthState = providerHealthMap["Fyers"]
+
     SectionHeader("AUTOMATIC FAILOVER ROUTER")
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -358,34 +362,44 @@ fun BrokerDiagnosticsSection(
     
     SectionHeader("BROKER DIAGNOSTICS")
     
+    val upstoxAuthStage = upstoxHealthState?.authenticationState?.takeIf { it.isNotBlank() }
+        ?: if (viewModel.sessionManager.isUpstoxConnected) "AUTHENTICATED" else if (viewModel.sessionManager.isUpstoxConfigured()) "READY" else "NOT_CONFIGURED"
+
     BrokerCard(
         name = "UPSTOX (Primary)",
         hasCredentials = viewModel.sessionManager.isUpstoxConfigured(),
-        isAuthenticated = !viewModel.sessionManager.upstoxAccessToken.isNullOrBlank(),
-        callbackStatus = if (!viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "RECEIVED" else if (viewModel.sessionManager.isUpstoxConfigured()) "WAITING" else "N/A",
+        isAuthenticated = viewModel.sessionManager.isUpstoxConnected,
+        authStage = upstoxAuthStage,
+        callbackStatus = if (viewModel.sessionManager.isUpstoxConnected) "RECEIVED" else if (upstoxAuthStage.contains("CALLBACK") || upstoxAuthStage.contains("CODE") || upstoxAuthStage.contains("TOKEN")) "RECEIVED" else if (viewModel.sessionManager.isUpstoxConfigured()) "WAITING" else "N/A",
         wsState = upstoxState,
         isActiveSubscription = viewModel.brokerManager.upstoxMarketDataService.hasActiveSubscription(),
         hasRealTick = viewModel.brokerManager.upstoxMarketDataService.hasFirstTickReceived(),
         lastTickTime = viewModel.brokerManager.upstoxMarketDataService.getLastUpdatedTime(),
         tickAgeMs = viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs(),
         health = upstoxHealth,
-        sourceName = MarketDataSourceNames.UPSTOX
+        sourceName = MarketDataSourceNames.UPSTOX,
+        lastError = upstoxHealthState?.lastError ?: ""
     )
     
     Spacer(modifier = Modifier.height(8.dp))
     
+    val fyersAuthStage = fyersHealthState?.authenticationState?.takeIf { it.isNotBlank() }
+        ?: if (viewModel.sessionManager.isFyersConnected) "AUTHENTICATED" else if (viewModel.sessionManager.isFyersConfigured()) "READY" else "NOT_CONFIGURED"
+
     BrokerCard(
         name = "FYERS (Fallback #1)",
         hasCredentials = viewModel.sessionManager.isFyersConfigured(),
-        isAuthenticated = !viewModel.sessionManager.fyersAccessToken.isNullOrBlank(),
-        callbackStatus = if (!viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "RECEIVED" else if (viewModel.sessionManager.isFyersConfigured()) "WAITING" else "N/A",
+        isAuthenticated = viewModel.sessionManager.isFyersConnected,
+        authStage = fyersAuthStage,
+        callbackStatus = if (viewModel.sessionManager.isFyersConnected) "RECEIVED" else if (fyersAuthStage.contains("CALLBACK") || fyersAuthStage.contains("CODE") || fyersAuthStage.contains("TOKEN")) "RECEIVED" else if (viewModel.sessionManager.isFyersConfigured()) "WAITING" else "N/A",
         wsState = fyersState,
         isActiveSubscription = viewModel.brokerManager.fyersMarketDataService.hasActiveSubscription(),
         hasRealTick = viewModel.brokerManager.fyersMarketDataService.hasFirstTickReceived(),
         lastTickTime = viewModel.brokerManager.fyersMarketDataService.getLastUpdatedTime(),
         tickAgeMs = viewModel.brokerManager.fyersMarketDataService.getTickAgeMs(),
         health = fyersHealth,
-        sourceName = MarketDataSourceNames.FYERS
+        sourceName = MarketDataSourceNames.FYERS,
+        lastError = fyersHealthState?.lastError ?: ""
     )
     
     Spacer(modifier = Modifier.height(8.dp))
@@ -424,6 +438,7 @@ fun BrokerCard(
     name: String,
     hasCredentials: Boolean,
     isAuthenticated: Boolean,
+    authStage: String = "",
     callbackStatus: String = "N/A",
     wsState: String,
     isActiveSubscription: Boolean,
@@ -442,8 +457,10 @@ fun BrokerCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             
+            val authDisplay = if (authStage.isNotBlank()) authStage else if (isAuthenticated) "AUTHENTICATED" else if (hasCredentials && lastError.isNotBlank()) "AUTH_FAILED" else "NOT_STARTED"
+
             DiagnosticItem("API Credentials", if (hasCredentials) "CONFIGURED" else "NOT CONFIGURED")
-            DiagnosticItem("Authentication", if (isAuthenticated) "AUTHENTICATED" else if (hasCredentials && lastError.isNotBlank()) "FAILED" else "NOT STARTED")
+            DiagnosticItem("Authentication", authDisplay)
             DiagnosticItem("Callback", callbackStatus)
             DiagnosticItem("WebSocket", wsState)
             DiagnosticItem("Subscription", if (isActiveSubscription) "ACTIVE" else "INACTIVE")

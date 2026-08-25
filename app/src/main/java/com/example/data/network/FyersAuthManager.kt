@@ -18,40 +18,68 @@ class FyersAuthManager(
 
     suspend fun exchangeAuthCode(authCode: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val appId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
-            val secret = sessionManager.fyersSecretId ?: throw Exception("Secret missing")
+            val appId = sessionManager.fyersAppId.takeIf { it.isNotBlank() } ?: throw Exception("Fyers App ID missing")
+            val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() } ?: throw Exception("Fyers Secret ID missing")
 
             val appIdHash = FyersAuthHelper.generateAppIdHash(appId, secret)
 
             val request = FyersTokenRequest(
                 grant_type = "authorization_code",
                 appIdHash = appIdHash,
-                code = authCode
+                code = authCode.trim()
             )
 
-            Log.i(TAG, "[FYERS_AUTH_START] Exchanging FYERS authorization code...")
-            android.util.Log.d("FyersAuth", "[7] Token exchange initiated...")
-            val response = fyersApi.validateAuthCode(request)
-            if (!response.isSuccessful) {
-                throw Exception("HTTP ${response.code()}")
+            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_START] Initiating FYERS authorization code exchange...")
+            val response = try {
+                fyersApi.validateAuthCode(request)
+            } catch (e: Exception) {
+                _authStatus.value = BrokerAuthStatus.ERROR
+                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Network error during FYERS token exchange: ${e.localizedMessage}")
+                throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
             }
 
-            val body = response.body() ?: throw Exception("Empty response body")
-            android.util.Log.d("FyersAuth", "[8] Token validated: PASS")
+            if (!response.isSuccessful) {
+                _authStatus.value = BrokerAuthStatus.ERROR
+                val errBody = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                val sanitized = errBody.take(150).replace("\n", " ")
+                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS Token Exchange Failed: $sanitized")
+                throw Exception("TOKEN_EXCHANGE_FAILED: $sanitized")
+            }
+
+            val body = response.body() ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
+
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
-                Log.i(TAG, "[FYERS_TOKEN_OK] FYERS Access Token obtained & validated successfully")
-                sessionManager.fyersAccessToken = body.access_token
+                val accessToken = body.access_token
+                Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
+
+                // Validate access token with profile API call
+                val authHeader = "$appId:$accessToken"
+                try {
+                    val profileRes = fyersApi.getProfile(authHeader)
+                    if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {
+                        val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                        Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
+                        throw Exception("TOKEN_INVALID: $pErr")
+                    }
+                    Log.i(TAG, "[FYERS_TOKEN_VALID] FYERS token profile validation: PASS")
+                } catch (e: Exception) {
+                    if (e.message?.startsWith("TOKEN_INVALID") == true) throw e
+                    Log.w(TAG, "[FYERS_TOKEN_VALID] Profile check warning (proceeding): ${e.localizedMessage}")
+                }
+
+                sessionManager.fyersAccessToken = accessToken
                 sessionManager.fyersRefreshToken = body.refresh_token
                 sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isFyersConnected = true
-                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
-                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
+
+                Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS OAuth session successfully authenticated")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
-                body.access_token
+                accessToken
             } else {
                 val errorMsg = body.message ?: "Unknown error from Fyers"
                 _authStatus.value = BrokerAuthStatus.ERROR
-                throw Exception(errorMsg)
+                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS Token Exchange Failed: $errorMsg")
+                throw Exception("TOKEN_EXCHANGE_FAILED: $errorMsg")
             }
         }
     }
