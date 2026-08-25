@@ -191,8 +191,12 @@ data class UpstoxFeedAuthResponse(
 
 @JsonClass(generateAdapter = true)
 data class UpstoxFeedAuthData(
-    @Json(name = "authorizedRedirectUri") val authorizedRedirectUri: String? = null
-)
+    @Json(name = "authorizedRedirectUri") val authorizedRedirectUri: String? = null,
+    @Json(name = "authorized_redirect_uri") val authorized_redirect_uri: String? = null
+) {
+    val redirectUri: String?
+        get() = authorizedRedirectUri ?: authorized_redirect_uri
+}
 
 @JsonClass(generateAdapter = true)
 data class UpstoxApiError(

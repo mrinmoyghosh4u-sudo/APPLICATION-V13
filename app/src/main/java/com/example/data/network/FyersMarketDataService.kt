@@ -20,6 +20,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.nio.ByteBuffer
@@ -114,7 +115,7 @@ class FyersMarketDataService(
             
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "[FYERS_WS_CONNECTED] FYERS WebSocket connected")
+                Log.i(TAG, "[FYERS_WS_OPEN] FYERS WebSocket connected")
                 isConnected = true
                 backoffDelayMs = 2000L
                 _connectionState.value = "CONNECTED"
@@ -122,32 +123,36 @@ class FyersMarketDataService(
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
                 healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
 
-                _connectionState.value = "AUTHENTICATED"
                 _connectionState.value = "SUBSCRIBING"
                 healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
                 
-                // Resubscribe symbols
-                if (subscribedSymbols.isNotEmpty()) {
-                    subscribeSymbols(subscribedSymbols.toList(), "symbolUpdate")
-                    Log.d(TAG, "[FYERS_SUBSCRIPTION_SENT] Subscribed to ${subscribedSymbols.size} symbols")
+                // Subscribe using official JSON format with type 'lite'
+                val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
+                    subscribedSymbols.toList()
                 } else {
-                    // Subscribe to default symbols
-                    val defaultSymbols = listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "BSE:SENSEX-INDEX")
-                    subscribedSymbols.addAll(defaultSymbols)
-                    subscribeSymbols(defaultSymbols, "symbolUpdate")
-                    Log.d(TAG, "[FYERS_SUBSCRIPTION_SENT] Subscribed to default FYERS symbols")
+                    listOf("NSE:NIFTY50-INDEX")
                 }
+                subscribedSymbols.addAll(symbolsToSub)
 
-                _connectionState.value = "SUBSCRIBED"
+                val payload = JSONObject().apply {
+                    put("symbol", JSONArray(symbolsToSub))
+                    put("type", "lite")
+                }.toString()
+                
+                webSocket.send(payload)
+                Log.i(TAG, "[FYERS_SUBSCRIBE_SENT] Sent subscription for $symbolsToSub")
+
                 _connectionState.value = "WAITING_FOR_FIRST_TICK"
-                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, symbolsToSub.size)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(TAG, "[FYERS_MESSAGE_RECEIVED] Text message received")
                 handleTextMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                Log.d(TAG, "[FYERS_MESSAGE_RECEIVED] Binary message received (${bytes.size} bytes)")
                 handleBinaryMessage(bytes.toByteArray())
             }
 
@@ -352,28 +357,16 @@ class FyersMarketDataService(
         }
         
         if (!ltp.isNaN() && ltp > 0.0) {
-            val now = System.currentTimeMillis()
-            if (!hasFirstTick) {
-                Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
-            }
-            hasFirstTick = true
-            lastTickReceivedTime = now
-            _connectionState.value = "LIVE"
-            healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
-
-            val exch = detectExchange(symbol)
-            val tick = MarketTick(
-                symbol = symbol,
+            processValidTick(
+                rawSymbol = symbol,
                 ltp = ltp,
                 open = if (open.isNaN()) ltp else open,
                 high = if (high.isNaN()) ltp else high,
                 low = if (low.isNaN()) ltp else low,
                 close = if (close.isNaN()) ltp else close,
                 volume = vol,
-                timestamp = now,
-                exchange = exch
+                ts = System.currentTimeMillis()
             )
-            scope.launch { marketDataEngine.updateFyersTick(tick) }
         }
     }
 
@@ -394,72 +387,122 @@ class FyersMarketDataService(
         val multiplier = topicToMultiplierMap[topicId]?.toDouble() ?: 100.0
         
         if (ltpVal != -2147483648 && ltpVal > 0) {
-            val now = System.currentTimeMillis()
             val ltp = ltpVal / multiplier
-            if (!hasFirstTick) {
-                Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
-            }
-            hasFirstTick = true
-            lastTickReceivedTime = now
-            _connectionState.value = "LIVE"
-            healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
-
-            val exch = detectExchange(symbol)
-            val tick = MarketTick(
-                symbol = symbol,
+            processValidTick(
+                rawSymbol = symbol,
                 ltp = ltp,
                 open = ltp,
                 high = ltp,
                 low = ltp,
                 close = ltp,
                 volume = 0L,
-                timestamp = now,
-                exchange = exch
+                ts = System.currentTimeMillis()
             )
-            scope.launch { marketDataEngine.updateFyersTick(tick) }
         }
     }
 
     private fun parseJsonTick(json: JSONObject) {
-        // If they send JSON ticks
         try {
-            val symbol = json.optString("symbol", "")
-            val ltp = json.optDouble("ltp", Double.NaN)
-            val open = json.optDouble("open", Double.NaN).takeIf { !it.isNaN() }
-            val high = json.optDouble("high", Double.NaN).takeIf { !it.isNaN() }
-            val low = json.optDouble("low", Double.NaN).takeIf { !it.isNaN() }
-            val close = json.optDouble("close", Double.NaN).takeIf { !it.isNaN() }
-            val volume = json.optLong("volume", -1).takeIf { it != -1L }
-            val ts = json.optLong("timestamp", System.currentTimeMillis())
+            // Check for array in 'd' field
+            if (json.has("d")) {
+                val dArray = json.optJSONArray("d")
+                if (dArray != null) {
+                    for (i in 0 until dArray.length()) {
+                        val item = dArray.optJSONObject(i) ?: continue
+                        val itemSym = item.optString("n", item.optString("symbol", ""))
+                        val vObj = item.optJSONObject("v")
+                        val itemLtp = vObj?.optDouble("lp", Double.NaN) ?: item.optDouble("ltp", Double.NaN)
+                        val itemOpen = vObj?.optDouble("open_price", Double.NaN) ?: item.optDouble("open", Double.NaN)
+                        val itemHigh = vObj?.optDouble("high_price", Double.NaN) ?: item.optDouble("high", Double.NaN)
+                        val itemLow = vObj?.optDouble("low_price", Double.NaN) ?: item.optDouble("low", Double.NaN)
+                        val itemClose = vObj?.optDouble("prev_close_price", Double.NaN) ?: item.optDouble("close", Double.NaN)
+                        val itemVol = vObj?.optLong("volume", 0L) ?: item.optLong("volume", 0L)
+                        val itemTs = vObj?.optLong("tt", System.currentTimeMillis()) ?: item.optLong("timestamp", System.currentTimeMillis())
+
+                        if (itemSym.isNotBlank() && !itemLtp.isNaN() && itemLtp > 0.0) {
+                            processValidTick(
+                                rawSymbol = itemSym,
+                                ltp = itemLtp,
+                                open = if (itemOpen.isNaN()) itemLtp else itemOpen,
+                                high = if (itemHigh.isNaN()) itemLtp else itemHigh,
+                                low = if (itemLow.isNaN()) itemLtp else itemLow,
+                                close = if (itemClose.isNaN()) itemLtp else itemClose,
+                                volume = itemVol,
+                                ts = itemTs
+                            )
+                        }
+                    }
+                    return
+                }
+            }
+
+            // Direct object tick
+            val symbol = json.optString("symbol", json.optString("name", json.optString("n", "")))
+            val ltp = json.optDouble("ltp", json.optDouble("lp", Double.NaN))
+            val open = json.optDouble("open", json.optDouble("open_price", Double.NaN)).takeIf { !it.isNaN() }
+            val high = json.optDouble("high", json.optDouble("high_price", Double.NaN)).takeIf { !it.isNaN() }
+            val low = json.optDouble("low", json.optDouble("low_price", Double.NaN)).takeIf { !it.isNaN() }
+            val close = json.optDouble("close", json.optDouble("prev_close_price", Double.NaN)).takeIf { !it.isNaN() }
+            val volume = json.optLong("volume", 0L)
+            val ts = json.optLong("timestamp", json.optLong("tt", System.currentTimeMillis()))
             
             if (symbol.isNotEmpty() && !ltp.isNaN() && ltp > 0.0) {
-                val now = System.currentTimeMillis()
-                if (!hasFirstTick) {
-                    Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received!")
-                }
-                hasFirstTick = true
-                lastTickReceivedTime = now
-                _connectionState.value = "LIVE"
-                healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
-
-                val exch = detectExchange(symbol)
-                val tick = MarketTick(
-                    symbol = symbol,
+                processValidTick(
+                    rawSymbol = symbol,
                     ltp = ltp,
                     open = open ?: ltp,
                     high = high ?: ltp,
                     low = low ?: ltp,
                     close = close ?: ltp,
-                    timestamp = if (ts > 0L) ts else now,
-                    volume = volume ?: 0L,
-                    exchange = exch
+                    volume = volume,
+                    ts = ts
                 )
-                scope.launch {
-                    marketDataEngine.updateFyersTick(tick)
-                }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error parsing tick: ${e.message}")
+            Log.w(TAG, "Error parsing FYERS JSON tick: ${e.message}")
+        }
+    }
+
+    private fun processValidTick(
+        rawSymbol: String,
+        ltp: Double,
+        open: Double,
+        high: Double,
+        low: Double,
+        close: Double,
+        volume: Long,
+        ts: Long
+    ) {
+        val now = System.currentTimeMillis()
+        Log.i(TAG, "[FYERS_LTP_RECEIVED] Symbol: $rawSymbol, LTP: $ltp")
+
+        if (!hasFirstTick) {
+            Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received: $rawSymbol = $ltp")
+        }
+        hasFirstTick = true
+        lastTickReceivedTime = now
+        _connectionState.value = "LIVE"
+        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
+
+        val exch = detectExchange(rawSymbol)
+        val standardSym = FyersSymbolMapper.fromFyersSymbol(rawSymbol)
+
+        val tick = MarketTick(
+            symbol = standardSym,
+            token = rawSymbol,
+            exchange = exch,
+            ltp = ltp,
+            open = open,
+            high = high,
+            low = low,
+            close = close,
+            volume = volume,
+            timestamp = if (ts > 0L) ts else now
+        )
+
+        scope.launch {
+            marketDataEngine.updateFyersTick(tick)
+            Log.i(TAG, "[FYERS_TICK_FORWARDED] Forwarded $standardSym ($rawSymbol) LTP $ltp to MarketDataEngine")
         }
     }
 
