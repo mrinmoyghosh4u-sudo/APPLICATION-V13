@@ -605,6 +605,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                sessionManager.pendingOAuthSession = sessionManager.pendingOAuthSession?.copy(consumed = true)
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
                 _brokerSwitchStatus.value = "✓ UPSTOX CONNECTED"
@@ -669,6 +670,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                sessionManager.pendingOAuthSession = sessionManager.pendingOAuthSession?.copy(consumed = true)
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
                 _brokerSwitchStatus.value = "✓ FYERS CONNECTED"
@@ -713,7 +715,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Upstox"
         sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
-            provider = "Upstox",
+            provider = "UPSTOX",
             state = randomState,
             createdAt = System.currentTimeMillis(),
             redirectUri = redirectUri,
@@ -752,7 +754,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Fyers"
         sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
-            provider = "Fyers",
+            provider = "FYERS",
             state = randomState,
             createdAt = System.currentTimeMillis(),
             redirectUri = redirectUri,
@@ -878,8 +880,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val pendingSession = sessionManager.pendingOAuthSession
 
-            val isUpstox = (pendingSession != null && pendingSession.provider == "Upstox")
-            val isFyers = (pendingSession != null && pendingSession.provider == "Fyers")
+            val isUpstox = (pendingSession != null && (pendingSession.provider == "UPSTOX" || pendingSession.provider == "Upstox"))
+            val isFyers = (pendingSession != null && (pendingSession.provider == "FYERS" || pendingSession.provider == "Fyers"))
 
             if (isUpstox || isFyers || stateHasUpstox || stateHasFyers) {
                 val providerName = if (isUpstox || stateHasUpstox) ProviderHealthManager.PROVIDER_UPSTOX else ProviderHealthManager.PROVIDER_FYERS
@@ -899,7 +901,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 2. Expected state must exist (not blank)
+                // 2. Reject unknown/missing provider in the pending session
+                val rawProvider = pendingSession.provider.uppercase().trim()
+                if (rawProvider != "UPSTOX" && rawProvider != "FYERS") {
+                    val errMsg = "$logPrefix OAuth callback rejected: Unknown provider '$rawProvider' in pending session"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_UNKNOWN_PROVIDER] $errMsg")
+                    _authErrorMessage.value = "Login Failed: Unknown Provider"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "UNKNOWN_PROVIDER", errMsg)
+                    return@launch
+                }
+
+                // 3. Reject callback if the OAuth session has expired (e.g., 15 minutes)
+                val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
+                if (isExpired) {
+                    val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
+                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
+                    return@launch
+                }
+
+                // 4. Verify callback belongs to that provider
+                if (rawProvider == "UPSTOX" && (stateHasFyers || !stateHasUpstox)) {
+                    val errMsg = "Mismatched provider callback: Expected UPSTOX session, but got state: '$callbackState'"
+                    android.util.Log.e("Auth", "[PROVIDER_MISMATCH] $errMsg")
+                    _authErrorMessage.value = "Login Failed: Provider Mismatch"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", errMsg)
+                    return@launch
+                }
+                if (rawProvider == "FYERS" && (stateHasUpstox || !stateHasFyers)) {
+                    val errMsg = "Mismatched provider callback: Expected FYERS session, but got state: '$callbackState'"
+                    android.util.Log.e("Auth", "[PROVIDER_MISMATCH] $errMsg")
+                    _authErrorMessage.value = "Login Failed: Provider Mismatch"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", errMsg)
+                    return@launch
+                }
+
+                // 5. Expected state must exist (not blank)
                 val expectedState = pendingSession.state.trim()
                 if (expectedState.isBlank()) {
                     val errMsg = "$logPrefix Expected State is blank"
@@ -914,7 +956,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 3. Callback state must exist (not blank)
+                // 6. Callback state must exist (not blank)
                 if (callbackState.isBlank()) {
                     val errMsg = "$logPrefix Callback State is blank"
                     android.util.Log.e("Auth", "[$logPrefix" + "_STATE_MISSING] $errMsg")
@@ -928,7 +970,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 4. Callback state must exactly equal expected state
+                // 7. Callback state must exactly equal expected state
                 if (callbackState != expectedState) {
                     val errMsg = "$logPrefix OAuth State Mismatch! Expected '$expectedState', got '$callbackState'."
                     android.util.Log.e("Auth", "[$logPrefix" + "_STATE_MISMATCH] $errMsg")
@@ -942,7 +984,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 5. Session must not be already consumed (replay prevention)
+                // 8. Session must not be already consumed (replay prevention)
                 if (pendingSession.consumed) {
                     val errMsg = "$logPrefix OAuth callback replay detected (already consumed)"
                     android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
@@ -955,27 +997,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     return@launch
                 }
-
-                // 6. Provider matching check: Never allow Upstox callback to complete Fyers, or vice versa
-                if (stateHasUpstox && pendingSession.provider != "Upstox") {
-                    val errMsg = "Mismatched provider callback: Got Upstox state, but pending session is for ${pendingSession.provider}"
-                    android.util.Log.e("Auth", "[PROVIDER_MISMATCH] $errMsg")
-                    _authErrorMessage.value = "Login Failed: Provider Mismatch"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", errMsg)
-                    return@launch
-                }
-                if (stateHasFyers && pendingSession.provider != "Fyers") {
-                    val errMsg = "Mismatched provider callback: Got Fyers state, but pending session is for ${pendingSession.provider}"
-                    android.util.Log.e("Auth", "[PROVIDER_MISMATCH] $errMsg")
-                    _authErrorMessage.value = "Login Failed: Provider Mismatch"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", errMsg)
-                    return@launch
-                }
-
-                // Mark as consumed immediately to prevent replay
-                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
 
                 brokerManager.healthManager.reportCallbackReceived(providerName)
                 android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
