@@ -229,7 +229,15 @@ class SessionManager(context: Context) {
                     .putBoolean("pending_session_consumed", value.consumed)
                     .apply()
             }
-        }
+    }
+
+    var lastProcessedOAuthCode: String
+        get() = prefs.getString("last_processed_oauth_code", "") ?: ""
+        set(value) = prefs.edit().putString("last_processed_oauth_code", value).apply()
+
+    var lastProcessedOAuthTime: Long
+        get() = prefs.getLong("last_processed_oauth_time", 0L)
+        set(value) = prefs.edit().putLong("last_processed_oauth_time", value).apply()
 
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution

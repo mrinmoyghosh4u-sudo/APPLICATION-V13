@@ -957,6 +957,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
+                // Mark session as consumed immediately to prevent replay/duplicate requests
+                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
+
                 brokerManager.healthManager.reportCallbackReceived(providerName)
                 android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
 
@@ -983,11 +986,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val cleanedCode = code.trim()
                 // Deduplication Check
-                if (cleanedCode == lastProcessedOAuthCode && System.currentTimeMillis() - lastProcessedOAuthTime < 60_000L) {
+                val lastCode = sessionManager.lastProcessedOAuthCode
+                val lastTime = sessionManager.lastProcessedOAuthTime
+                if (cleanedCode == lastCode && System.currentTimeMillis() - lastTime < 60_000L) {
                     android.util.Log.w("Auth", "[$logPrefix" + "_DUPLICATE_CALLBACK_IGNORED] Ignoring duplicate authorization code")
                     _isAuthInProgress.value = false
                     return@launch
                 }
+                sessionManager.lastProcessedOAuthCode = cleanedCode
+                sessionManager.lastProcessedOAuthTime = System.currentTimeMillis()
                 lastProcessedOAuthCode = cleanedCode
                 lastProcessedOAuthTime = System.currentTimeMillis()
 
