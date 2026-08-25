@@ -80,6 +80,7 @@ class UpstoxMarketDataService(
             Log.w(TAG, "[UPSTOX_AUTH_FAILED] Cannot connect: credentials missing")
             return@withContext
         }
+        _connectionState.value = "AUTHENTICATED"
         reconnectJob?.cancel()
         connectWebSocket()
     }
@@ -134,6 +135,8 @@ class UpstoxMarketDataService(
                         healthManager?.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
                         backoffDelayMs = 1000L
 
+                        _connectionState.value = "AUTHENTICATED"
+
                         // Subscribe to default index scrips & any pending subscriptions
                         _connectionState.value = "SUBSCRIBING"
                         healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
@@ -149,7 +152,8 @@ class UpstoxMarketDataService(
                         subscribedInstrumentKeys.addAll(defaultKeys)
                         sendSubscription(subscribedInstrumentKeys.toList(), mode = "full")
                         
-                        _connectionState.value = "WAITING_FOR_FIRST_TICK"
+                        _connectionState.value = "SUBSCRIBED"
+                        _connectionState.value = "WAITING_FOR_TICK"
                         healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, subscribedInstrumentKeys.size)
                     }
 

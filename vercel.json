@@ -2,6 +2,8 @@
   "version": 2,
   "rewrites": [
     { "source": "/oauth", "destination": "/api/oauth" },
-    { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks" }
+    { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks" },
+    { "source": "/api/token-exchange", "destination": "/api/token-exchange" },
+    { "source": "/token-exchange", "destination": "/api/token-exchange" }
   ]
 }

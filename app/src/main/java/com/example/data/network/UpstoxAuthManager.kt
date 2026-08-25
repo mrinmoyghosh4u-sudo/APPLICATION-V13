@@ -23,24 +23,24 @@ class UpstoxAuthManager(
         runCatching {
             val apiKey = sessionManager.upstoxApiKey.takeIf { it.isNotBlank() }
                 ?: throw Exception("Upstox API Key (client_id) is missing")
-            val apiSecret = sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
-                ?: throw Exception("Upstox API Secret is missing")
             val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
                 ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
-            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating Upstox authorization code exchange...")
-            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
+            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating Upstox authorization code exchange via backend...")
+            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange via backend...")
+
+            val backendBase = UpstoxAuthHelper.DEFAULT_REDIRECT_URI.substringBefore("/oauth")
+            val tokenExchangeUrl = "$backendBase/api/token-exchange"
 
             val response = try {
-                upstoxApi.getAccessToken(
+                upstoxApi.exchangeTokenSecurely(
+                    url = tokenExchangeUrl,
                     code = authCode.trim(),
-                    clientId = apiKey,
-                    clientSecret = apiSecret,
                     redirectUri = redirectUri
                 )
             } catch (e: Exception) {
                 _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Network error during token exchange: ${e.localizedMessage}")
+                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Network error during secure token exchange: ${e.localizedMessage}")
                 throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
             }
 

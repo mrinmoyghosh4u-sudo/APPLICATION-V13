@@ -583,9 +583,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cleanKey = apiKey.trim()
             val cleanSecret = apiSecret.trim()
 
-            if (cleanKey.isBlank() || cleanSecret.isBlank()) {
+            if (cleanKey.isBlank()) {
                 _isAuthInProgress.value = false
-                _authErrorMessage.value = "Upstox API Key and API Secret are required"
+                _authErrorMessage.value = "Upstox API Key is required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
                     com.example.data.network.ProviderHealthManager.STATE_CREDENTIALS_MISSING,

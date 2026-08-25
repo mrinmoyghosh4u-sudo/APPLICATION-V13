@@ -22,6 +22,13 @@ interface UpstoxApi {
         @Field("grant_type") grantType: String = "authorization_code"
     ): Response<UpstoxTokenResponse>
 
+    @GET
+    suspend fun exchangeTokenSecurely(
+        @retrofit2.http.Url url: String,
+        @Query("code") code: String,
+        @Query("redirect_uri") redirectUri: String
+    ): Response<UpstoxTokenResponse>
+
     @GET("v2/user/profile")
     suspend fun getUserProfile(
         @Header("Authorization") token: String,
