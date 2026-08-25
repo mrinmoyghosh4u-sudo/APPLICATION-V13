@@ -28,6 +28,7 @@ class UpstoxAuthManager(
             val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
                 ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
+            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating Upstox authorization code exchange...")
             Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
 
             val response = try {
@@ -60,6 +61,7 @@ class UpstoxAuthManager(
                 throw Exception("TOKEN_EXCHANGE_FAILED: Access token is empty")
             }
 
+            Log.i(TAG, "[TOKEN_EXCHANGE_SUCCESS] Upstox Access Token received successfully")
             Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE_SUCCESS] Upstox Access Token received successfully")
 
             // Validate token with profile endpoint before marking authenticated
@@ -71,6 +73,7 @@ class UpstoxAuthManager(
                 throw Exception("TOKEN_INVALID: ${e.message}")
             }
 
+            Log.i(TAG, "[PROFILE_VALIDATED] Upstox token profile validation passed")
             Log.i(TAG, "[UPSTOX_TOKEN_VALIDATED] Upstox token profile validation: PASS")
 
             // Securely store credentials and tokens in encrypted storage
@@ -81,6 +84,7 @@ class UpstoxAuthManager(
             sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
             sessionManager.isUpstoxConnected = true
 
+            Log.i(TAG, "[BROKER_CONNECTED] Upstox OAuth session successfully connected and authenticated")
             Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox OAuth session successfully authenticated")
             _authStatus.value = BrokerAuthStatus.CONNECTED
             accessToken

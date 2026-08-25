@@ -29,6 +29,7 @@ class FyersAuthManager(
                 code = authCode.trim()
             )
 
+            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange...")
             Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
             val response = try {
                 fyersApi.validateAuthCode(request)
@@ -50,6 +51,7 @@ class FyersAuthManager(
 
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
                 val accessToken = body.access_token
+                Log.i(TAG, "[TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
                 Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
 
                 // Validate access token with profile API call
@@ -61,6 +63,7 @@ class FyersAuthManager(
                         Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
                         throw Exception("TOKEN_INVALID: $pErr")
                     }
+                    Log.i(TAG, "[PROFILE_VALIDATED] FYERS token profile validation passed")
                     Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
                 } catch (e: Exception) {
                     if (e.message?.startsWith("TOKEN_INVALID") == true) throw e
@@ -72,6 +75,7 @@ class FyersAuthManager(
                 sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isFyersConnected = true
 
+                Log.i(TAG, "[BROKER_CONNECTED] FYERS OAuth session successfully connected and authenticated")
                 Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS OAuth session successfully authenticated")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 accessToken

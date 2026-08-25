@@ -490,12 +490,15 @@ fun BrokerCard(
                     val authStageUpper = authStage.uppercase(java.util.Locale.ENGLISH)
                     val lastErrorUpper = lastError.uppercase(java.util.Locale.ENGLISH)
                     when {
-                        authStageUpper.contains("AUTHORIZATION_STARTED") || authStageUpper.contains("START") -> "OAUTH_START_FAILED"
-                        authStageUpper.contains("CALLBACK") || lastErrorUpper.contains("CALLBACK") -> "CALLBACK_NOT_RECEIVED"
-                        authStageUpper.contains("STATE") || lastErrorUpper.contains("STATE") -> "INVALID_STATE"
-                        authStageUpper.contains("TOKEN") || lastErrorUpper.contains("TOKEN") -> "TOKEN_EXCHANGE_FAILED"
-                        lastError.isNotBlank() -> "AUTHENTICATION_FAILED"
-                        else -> "NOT_AUTHENTICATED"
+                        lastErrorUpper.contains("REDIRECT") -> "REDIRECT_URI_MISMATCH"
+                        lastErrorUpper.contains("STATE_MISMATCH") || lastErrorUpper.contains("STATE_INVALID") || lastErrorUpper.contains("INVALID_STATE") -> "STATE_MISMATCH"
+                        lastErrorUpper.contains("CODE_MISSING") || authStageUpper.contains("CODE_MISSING") || authStageUpper.contains("AUTH_CODE_MISSING") -> "AUTH_CODE_MISSING"
+                        lastErrorUpper.contains("TOKEN_INVALID") || authStageUpper.contains("TOKEN_INVALID") -> "TOKEN_INVALID"
+                        lastErrorUpper.contains("PROFILE") || lastErrorUpper.contains("VALIDATION") -> "PROFILE_VALIDATION_FAILED"
+                        lastErrorUpper.contains("DEEP_LINK_FAILED") || lastErrorUpper.contains("DEEP_LINK") -> "DEEP_LINK_FAILED"
+                        lastErrorUpper.contains("TOKEN") || authStageUpper.contains("TOKEN") -> "TOKEN_EXCHANGE_FAILED"
+                        authStageUpper.contains("WAITING_FOR_CALLBACK") -> "CALLBACK_NOT_RECEIVED"
+                        else -> "CALLBACK_NOT_RECEIVED"
                     }
                 }
                 wsState == "ERROR" || wsState == "DISCONNECTED" || wsState == "OFFLINE" -> "WEBSOCKET_FAILED"

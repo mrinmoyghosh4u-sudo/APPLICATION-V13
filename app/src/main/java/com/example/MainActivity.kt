@@ -732,6 +732,7 @@ class MainActivity : FragmentActivity() {
                                     viewModel.startUpstoxOAuth(apiKey, apiSecret,
                                         onUrlGenerated = { loginUrl ->
                                             try {
+                                                android.util.Log.i("UpstoxAuth", "[BROWSER_OPENED] Browser opened for Upstox authorization")
                                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                                 this@MainActivity.startActivity(intent)
                                                 viewModel.closeConnectDialog()
@@ -746,6 +747,7 @@ class MainActivity : FragmentActivity() {
                                     viewModel.startFyersOAuth(appId, secretId,
                                         onUrlGenerated = { loginUrl ->
                                             try {
+                                                android.util.Log.i("FyersAuth", "[BROWSER_OPENED] Browser opened for Fyers authorization")
                                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                                 this@MainActivity.startActivity(intent)
                                                 viewModel.closeConnectDialog()
