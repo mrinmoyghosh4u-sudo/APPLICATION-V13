@@ -532,11 +532,31 @@ class AppPreferences(private val context: Context) {
     }
 
     fun isAutoCheckUpdateEnabled(): Boolean {
-        return prefs.getBoolean("auto_check_update_enabled", false)
+        return prefs.getBoolean("auto_check_update_enabled", true)
     }
 
     fun setAutoCheckUpdateEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("auto_check_update_enabled", enabled).apply()
+    }
+
+    fun getLastInstalledVersion(): String {
+        return prefs.getString("last_installed_version_name", "").orEmpty()
+    }
+
+    fun setLastInstalledVersion(version: String) {
+        prefs.edit().putString("last_installed_version_name", version).apply()
+    }
+
+    fun getPendingUpdateVersion(): String {
+        return prefs.getString("pending_update_version_name", "").orEmpty()
+    }
+
+    fun setPendingUpdateVersion(version: String) {
+        prefs.edit().putString("pending_update_version_name", version).apply()
+    }
+
+    fun clearPendingUpdateVersion() {
+        prefs.edit().remove("pending_update_version_name").apply()
     }
 
     fun getGithubTokenRaw(): String {

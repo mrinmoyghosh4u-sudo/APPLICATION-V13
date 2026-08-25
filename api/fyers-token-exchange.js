@@ -1,31 +1,104 @@
 const https = require('https');
 const crypto = require('crypto');
 
-module.exports = async (req, res) => {
-  // Support both POST and GET
-  let code = '';
-  let redirectUri = '';
+// In-memory set of consumed auth codes to guarantee idempotency and prevent duplicate upstream exchange
+const consumedCodes = new Map();
 
-  if (req.method === 'POST') {
-    code = req.body?.code || '';
-    redirectUri = req.body?.redirect_uri || '';
-  } else {
-    code = req.query?.code || '';
-    redirectUri = req.query?.redirect_uri || '';
+function isCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (!clean) return true;
+  const entry = consumedCodes.get(clean);
+  if (!entry) return false;
+  // Expire after 10 minutes
+  if (Date.now() - entry > 10 * 60 * 1000) {
+    consumedCodes.delete(clean);
+    return false;
+  }
+  return true;
+}
+
+function markCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (clean) {
+    consumedCodes.set(clean, Date.now());
+  }
+}
+
+function parseRequestBody(req) {
+  return new Promise((resolve) => {
+    if (req.body && typeof req.body === 'object') {
+      return resolve(req.body);
+    }
+    if (typeof req.body === 'string' && req.body.length > 0) {
+      try {
+        return resolve(JSON.parse(req.body));
+      } catch (_) {
+        try {
+          const params = new URLSearchParams(req.body);
+          const obj = {};
+          for (const [k, v] of params.entries()) obj[k] = v;
+          return resolve(obj);
+        } catch (_) {
+          return resolve({});
+        }
+      }
+    }
+    let data = '';
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => {
+      if (!data) return resolve({});
+      try {
+        resolve(JSON.parse(data));
+      } catch (_) {
+        try {
+          const params = new URLSearchParams(data);
+          const obj = {};
+          for (const [k, v] of params.entries()) obj[k] = v;
+          resolve(obj);
+        } catch (_) {
+          resolve({});
+        }
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  code = (code || '').trim();
-  redirectUri = (redirectUri || '').trim();
+  const parsedBody = await parseRequestBody(req);
+
+  const code = (req.query?.code || req.query?.auth_code || parsedBody?.code || parsedBody?.auth_code || '').trim();
+  const redirectUri = (req.query?.redirect_uri || parsedBody?.redirect_uri || 'https://application-beige-psi.vercel.app/oauth').trim();
 
   if (!code) {
     return res.status(400).json({ s: "error", code: 400, message: "Missing authorization code" });
   }
 
-  let appId = (process.env.FYERS_APP_ID || '').trim();
-  const secretId = (process.env.FYERS_SECRET_ID || '').trim();
+  if (isCodeConsumed(code)) {
+    return res.status(400).json({
+      s: "error",
+      code: 400,
+      message: "AUTH_CODE_ALREADY_USED: This authorization code has already been exchanged or expired. A new login is required."
+    });
+  }
+
+  // Mark consumed before making the upstream request to prevent concurrent race-condition replays
+  markCodeConsumed(code);
+
+  let appId = (req.query?.app_id || req.query?.appId || req.query?.client_id || parsedBody?.app_id || parsedBody?.appId || parsedBody?.client_id || process.env.FYERS_APP_ID || '').trim();
+  const secretId = (req.query?.secret_id || req.query?.secretId || req.query?.client_secret || parsedBody?.secret_id || parsedBody?.secretId || parsedBody?.client_secret || process.env.FYERS_SECRET_ID || '').trim();
 
   if (!appId || !secretId) {
-    return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration" });
+    return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration (FYERS_APP_ID / FYERS_SECRET_ID)" });
   }
 
   // Ensure -100 suffix on appId for Fyers v3 API
@@ -84,3 +157,4 @@ module.exports = async (req, res) => {
     postReq.end();
   });
 };
+

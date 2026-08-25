@@ -29,6 +29,8 @@ data class UpdateDiagnostics(
     val apkAssetFormattedSize: String = "0 B",
     val apkDownloadStatus: String = "READY",
     val installerStatus: String = "VERIFIED (FileProvider)",
+    val checksumStatus: String = "N/A",
+    val verifiedSha256: String = "N/A",
     val resultStatus: String = "N/A",
     val hasAuthToken: Boolean = false
 )
@@ -46,6 +48,7 @@ data class UpdateInfo(
     val assetId: Long = 0L,
     val assetApiUrl: String = "",
     val browserDownloadUrl: String = "",
+    val expectedSha256: String? = null,
     val diagnostics: UpdateDiagnostics = UpdateDiagnostics()
 )
 

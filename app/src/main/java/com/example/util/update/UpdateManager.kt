@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class UpdateManager(
@@ -323,6 +324,7 @@ class UpdateManager(
             val cleanCurrent = VersionUtils.cleanVersion(currentVersion)
             val isNewer = VersionUtils.isUpdateAvailable(cleanCurrent, cleanLatest)
             val formattedSize = formatBytes(apkSize)
+            val expectedSha256 = extractExpectedSha256(releaseNotes, apkName)
 
             val comparisonStatus = if (isNewer) {
                 "v$cleanCurrent < v$cleanLatest"
@@ -346,6 +348,7 @@ class UpdateManager(
                 apkAssetUrl = if (apkUrl.isNotBlank()) apkUrl else "NOT FOUND",
                 apkAssetFound = if (apkUrl.isNotBlank() && apkSize > 0) "PASS" else "NOT FOUND",
                 apkAssetFormattedSize = formattedSize,
+                checksumStatus = if (!expectedSha256.isNullOrBlank()) "PROVIDED (SHA-256)" else "OPTIONAL (PACKAGE VERIFIED)",
                 resultStatus = if (apkUrl.isBlank() || apkSize <= 0) "APK release asset not found. Please create/publish the GitHub Release APK." else if (isNewer) "UPDATE AVAILABLE" else "YOU ARE UP TO DATE"
             )
 
@@ -368,6 +371,7 @@ class UpdateManager(
                 assetId = assetId,
                 assetApiUrl = assetApiUrl,
                 browserDownloadUrl = browserDownloadUrl,
+                expectedSha256 = expectedSha256,
                 diagnostics = diagnostics
             )
 
@@ -397,16 +401,127 @@ class UpdateManager(
         }
     }
 
-    fun verifyApk(apkFile: File): Boolean {
-        if (!apkFile.exists() || apkFile.length() <= 0) return false
+    fun calculateSha256(file: File): String {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { fis ->
+                val buffer = ByteArray(16384)
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            Log.e("UpdateManager", "Failed to calculate SHA-256 for file: ${file.absolutePath}", e)
+            ""
+        }
+    }
+
+    fun extractExpectedSha256(releaseNotes: String, assetName: String): String? {
+        if (releaseNotes.isBlank()) return null
+        val hex64Regex = Regex("[a-fA-F0-9]{64}")
+        val lines = releaseNotes.lines()
+        for (line in lines) {
+            val lower = line.lowercase()
+            if (lower.contains(assetName.lowercase()) || lower.contains("sha256") || lower.contains("sha-256") || lower.contains("checksum")) {
+                val match = hex64Regex.find(line)
+                if (match != null) {
+                    return match.value.lowercase()
+                }
+            }
+        }
+        val fallbackMatch = hex64Regex.find(releaseNotes)
+        return fallbackMatch?.value?.lowercase()
+    }
+
+    fun verifyApk(apkFile: File, expectedVersion: String? = null, expectedSha256: String? = null): Boolean {
+        if (!apkFile.exists() || apkFile.length() <= 0) {
+            Log.w("UpdateManager", "verifyApk failed: file does not exist or empty")
+            return false
+        }
         return try {
             val pm = context.packageManager
             val info = pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
-            info != null && !info.packageName.isNullOrBlank()
+            if (info == null || info.packageName.isNullOrBlank()) {
+                Log.e("UpdateManager", "verifyApk failed: package archive info could not be parsed")
+                return false
+            }
+
+            if (!expectedVersion.isNullOrBlank()) {
+                val parsedVersion = info.versionName ?: ""
+                if (parsedVersion.isNotBlank()) {
+                    Log.d("UpdateManager", "verifyApk parsed APK version: $parsedVersion (expected: $expectedVersion)")
+                }
+            }
+
+            if (!expectedSha256.isNullOrBlank()) {
+                val calculatedSha = calculateSha256(apkFile)
+                if (!calculatedSha.equals(expectedSha256.trim(), ignoreCase = true)) {
+                    Log.e("UpdateManager", "verifyApk SHA-256 mismatch! Expected: $expectedSha256, Actual: $calculatedSha")
+                    return false
+                } else {
+                    Log.d("UpdateManager", "verifyApk SHA-256 checksum matched: $calculatedSha")
+                }
+            }
+
+            true
         } catch (e: Exception) {
             Log.e("UpdateManager", "Failed to parse APK archive: ${e.localizedMessage}", e)
             false
         }
+    }
+
+    data class PostInstallVerification(
+        val isUpdated: Boolean,
+        val currentVersion: String,
+        val previousVersion: String,
+        val message: String
+    )
+
+    fun checkAndVerifyInstalledVersion(prefs: AppPreferences): PostInstallVerification {
+        val current = getCurrentVersionName()
+        val lastInstalled = prefs.getLastInstalledVersion()
+        val pending = prefs.getPendingUpdateVersion()
+
+        val isNewer = if (lastInstalled.isNotBlank()) {
+            VersionUtils.compareVersions(current, lastInstalled) > 0
+        } else false
+
+        val matchesPending = pending.isNotBlank() && VersionUtils.cleanVersion(current) == VersionUtils.cleanVersion(pending)
+
+        if (isNewer || matchesPending) {
+            prefs.setLastInstalledVersion(current)
+            prefs.clearPendingUpdateVersion()
+            Log.d("UpdateManager", "Post-install verification successful: v$current installed (previous: $lastInstalled)")
+            return PostInstallVerification(
+                isUpdated = true,
+                currentVersion = current,
+                previousVersion = if (lastInstalled.isNotBlank()) lastInstalled else "previous",
+                message = "🎉 Successfully updated to v$current! Verification passed."
+            )
+        }
+
+        if (lastInstalled.isBlank()) {
+            prefs.setLastInstalledVersion(current)
+        }
+
+        return PostInstallVerification(
+            isUpdated = false,
+            currentVersion = current,
+            previousVersion = lastInstalled,
+            message = "Running version v$current"
+        )
+    }
+
+    suspend fun autoDownloadAndInstall(updateInfo: UpdateInfo, customToken: String? = null): File? {
+        val downloadedApk = downloadUpdateApk(updateInfo, customToken)
+        if (downloadedApk != null && verifyApk(downloadedApk, updateInfo.versionName, updateInfo.expectedSha256)) {
+            AppPreferences.getInstance(context).setPendingUpdateVersion(updateInfo.versionName)
+            installApk(downloadedApk)
+            return downloadedApk
+        }
+        return null
     }
 
     suspend fun downloadUpdateApk(updateInfo: UpdateInfo, customToken: String? = null): File? = withContext(Dispatchers.IO) {
@@ -420,7 +535,7 @@ class UpdateManager(
         val tempFile = File(downloadDir, "app-release-${updateInfo.versionName}.apk.tmp")
 
         if (apkFile.exists() && apkFile.length() > 0) {
-            if (verifyApk(apkFile) && (updateInfo.apkSize <= 0 || apkFile.length() == updateInfo.apkSize)) {
+            if (verifyApk(apkFile, updateInfo.versionName, updateInfo.expectedSha256) && (updateInfo.apkSize <= 0 || apkFile.length() == updateInfo.apkSize)) {
                 Log.d("UpdateManager", "Cached APK is valid and verified: ${apkFile.absolutePath}")
                 _downloadState.value = DownloadState.Completed(apkFile)
                 return@withContext apkFile
@@ -605,10 +720,10 @@ class UpdateManager(
                         }
 
                         // VERIFY THE DOWNLOADED APK ARCHIVE BEFORE FINALIZING
-                        if (!verifyApk(tempFile)) {
+                        if (!verifyApk(tempFile, updateInfo.versionName, updateInfo.expectedSha256)) {
                             Log.e("UpdateManager", "Downloaded file failed APK package verification: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
                             tempFile.delete()
-                            lastErrorMessage = "APK VERIFICATION FAILED (Invalid or corrupted APK package)"
+                            lastErrorMessage = "APK VERIFICATION FAILED (Invalid or corrupted APK package or checksum mismatch)"
                             return@use
                         }
 

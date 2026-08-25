@@ -64,6 +64,30 @@ app.get('/oauth', (req, res) => {
 });
 
 const https = require('https');
+const crypto = require('crypto');
+
+// In-memory set of consumed auth codes to guarantee idempotency and prevent duplicate upstream exchange
+const consumedCodes = new Map();
+
+function isCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (!clean) return true;
+  const entry = consumedCodes.get(clean);
+  if (!entry) return false;
+  // Expire after 10 minutes
+  if (Date.now() - entry > 10 * 60 * 1000) {
+    consumedCodes.delete(clean);
+    return false;
+  }
+  return true;
+}
+
+function markCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (clean) {
+    consumedCodes.set(clean, Date.now());
+  }
+}
 
 // Token Exchange Endpoint
 const handleTokenExchange = (req, res) => {
@@ -71,10 +95,10 @@ const handleTokenExchange = (req, res) => {
   let redirectUri = '';
 
   if (req.method === 'POST') {
-    code = req.body?.code || '';
+    code = req.body?.code || req.body?.auth_code || '';
     redirectUri = req.body?.redirect_uri || '';
   } else {
-    code = req.query?.code || '';
+    code = req.query?.code || req.query?.auth_code || '';
     redirectUri = req.query?.redirect_uri || '';
   }
 
@@ -82,11 +106,20 @@ const handleTokenExchange = (req, res) => {
   redirectUri = (redirectUri || '').trim();
 
   if (!code) {
-    return res.status(400).json({ error: "Missing authorization code" });
+    return res.status(400).json({ status: "error", error: "Missing authorization code" });
   }
 
-  const clientId = (process.env.UPSTOX_API_KEY || req.query?.client_id || req.query?.apiKey || req.body?.client_id || req.body?.apiKey || '').trim();
-  const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
+  if (isCodeConsumed(code)) {
+    return res.status(400).json({
+      status: "error",
+      error: "AUTH_CODE_ALREADY_USED: This authorization code has already been exchanged or expired. A new login is required."
+    });
+  }
+
+  markCodeConsumed(code);
+
+  const clientId = (req.query?.client_id || req.query?.apiKey || req.body?.client_id || req.body?.apiKey || process.env.UPSTOX_API_KEY || '').trim();
+  const clientSecret = (req.query?.client_secret || req.query?.apiSecret || req.body?.client_secret || req.body?.apiSecret || process.env.UPSTOX_API_SECRET || '').trim();
   const defaultRedirectUri = (process.env.UPSTOX_REDIRECT_URI || '').trim();
   
   const finalRedirectUri = redirectUri || defaultRedirectUri || "https://application-beige-psi.vercel.app/oauth";
@@ -94,7 +127,7 @@ const handleTokenExchange = (req, res) => {
   if (!clientId || !clientSecret) {
     return res.status(500).json({
       status: "error",
-      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY / UPSTOX_API_SECRET must be configured."
+      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY and UPSTOX_API_SECRET must be configured."
     });
   }
 
@@ -138,7 +171,7 @@ const handleTokenExchange = (req, res) => {
 
   postReq.on('error', (e) => {
     console.error(`Token exchange error: ${e.message}`);
-    res.status(500).json({ error: `Internal connection error: ${e.message}` });
+    res.status(500).json({ status: "error", error: `Internal connection error: ${e.message}` });
   });
 
   postReq.write(postData);
@@ -149,16 +182,15 @@ app.all('/api/token-exchange', handleTokenExchange);
 app.all('/token-exchange', handleTokenExchange);
 
 // FYERS Token Exchange Endpoint
-const crypto = require('crypto');
 const handleFyersTokenExchange = (req, res) => {
   let code = '';
   let redirectUri = '';
 
   if (req.method === 'POST') {
-    code = req.body?.code || '';
+    code = req.body?.code || req.body?.auth_code || '';
     redirectUri = req.body?.redirect_uri || '';
   } else {
-    code = req.query?.code || '';
+    code = req.query?.code || req.query?.auth_code || '';
     redirectUri = req.query?.redirect_uri || '';
   }
 
@@ -169,11 +201,21 @@ const handleFyersTokenExchange = (req, res) => {
     return res.status(400).json({ s: "error", code: 400, message: "Missing authorization code" });
   }
 
-  let appId = (process.env.FYERS_APP_ID || '').trim();
-  const secretId = (process.env.FYERS_SECRET_ID || '').trim();
+  if (isCodeConsumed(code)) {
+    return res.status(400).json({
+      s: "error",
+      code: 400,
+      message: "AUTH_CODE_ALREADY_USED: This authorization code has already been exchanged or expired. A new login is required."
+    });
+  }
+
+  markCodeConsumed(code);
+
+  let appId = (req.query?.app_id || req.query?.appId || req.query?.client_id || req.body?.app_id || req.body?.appId || req.body?.client_id || process.env.FYERS_APP_ID || '').trim();
+  const secretId = (req.query?.secret_id || req.query?.secretId || req.query?.client_secret || req.body?.secret_id || req.body?.secretId || req.body?.client_secret || process.env.FYERS_SECRET_ID || '').trim();
 
   if (!appId || !secretId) {
-    return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration" });
+    return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration (FYERS_APP_ID / FYERS_SECRET_ID)" });
   }
 
   if (!appId.endsWith('-100')) {

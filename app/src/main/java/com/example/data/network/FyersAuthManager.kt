@@ -18,71 +18,73 @@ class FyersAuthManager(
 
     suspend fun exchangeAuthCode(authCode: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val appId = sessionManager.fyersAppId.takeIf { it.isNotBlank() } ?: throw Exception("Fyers App ID missing")
+            val rawAppId = sessionManager.fyersAppId.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.fyersAppId.takeIf { it.isNotBlank() }
+                ?: throw Exception("FYERS App ID is missing")
+            val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
             val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() }
                 ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
-            val backendBase = FyersAuthHelper.DEFAULT_REDIRECT_URI.substringBefore("/oauth")
-            val tokenExchangeUrl = "$backendBase/api/fyers-token-exchange"
+            val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
+            val cleanCode = authCode.trim()
 
-            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange via backend...")
-            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange via backend...")
+            Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange...")
+            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
 
             var tokenBody: FyersTokenResponse? = null
-            var lastErrorString: String? = null
 
-            // 1. Try secure backend endpoint first
-            try {
-                val response = fyersApi.exchangeTokenSecurely(
-                    url = tokenExchangeUrl,
-                    code = authCode.trim(),
-                    redirectUri = redirectUri
+            if (!secret.isNullOrBlank()) {
+                // Direct official FYERS V3 OAuth token exchange (POST https://api-t1.fyers.in/api/v3/validate-authcode)
+                val appIdHash = FyersAuthHelper.generateAppIdHash(fullAppId, secret)
+                val request = FyersTokenRequest(
+                    grant_type = "authorization_code",
+                    appIdHash = appIdHash,
+                    code = cleanCode
                 )
+                Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code directly via official FYERS V3 API...")
+                val directRes = try {
+                    fyersApi.validateAuthCode(request)
+                } catch (e: Exception) {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS direct token exchange request failed: ${e.localizedMessage}")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                }
+
+                if (directRes.isSuccessful && directRes.body()?.access_token?.isNotBlank() == true) {
+                    tokenBody = directRes.body()
+                } else {
+                    val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
+                    val sanitizedErr = err.take(150).replace("\n", " ")
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Direct FYERS exchange returned error: $sanitizedErr")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+                }
+            } else {
+                // Secure backend token exchange fallback
+                val backendBase = FyersAuthHelper.DEFAULT_REDIRECT_URI.substringBefore("/oauth")
+                val tokenExchangeUrl = "$backendBase/api/fyers-token-exchange"
+                Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code via secure backend endpoint...")
+                val response = try {
+                    fyersApi.exchangeTokenSecurely(
+                        url = tokenExchangeUrl,
+                        code = cleanCode,
+                        redirectUri = redirectUri
+                    )
+                } catch (e: Exception) {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Backend exchange connection error: ${e.localizedMessage}")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                }
+
                 if (response.isSuccessful && response.body()?.access_token?.isNotBlank() == true) {
                     tokenBody = response.body()
                 } else {
                     val errBody = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                    lastErrorString = errBody.take(150).replace("\n", " ")
-                    Log.w(TAG, "[FYERS_TOKEN_EXCHANGE] Backend exchange returned $lastErrorString, trying direct official API fallback...")
-                }
-            } catch (e: Exception) {
-                lastErrorString = e.localizedMessage
-                Log.w(TAG, "[FYERS_TOKEN_EXCHANGE] Backend exchange error: ${e.message}, trying direct official API fallback...")
-            }
-
-            // 2. Fallback to direct official FYERS API if backend was 404 / unavailable
-            if (tokenBody == null) {
-                val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
-                    ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
-                if (!secret.isNullOrBlank()) {
-                    val appIdHash = FyersAuthHelper.generateAppIdHash(appId, secret)
-                    val request = FyersTokenRequest(
-                        grant_type = "authorization_code",
-                        appIdHash = appIdHash,
-                        code = authCode.trim()
-                    )
-                    Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code directly with official FYERS API...")
-                    val directRes = try {
-                        fyersApi.validateAuthCode(request)
-                    } catch (e: Exception) {
-                        _authStatus.value = BrokerAuthStatus.ERROR
-                        Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Direct FYERS exchange failed: ${e.localizedMessage}")
-                        throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
-                    }
-
-                    if (directRes.isSuccessful && directRes.body()?.access_token?.isNotBlank() == true) {
-                        tokenBody = directRes.body()
-                    } else {
-                        val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
-                        val sanitizedErr = err.take(150).replace("\n", " ")
-                        _authStatus.value = BrokerAuthStatus.ERROR
-                        Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Direct FYERS exchange error: $sanitizedErr")
-                        throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
-                    }
-                } else {
+                    val sanitizedErr = errBody.take(150).replace("\n", " ")
                     _authStatus.value = BrokerAuthStatus.ERROR
-                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Token exchange failed and FYERS secret ID not found for direct fallback: $lastErrorString")
-                    throw Exception("TOKEN_EXCHANGE_FAILED: $lastErrorString")
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Backend exchange returned error: $sanitizedErr")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
                 }
             }
 
@@ -94,7 +96,7 @@ class FyersAuthManager(
                 Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
 
                 // Validate access token with profile API call
-                val authHeader = "$appId:$accessToken"
+                val authHeader = "$fullAppId:$accessToken"
                 try {
                     val profileRes = fyersApi.getProfile(authHeader)
                     if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {

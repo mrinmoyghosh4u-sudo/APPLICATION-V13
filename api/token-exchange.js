@@ -1,5 +1,28 @@
 const https = require('https');
 
+// In-memory set of consumed auth codes to guarantee idempotency and prevent duplicate upstream exchange
+const consumedCodes = new Map();
+
+function isCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (!clean) return true;
+  const entry = consumedCodes.get(clean);
+  if (!entry) return false;
+  // Expire after 10 minutes
+  if (Date.now() - entry > 10 * 60 * 1000) {
+    consumedCodes.delete(clean);
+    return false;
+  }
+  return true;
+}
+
+function markCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (clean) {
+    consumedCodes.set(clean, Date.now());
+  }
+}
+
 function parseRequestBody(req) {
   return new Promise((resolve) => {
     if (req.body && typeof req.body === 'object') {
@@ -52,19 +75,29 @@ module.exports = async (req, res) => {
 
   const parsedBody = await parseRequestBody(req);
 
-  const code = (req.query?.code || parsedBody?.code || '').trim();
+  const code = (req.query?.code || req.query?.auth_code || parsedBody?.code || parsedBody?.auth_code || '').trim();
   const redirectUri = (req.query?.redirect_uri || parsedBody?.redirect_uri || process.env.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth').trim();
-  const clientId = (process.env.UPSTOX_API_KEY || req.query?.client_id || req.query?.apiKey || parsedBody?.client_id || parsedBody?.apiKey || '').trim();
-  const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
+  const clientId = (req.query?.client_id || req.query?.apiKey || parsedBody?.client_id || parsedBody?.apiKey || process.env.UPSTOX_API_KEY || '').trim();
+  const clientSecret = (req.query?.client_secret || req.query?.apiSecret || parsedBody?.client_secret || parsedBody?.apiSecret || process.env.UPSTOX_API_SECRET || '').trim();
 
   if (!code) {
     return res.status(400).json({ status: "error", error: "Missing authorization code" });
   }
 
+  if (isCodeConsumed(code)) {
+    return res.status(400).json({
+      status: "error",
+      error: "AUTH_CODE_ALREADY_USED: This authorization code has already been exchanged or expired. A new login is required."
+    });
+  }
+
+  // Mark consumed before making the upstream request to prevent concurrent race-condition replays
+  markCodeConsumed(code);
+
   if (!clientId || !clientSecret) {
     return res.status(500).json({
       status: "error",
-      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY / UPSTOX_API_SECRET must be configured."
+      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY and UPSTOX_API_SECRET must be configured."
     });
   }
 
@@ -118,3 +151,4 @@ module.exports = async (req, res) => {
     postReq.end();
   });
 };
+

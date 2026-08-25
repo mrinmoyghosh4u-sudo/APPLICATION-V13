@@ -100,15 +100,25 @@ class MainActivity : FragmentActivity() {
                 val authErrorMessage by viewModel.authErrorMessage.collectAsStateWithLifecycle()
                 val authSuccessEvent by viewModel.authSuccessEvent.collectAsStateWithLifecycle()
 
+                val snackbarHostState = remember { SnackbarHostState() }
+                val coroutineScope = rememberCoroutineScope()
+
                 var autoUpdateBannerInfo by remember { mutableStateOf<com.example.util.update.UpdateInfo?>(null) }
+                val updateManager = remember { com.example.util.update.UpdateManager(applicationContext) }
+                val updateDownloadState by updateManager.downloadState.collectAsStateWithLifecycle()
 
                 LaunchedEffect(Unit) {
+                    val postInstall = updateManager.checkAndVerifyInstalledVersion(appPreferences)
+                    if (postInstall.isUpdated) {
+                        snackbarHostState.showSnackbar(postInstall.message)
+                    }
+
                     if (appPreferences.isAutoCheckUpdateEnabled()) {
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val updateManager = com.example.util.update.UpdateManager(applicationContext)
                             val res = updateManager.checkForUpdates()
                             if (res is com.example.util.update.UpdateCheckResult.UpdateAvailable) {
                                 autoUpdateBannerInfo = res.info
+                                updateManager.autoDownloadAndInstall(res.info)
                             }
                         }
                     }
@@ -136,9 +146,6 @@ class MainActivity : FragmentActivity() {
                 LaunchedEffect(pagerState.currentPage) {
                     viewModel.refreshBrokerData()
                 }
-
-                val snackbarHostState = remember { SnackbarHostState() }
-                val coroutineScope = rememberCoroutineScope()
 
                 val brokerSwitchStatus by viewModel.brokerSwitchStatus.collectAsStateWithLifecycle()
                 LaunchedEffect(brokerSwitchStatus) {
@@ -226,48 +233,104 @@ class MainActivity : FragmentActivity() {
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.ProfitGreen)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                                ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                     Row(
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                                     ) {
-                                        androidx.compose.material3.Text(
-                                            "🚀 New Update v${updateInfo.versionName} available!",
-                                            fontSize = 11.sp,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                            color = com.example.ui.theme.ProfitGreen
-                                        )
-                                    }
-                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        androidx.compose.material3.TextButton(
-                                            onClick = {
-                                                navController.navigate("main")
-                                                autoUpdateBannerInfo = null
-                                            },
-                                            contentPadding = PaddingValues(horizontal = 8.dp)
+                                        Row(
+                                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
                                         ) {
+                                            val bannerText = when (val state = updateDownloadState) {
+                                                is com.example.util.update.DownloadState.Downloading ->
+                                                    "🚀 Auto-updating v${updateInfo.versionName} (${state.progress}%)..."
+                                                is com.example.util.update.DownloadState.Completed ->
+                                                    "✅ Update v${updateInfo.versionName} ready to install"
+                                                is com.example.util.update.DownloadState.Error ->
+                                                    "⚠️ Update download failed: ${state.message.take(40)}"
+                                                com.example.util.update.DownloadState.Idle ->
+                                                    "🚀 New Update v${updateInfo.versionName} available"
+                                            }
                                             androidx.compose.material3.Text(
-                                                "VIEW",
+                                                bannerText,
                                                 fontSize = 11.sp,
                                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                                color = com.example.ui.theme.SecondaryGold
+                                                color = com.example.ui.theme.ProfitGreen
                                             )
                                         }
-                                        androidx.compose.material3.IconButton(
-                                            onClick = { autoUpdateBannerInfo = null },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            androidx.compose.material3.Icon(
-                                                androidx.compose.material.icons.Icons.Default.Close,
-                                                contentDescription = "Dismiss",
-                                                tint = com.example.ui.theme.TextGray,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                            when (val state = updateDownloadState) {
+                                                is com.example.util.update.DownloadState.Completed -> {
+                                                    androidx.compose.material3.TextButton(
+                                                        onClick = { updateManager.installApk(state.apkFile) },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                                    ) {
+                                                        androidx.compose.material3.Text(
+                                                            "INSTALL",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                            color = com.example.ui.theme.ProfitGreen
+                                                        )
+                                                    }
+                                                }
+                                                is com.example.util.update.DownloadState.Error -> {
+                                                    androidx.compose.material3.TextButton(
+                                                        onClick = {
+                                                            coroutineScope.launch {
+                                                                updateManager.autoDownloadAndInstall(updateInfo)
+                                                            }
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                                    ) {
+                                                        androidx.compose.material3.Text(
+                                                            "RETRY",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                            color = com.example.ui.theme.SecondaryGold
+                                                        )
+                                                    }
+                                                }
+                                                else -> {
+                                                    androidx.compose.material3.TextButton(
+                                                        onClick = {
+                                                            navController.navigate("main")
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                                    ) {
+                                                        androidx.compose.material3.Text(
+                                                            "DETAILS",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                            color = com.example.ui.theme.SecondaryGold
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            androidx.compose.material3.IconButton(
+                                                onClick = { autoUpdateBannerInfo = null },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                androidx.compose.material3.Icon(
+                                                    androidx.compose.material.icons.Icons.Default.Close,
+                                                    contentDescription = "Dismiss",
+                                                    tint = com.example.ui.theme.TextGray,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
+                                    }
+
+                                    if (updateDownloadState is com.example.util.update.DownloadState.Downloading) {
+                                        val progress = (updateDownloadState as com.example.util.update.DownloadState.Downloading).progress
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        androidx.compose.material3.LinearProgressIndicator(
+                                            progress = { progress / 100f },
+                                            modifier = Modifier.fillMaxWidth().height(4.dp),
+                                            color = com.example.ui.theme.ProfitGreen,
+                                            trackColor = com.example.ui.theme.DarkCardBorder
+                                        )
                                     }
                                 }
                             }
