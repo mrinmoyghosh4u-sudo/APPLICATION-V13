@@ -1,5 +1,7 @@
 package com.example.data.network
 
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -7,102 +9,114 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 
+@JsonClass(generateAdapter = true)
 data class FyersRefreshTokenRequest(
-    val grant_type: String = "refresh_token",
-    val appIdHash: String,
-    val refresh_token: String,
-    val pin: String
+    @Json(name = "grant_type") val grant_type: String = "refresh_token",
+    @Json(name = "appIdHash") val appIdHash: String,
+    @Json(name = "refresh_token") val refresh_token: String,
+    @Json(name = "pin") val pin: String
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersTokenRequest(
-    val grant_type: String = "authorization_code",
-    val appIdHash: String,
-    val code: String
+    @Json(name = "grant_type") val grant_type: String = "authorization_code",
+    @Json(name = "appIdHash") val appIdHash: String,
+    @Json(name = "code") val code: String
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersTokenResponse(
-    val s: String?,
-    val code: Int?,
-    val message: String?,
-    val access_token: String?,
-    val refresh_token: String?
+    @Json(name = "s") val s: String? = null,
+    @Json(name = "code") val code: Int? = null,
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "access_token") val access_token: String? = null,
+    @Json(name = "refresh_token") val refresh_token: String? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersHistoryResponse(
-    val s: String?,
-    val candles: List<List<Double>>?
+    @Json(name = "s") val s: String? = null,
+    @Json(name = "candles") val candles: List<List<Double>>? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersQuotesResponse(
-    val s: String?,
-    val d: List<FyersQuoteData>?
+    @Json(name = "s") val s: String? = null,
+    @Json(name = "d") val d: List<FyersQuoteData>? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersQuoteData(
-    val n: String?,
-    val v: FyersQuoteValues?
+    @Json(name = "n") val n: String? = null,
+    @Json(name = "v") val v: FyersQuoteValues? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersQuoteValues(
-    val ch: Double?,
-    val chp: Double?,
-    val lp: Double?,
-    val spread: Double?,
-    val ask: Double?,
-    val bid: Double?,
-    val open_price: Double?,
-    val high_price: Double?,
-    val low_price: Double?,
-    val prev_close_price: Double?,
-    val volume: Long?,
-    val short_name: String?,
-    val exchange: String?,
-    val description: String?,
-    val original_name: String?,
-    val symbol: String?,
-    val fyToken: String?,
-    val tt: Long?
+    @Json(name = "ch") val ch: Double? = null,
+    @Json(name = "chp") val chp: Double? = null,
+    @Json(name = "lp") val lp: Double? = null,
+    @Json(name = "spread") val spread: Double? = null,
+    @Json(name = "ask") val ask: Double? = null,
+    @Json(name = "bid") val bid: Double? = null,
+    @Json(name = "open_price") val open_price: Double? = null,
+    @Json(name = "high_price") val high_price: Double? = null,
+    @Json(name = "low_price") val low_price: Double? = null,
+    @Json(name = "prev_close_price") val prev_close_price: Double? = null,
+    @Json(name = "volume") val volume: Long? = null,
+    @Json(name = "short_name") val short_name: String? = null,
+    @Json(name = "exchange") val exchange: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "original_name") val original_name: String? = null,
+    @Json(name = "symbol") val symbol: String? = null,
+    @Json(name = "fyToken") val fyToken: String? = null,
+    @Json(name = "tt") val tt: Long? = null
 )
 
-
+@JsonClass(generateAdapter = true)
 data class FyersOptionChainResponse(
-    val s: String?,
-    val data: FyersOptionChainData?
+    @Json(name = "s") val s: String? = null,
+    @Json(name = "data") val data: FyersOptionChainData? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersOptionChainData(
-    val expiryData: List<FyersExpiryData>?
+    @Json(name = "expiryData") val expiryData: List<FyersExpiryData>? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersExpiryData(
-    val expiry: String?,
-    val optionChain: List<FyersOptionContract>?
+    @Json(name = "expiry") val expiry: String? = null,
+    @Json(name = "optionChain") val optionChain: List<FyersOptionContract>? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersOptionContract(
-    val strike_price: Double?,
-    val symbol: String?,
-    val ltp: Double?,
-    val oi: Double?,
-    val volume: Double?,
-    val option_type: String?,
-    val ch: Double?,
-    val chp: Double?,
-    val bid: Double?,
-    val ask: Double?
+    @Json(name = "strike_price") val strike_price: Double? = null,
+    @Json(name = "symbol") val symbol: String? = null,
+    @Json(name = "ltp") val ltp: Double? = null,
+    @Json(name = "oi") val oi: Double? = null,
+    @Json(name = "volume") val volume: Double? = null,
+    @Json(name = "option_type") val option_type: String? = null,
+    @Json(name = "ch") val ch: Double? = null,
+    @Json(name = "chp") val chp: Double? = null,
+    @Json(name = "bid") val bid: Double? = null,
+    @Json(name = "ask") val ask: Double? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersProfileResponse(
-    val s: String?,
-    val code: Int?,
-    val message: String?,
-    val data: FyersProfileData?
+    @Json(name = "s") val s: String? = null,
+    @Json(name = "code") val code: Int? = null,
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "data") val data: FyersProfileData? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class FyersProfileData(
-    val name: String?,
-    val fy_id: String?,
-    val email_id: String?
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "fy_id") val fy_id: String? = null,
+    @Json(name = "email_id") val email_id: String? = null
 )
 
 interface FyersApi {
