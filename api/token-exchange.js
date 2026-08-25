@@ -1,40 +1,78 @@
 const https = require('https');
 
-module.exports = async (req, res) => {
-  // Support both POST and GET for flexibility
-  let code = '';
-  let redirectUri = '';
+function parseRequestBody(req) {
+  return new Promise((resolve) => {
+    if (req.body && typeof req.body === 'object') {
+      return resolve(req.body);
+    }
+    if (typeof req.body === 'string' && req.body.length > 0) {
+      try {
+        return resolve(JSON.parse(req.body));
+      } catch (_) {
+        try {
+          const params = new URLSearchParams(req.body);
+          const obj = {};
+          for (const [k, v] of params.entries()) obj[k] = v;
+          return resolve(obj);
+        } catch (_) {
+          return resolve({});
+        }
+      }
+    }
+    let data = '';
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => {
+      if (!data) return resolve({});
+      try {
+        resolve(JSON.parse(data));
+      } catch (_) {
+        try {
+          const params = new URLSearchParams(data);
+          const obj = {};
+          for (const [k, v] of params.entries()) obj[k] = v;
+          resolve(obj);
+        } catch (_) {
+          resolve({});
+        }
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
 
-  if (req.method === 'POST') {
-    code = req.body?.code || '';
-    redirectUri = req.body?.redirect_uri || '';
-  } else {
-    code = req.query?.code || '';
-    redirectUri = req.query?.redirect_uri || '';
+module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Api-Version');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  code = (code || '').trim();
-  redirectUri = (redirectUri || '').trim();
+  const parsedBody = await parseRequestBody(req);
+
+  const code = (req.query?.code || parsedBody?.code || '').trim();
+  const redirectUri = (req.query?.redirect_uri || parsedBody?.redirect_uri || process.env.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth').trim();
+  const clientId = (process.env.UPSTOX_API_KEY || req.query?.client_id || req.query?.apiKey || parsedBody?.client_id || parsedBody?.apiKey || '').trim();
+  const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
 
   if (!code) {
-    return res.status(400).json({ error: "Missing authorization code" });
+    return res.status(400).json({ status: "error", error: "Missing authorization code" });
   }
 
-  const clientId = (process.env.UPSTOX_API_KEY || '').trim();
-  const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
-  const defaultRedirectUri = (process.env.UPSTOX_REDIRECT_URI || '').trim();
-  
-  const finalRedirectUri = redirectUri || defaultRedirectUri || "https://application-beige-psi.vercel.app/oauth";
-
   if (!clientId || !clientSecret) {
-    return res.status(500).json({ error: "Server missing Upstox credentials configuration" });
+    return res.status(500).json({
+      status: "error",
+      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY / UPSTOX_API_SECRET must be configured."
+    });
   }
 
   const postData = new URLSearchParams({
     code: code,
     client_id: clientId,
     client_secret: clientSecret,
-    redirect_uri: finalRedirectUri,
+    redirect_uri: redirectUri,
     grant_type: 'authorization_code'
   }).toString();
 
@@ -71,8 +109,8 @@ module.exports = async (req, res) => {
     });
 
     postReq.on('error', (e) => {
-      console.error(`Token exchange error: ${e.message}`);
-      res.status(500).json({ error: `Internal connection error: ${e.message}` });
+      console.error(`Upstox token exchange network error: ${e.message}`);
+      res.status(500).json({ status: "error", error: `Internal connection error: ${e.message}` });
       resolve();
     });
 

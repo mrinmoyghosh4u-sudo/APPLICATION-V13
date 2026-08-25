@@ -85,14 +85,17 @@ const handleTokenExchange = (req, res) => {
     return res.status(400).json({ error: "Missing authorization code" });
   }
 
-  const clientId = (process.env.UPSTOX_API_KEY || '').trim();
+  const clientId = (process.env.UPSTOX_API_KEY || req.query?.client_id || req.query?.apiKey || req.body?.client_id || req.body?.apiKey || '').trim();
   const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
   const defaultRedirectUri = (process.env.UPSTOX_REDIRECT_URI || '').trim();
   
   const finalRedirectUri = redirectUri || defaultRedirectUri || "https://application-beige-psi.vercel.app/oauth";
 
   if (!clientId || !clientSecret) {
-    return res.status(500).json({ error: "Server missing Upstox credentials configuration" });
+    return res.status(500).json({
+      status: "error",
+      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY / UPSTOX_API_SECRET must be configured."
+    });
   }
 
   const postData = new URLSearchParams({

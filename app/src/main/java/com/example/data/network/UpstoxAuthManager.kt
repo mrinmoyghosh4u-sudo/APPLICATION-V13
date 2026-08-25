@@ -32,27 +32,65 @@ class UpstoxAuthManager(
             val backendBase = UpstoxAuthHelper.DEFAULT_REDIRECT_URI.substringBefore("/oauth")
             val tokenExchangeUrl = "$backendBase/api/token-exchange"
 
-            val response = try {
-                upstoxApi.exchangeTokenSecurely(
+            var tokenBody: UpstoxTokenResponse? = null
+            var lastErrorString: String? = null
+
+            // 1. Try secure backend token exchange first
+            try {
+                val response = upstoxApi.exchangeTokenSecurely(
                     url = tokenExchangeUrl,
                     code = authCode.trim(),
-                    redirectUri = redirectUri
+                    redirectUri = redirectUri,
+                    clientId = apiKey
                 )
+                if (response.isSuccessful && response.body()?.accessToken?.isNotBlank() == true) {
+                    tokenBody = response.body()
+                } else {
+                    val rawErr = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                    lastErrorString = rawErr.take(200).replace("\n", " ")
+                    Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE] Backend exchange returned $lastErrorString, trying direct official API fallback...")
+                }
             } catch (e: Exception) {
-                _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Network error during secure token exchange: ${e.localizedMessage}")
-                throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                lastErrorString = e.localizedMessage
+                Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE] Backend exchange error: ${e.message}, trying direct official API fallback...")
             }
 
-            if (!response.isSuccessful) {
-                _authStatus.value = BrokerAuthStatus.ERROR
-                val rawErr = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                val sanitizedErr = rawErr.take(150).replace("\n", " ")
-                Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token Exchange Failed: $sanitizedErr")
-                throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+            // 2. Fallback to direct official Upstox token exchange endpoint if backend was 404 or unavailable
+            if (tokenBody == null) {
+                val secret = sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
+                    ?: com.example.util.BrokerConfig.upstoxApiSecret.takeIf { it.isNotBlank() }
+                if (!secret.isNullOrBlank()) {
+                    Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Exchanging code directly with official Upstox OAuth API...")
+                    val directRes = try {
+                        upstoxApi.getAccessToken(
+                            code = authCode.trim(),
+                            clientId = apiKey,
+                            clientSecret = secret,
+                            redirectUri = redirectUri
+                        )
+                    } catch (e: Exception) {
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Direct Upstox exchange failed: ${e.localizedMessage}")
+                        throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                    }
+
+                    if (directRes.isSuccessful && directRes.body()?.accessToken?.isNotBlank() == true) {
+                        tokenBody = directRes.body()
+                    } else {
+                        val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
+                        val sanitizedErr = err.take(150).replace("\n", " ")
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Direct Upstox exchange error: $sanitizedErr")
+                        throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+                    }
+                } else {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed and Upstox API secret not found for direct fallback: $lastErrorString")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $lastErrorString")
+                }
             }
 
-            val body = response.body() ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
+            val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
 
             val accessToken = body.accessToken
             if (accessToken.isNullOrBlank()) {

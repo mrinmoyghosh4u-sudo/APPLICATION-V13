@@ -1,11 +1,12 @@
 {
   "version": 2,
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/oauth", "destination": "/api/oauth" },
-    { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks" },
-    { "source": "/api/token-exchange", "destination": "/api/token-exchange" },
-    { "source": "/token-exchange", "destination": "/api/token-exchange" },
-    { "source": "/api/fyers-token-exchange", "destination": "/api/fyers-token-exchange" },
-    { "source": "/fyers-token-exchange", "destination": "/api/fyers-token-exchange" }
+    { "source": "/oauth", "destination": "/api/oauth.js" },
+    { "source": "/token-exchange", "destination": "/api/token-exchange.js" },
+    { "source": "/api/token-exchange", "destination": "/api/token-exchange.js" },
+    { "source": "/fyers-token-exchange", "destination": "/api/fyers-token-exchange.js" },
+    { "source": "/api/fyers-token-exchange", "destination": "/api/fyers-token-exchange.js" },
+    { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks.js" }
   ]
 }

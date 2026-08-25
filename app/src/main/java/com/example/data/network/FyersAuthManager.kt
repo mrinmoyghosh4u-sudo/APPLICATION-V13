@@ -27,27 +27,66 @@ class FyersAuthManager(
 
             Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange via backend...")
             Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange via backend...")
-            val response = try {
-                fyersApi.exchangeTokenSecurely(
+
+            var tokenBody: FyersTokenResponse? = null
+            var lastErrorString: String? = null
+
+            // 1. Try secure backend endpoint first
+            try {
+                val response = fyersApi.exchangeTokenSecurely(
                     url = tokenExchangeUrl,
                     code = authCode.trim(),
                     redirectUri = redirectUri
                 )
+                if (response.isSuccessful && response.body()?.access_token?.isNotBlank() == true) {
+                    tokenBody = response.body()
+                } else {
+                    val errBody = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                    lastErrorString = errBody.take(150).replace("\n", " ")
+                    Log.w(TAG, "[FYERS_TOKEN_EXCHANGE] Backend exchange returned $lastErrorString, trying direct official API fallback...")
+                }
             } catch (e: Exception) {
-                _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Network error during FYERS secure token exchange: ${e.localizedMessage}")
-                throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                lastErrorString = e.localizedMessage
+                Log.w(TAG, "[FYERS_TOKEN_EXCHANGE] Backend exchange error: ${e.message}, trying direct official API fallback...")
             }
 
-            if (!response.isSuccessful) {
-                _authStatus.value = BrokerAuthStatus.ERROR
-                val errBody = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                val sanitized = errBody.take(150).replace("\n", " ")
-                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS Token Exchange Failed: $sanitized")
-                throw Exception("TOKEN_EXCHANGE_FAILED: $sanitized")
+            // 2. Fallback to direct official FYERS API if backend was 404 / unavailable
+            if (tokenBody == null) {
+                val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
+                    ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
+                if (!secret.isNullOrBlank()) {
+                    val appIdHash = FyersAuthHelper.generateAppIdHash(appId, secret)
+                    val request = FyersTokenRequest(
+                        grant_type = "authorization_code",
+                        appIdHash = appIdHash,
+                        code = authCode.trim()
+                    )
+                    Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code directly with official FYERS API...")
+                    val directRes = try {
+                        fyersApi.validateAuthCode(request)
+                    } catch (e: Exception) {
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Direct FYERS exchange failed: ${e.localizedMessage}")
+                        throw Exception("TOKEN_EXCHANGE_FAILED: ${e.localizedMessage}")
+                    }
+
+                    if (directRes.isSuccessful && directRes.body()?.access_token?.isNotBlank() == true) {
+                        tokenBody = directRes.body()
+                    } else {
+                        val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
+                        val sanitizedErr = err.take(150).replace("\n", " ")
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Direct FYERS exchange error: $sanitizedErr")
+                        throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+                    }
+                } else {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Token exchange failed and FYERS secret ID not found for direct fallback: $lastErrorString")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $lastErrorString")
+                }
             }
 
-            val body = response.body() ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
+            val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
 
             if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
                 val accessToken = body.access_token
