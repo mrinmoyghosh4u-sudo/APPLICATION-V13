@@ -29,7 +29,7 @@ class FyersAuthManager(
                 code = authCode.trim()
             )
 
-            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_START] Initiating FYERS authorization code exchange...")
+            Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
             val response = try {
                 fyersApi.validateAuthCode(request)
             } catch (e: Exception) {
@@ -61,7 +61,7 @@ class FyersAuthManager(
                         Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
                         throw Exception("TOKEN_INVALID: $pErr")
                     }
-                    Log.i(TAG, "[FYERS_TOKEN_VALID] FYERS token profile validation: PASS")
+                    Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
                 } catch (e: Exception) {
                     if (e.message?.startsWith("TOKEN_INVALID") == true) throw e
                     Log.w(TAG, "[FYERS_TOKEN_VALID] Profile check warning (proceeding): ${e.localizedMessage}")

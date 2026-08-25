@@ -713,11 +713,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Upstox"
         
-        android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
+        android.util.Log.i("UpstoxAuth", "[UPSTOX_AUTHORIZATION_STARTED] Initialized Upstox OAuth with state=$randomState")
         brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
         brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
         
-        android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
         android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
 
@@ -745,11 +744,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Fyers"
         
-        android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
+        android.util.Log.i("FyersAuth", "[FYERS_AUTHORIZATION_STARTED] Initialized Fyers OAuth with state=$randomState")
         brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
         brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
         
-        android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
         android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
@@ -833,9 +831,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val path = uri.path ?: ""
             val fullUrl = uri.toString()
 
-            android.util.Log.d("Auth", "[4] Login completed: PASS")
-            android.util.Log.d("Auth", "[5] Callback received: PASS")
-            android.util.Log.d("DhanAuth", "redirect received")
             android.util.Log.d("DhanAuth", "redirect URI host/path: scheme=$scheme, host=$host, path=$path")
 
             var token = uri.getQueryParameter("access_token")
@@ -862,7 +857,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val state = uri.getQueryParameter("state") ?: ""
             val pendingBroker = sessionManager.pendingOAuthBroker
-            android.util.Log.d("Auth", "[6] Authorization code received: PASS (hidden)")
 
             val isUpstox = pendingBroker == "Upstox" || _connectingBrokerName.value == "Upstox" || state.startsWith("upstox_") || (state.contains("upstox", ignoreCase = true) && !state.contains("fyers", ignoreCase = true))
             val isFyers = pendingBroker == "Fyers" || _connectingBrokerName.value == "Fyers" || state.startsWith("fyers_") || (state.contains("fyers", ignoreCase = true) && !state.contains("upstox", ignoreCase = true))
@@ -901,6 +895,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 // State Machine Step 6: Validate OAuth State
+                android.util.Log.i("Auth", "[$logPrefix" + "_VALIDATING_STATE] Validating OAuth State: state=$state")
                 brokerManager.healthManager.reportValidatingState(providerName)
                 if (pendingState.isNotBlank()) {
                     if (state.isBlank() || state != pendingState) {

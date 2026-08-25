@@ -28,7 +28,7 @@ class UpstoxAuthManager(
             val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
                 ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
-            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE_START] Initiating Upstox authorization code exchange...")
+            Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
 
             val response = try {
                 upstoxApi.getAccessToken(
@@ -71,7 +71,7 @@ class UpstoxAuthManager(
                 throw Exception("TOKEN_INVALID: ${e.message}")
             }
 
-            Log.i(TAG, "[UPSTOX_TOKEN_VALID] Upstox token profile validation: PASS")
+            Log.i(TAG, "[UPSTOX_TOKEN_VALIDATED] Upstox token profile validation: PASS")
 
             // Securely store credentials and tokens in encrypted storage
             sessionManager.upstoxAccessToken = accessToken
