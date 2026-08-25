@@ -60,6 +60,8 @@ class ProviderHealthManager {
         const val STATE_NOT_CONFIGURED = "NOT_CONFIGURED"
         const val STATE_CONFIGURED = "CONFIGURED"
         const val STATE_AUTHENTICATING = "AUTHENTICATING"
+        const val STATE_WAITING_FOR_CALLBACK = "WAITING_FOR_CALLBACK"
+        const val STATE_EXCHANGING_TOKEN = "EXCHANGING_TOKEN"
         const val STATE_AUTHENTICATED = "AUTHENTICATED"
         const val STATE_AUTH_FAILED = "AUTH_FAILED"
         const val STATE_CONNECTING = "CONNECTING"

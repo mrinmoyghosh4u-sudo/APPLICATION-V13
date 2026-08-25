@@ -360,8 +360,9 @@ fun BrokerDiagnosticsSection(
     
     BrokerCard(
         name = "UPSTOX (Primary)",
-        hasCredentials = viewModel.sessionManager.upstoxApiKey.isNotBlank() && !viewModel.sessionManager.upstoxAccessToken.isNullOrBlank(),
+        hasCredentials = viewModel.sessionManager.isUpstoxConfigured(),
         isAuthenticated = !viewModel.sessionManager.upstoxAccessToken.isNullOrBlank(),
+        callbackStatus = if (!viewModel.sessionManager.upstoxAccessToken.isNullOrBlank()) "RECEIVED" else if (viewModel.sessionManager.isUpstoxConfigured()) "WAITING" else "N/A",
         wsState = upstoxState,
         isActiveSubscription = viewModel.brokerManager.upstoxMarketDataService.hasActiveSubscription(),
         hasRealTick = viewModel.brokerManager.upstoxMarketDataService.hasFirstTickReceived(),
@@ -375,8 +376,9 @@ fun BrokerDiagnosticsSection(
     
     BrokerCard(
         name = "FYERS (Fallback #1)",
-        hasCredentials = viewModel.sessionManager.fyersAppId.isNotBlank() && !viewModel.sessionManager.fyersAccessToken.isNullOrBlank(),
+        hasCredentials = viewModel.sessionManager.isFyersConfigured(),
         isAuthenticated = !viewModel.sessionManager.fyersAccessToken.isNullOrBlank(),
+        callbackStatus = if (!viewModel.sessionManager.fyersAccessToken.isNullOrBlank()) "RECEIVED" else if (viewModel.sessionManager.isFyersConfigured()) "WAITING" else "N/A",
         wsState = fyersState,
         isActiveSubscription = viewModel.brokerManager.fyersMarketDataService.hasActiveSubscription(),
         hasRealTick = viewModel.brokerManager.fyersMarketDataService.hasFirstTickReceived(),
@@ -390,7 +392,7 @@ fun BrokerDiagnosticsSection(
     
     BrokerCard(
         name = "ANGEL ONE (Fallback #2)",
-        hasCredentials = viewModel.sessionManager.angelClientId.isNotBlank() && !viewModel.sessionManager.angelJwtToken.isNullOrBlank(),
+        hasCredentials = viewModel.sessionManager.angelClientId.isNotBlank(),
         isAuthenticated = !viewModel.sessionManager.angelJwtToken.isNullOrBlank(),
         wsState = angelState,
         isActiveSubscription = viewModel.brokerManager.angelMarketDataService.hasActiveSubscription(),
@@ -405,7 +407,7 @@ fun BrokerDiagnosticsSection(
     
     BrokerCard(
         name = "m.STOCK (Fallback #3)",
-        hasCredentials = viewModel.sessionManager.mstockClientId.isNotBlank() && !viewModel.sessionManager.mstockAccessToken.isNullOrBlank(),
+        hasCredentials = viewModel.sessionManager.isMStockConfigured(),
         isAuthenticated = !viewModel.sessionManager.mstockAccessToken.isNullOrBlank(),
         wsState = mStockState,
         isActiveSubscription = viewModel.brokerManager.mStockMarketDataService.hasActiveSubscription(),

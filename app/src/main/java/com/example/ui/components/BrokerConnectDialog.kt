@@ -214,17 +214,22 @@ fun BrokerConnectDialog(
 
                         Button(
                             onClick = {
-                                if (upstoxApiKey.isBlank() || upstoxApiSecret.isBlank()) {
+                                val cleanKey = upstoxApiKey.trim()
+                                val cleanSecret = upstoxApiSecret.trim()
+                                if (cleanKey.isBlank() || cleanSecret.isBlank()) {
                                     localErrorMsg = "API Key and API Secret are required"
                                     return@Button
                                 }
-                                sessionManager.upstoxApiKey = upstoxApiKey
-                                sessionManager.upstoxApiSecret = upstoxApiSecret
+                                sessionManager.upstoxApiKey = cleanKey
+                                sessionManager.upstoxApiSecret = cleanSecret
                                 val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
                                 val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
                                 sessionManager.pendingOAuthState = randomState
                                 sessionManager.pendingOAuthBroker = "Upstox"
-                                val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey, redirectUri, state = randomState)
+                                android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
+                                android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
+                                android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+                                val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(cleanKey, redirectUri, state = randomState)
                                 try {
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                     context.startActivity(intent)
@@ -439,17 +444,22 @@ fun BrokerConnectDialog(
 
                         Button(
                             onClick = {
-                                if (fyersAppId.isBlank() || fyersSecretId.isBlank()) {
+                                val cleanAppId = fyersAppId.trim()
+                                val cleanSecretId = fyersSecretId.trim()
+                                if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
                                     localErrorMsg = "App ID and Secret ID are required"
                                     return@Button
                                 }
-                                sessionManager.fyersAppId = fyersAppId
-                                sessionManager.fyersSecretId = fyersSecretId
+                                sessionManager.fyersAppId = cleanAppId
+                                sessionManager.fyersSecretId = cleanSecretId
                                 val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
                                 val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
                                 sessionManager.pendingOAuthState = randomState
                                 sessionManager.pendingOAuthBroker = "Fyers"
-                                val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId, redirectUri, state = randomState)
+                                android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
+                                android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
+                                android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
+                                val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(cleanAppId, redirectUri, state = randomState)
                                 try {
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
                                     context.startActivity(intent)

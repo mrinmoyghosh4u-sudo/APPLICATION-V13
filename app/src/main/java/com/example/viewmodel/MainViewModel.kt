@@ -568,26 +568,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = null
 
             val cleanedCode = parseAuthCodeInput(authCode)
+            val cleanKey = apiKey.trim()
+            val cleanSecret = apiSecret.trim()
+
+            if (cleanKey.isBlank() || cleanSecret.isBlank()) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "Upstox API Key and API Secret are required"
+                return@launch
+            }
+
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Upstox Auth Code is required"
                 return@launch
             }
 
-            sessionManager.upstoxApiKey = apiKey
-            sessionManager.upstoxApiSecret = apiSecret
+            sessionManager.upstoxApiKey = cleanKey
+            sessionManager.upstoxApiSecret = cleanSecret
+            brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
+            brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
 
             val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
                 _brokerSwitchStatus.value = "Upstox Feed Connected • Primary Market Data"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.upstoxMarketDataService.connect()
-                alertService.notifyBrokerConnected("Upstox", account = apiKey)
+                alertService.notifyBrokerConnected("Upstox", account = cleanKey)
             } else {
-                _authErrorMessage.value = "Upstox Authentication Failed: ${res.exceptionOrNull()?.message}"
+                val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, false, err)
+                _authErrorMessage.value = "Upstox Authentication Failed: $err"
             }
         }
     }
@@ -598,26 +612,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = null
 
             val cleanedCode = parseAuthCodeInput(authCode)
+            val cleanAppId = appId.trim()
+            val cleanSecretId = secretId.trim()
+
+            if (cleanAppId.isBlank() || cleanSecretId.isBlank()) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "Fyers App ID and Secret ID are required"
+                return@launch
+            }
+
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Fyers Auth Code is required"
                 return@launch
             }
 
-            sessionManager.fyersAppId = appId
-            sessionManager.fyersSecretId = secretId
+            sessionManager.fyersAppId = cleanAppId
+            sessionManager.fyersSecretId = cleanSecretId
+            brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
+            brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
             val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
+                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
                 _brokerSwitchStatus.value = "Broker Connected • Fyers (Market Data)"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.fyersMarketDataService.connect()
-                alertService.notifyBrokerConnected("Fyers", account = appId)
+                alertService.notifyBrokerConnected("Fyers", account = cleanAppId)
             } else {
-                _authErrorMessage.value = "Fyers Authentication Failed: ${res.exceptionOrNull()?.message}"
+                val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, false, err)
+                _authErrorMessage.value = "Fyers Authentication Failed: $err"
             }
         }
     }
@@ -740,7 +768,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with code")
 
                 if (pendingState.isNotBlank()) {
-                    if (state.isBlank() || state != pendingState) {
+                    if (state.isNotBlank() && state != pendingState) {
                         val errMsg = "$logPrefix OAuth State Mismatch Rejection! Expected state='$pendingState', got '$state'."
                         android.util.Log.e("Auth", "[$logPrefix" + "_STATE_REJECTED] $errMsg")
                         _authErrorMessage.value = errMsg
@@ -749,6 +777,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         sessionManager.pendingOAuthBroker = ""
                         brokerManager.healthManager.reportAuthentication(providerName, false, errMsg)
                         return@launch
+                    } else if (state.isBlank()) {
+                        android.util.Log.w("Auth", "[$logPrefix" + "_STATE_OMITTED] Callback state parameter omitted; proceeding with code exchange")
                     } else {
                         android.util.Log.i("Auth", "[$logPrefix" + "_STATE_OK] OAuth State Validation: PASS")
                     }

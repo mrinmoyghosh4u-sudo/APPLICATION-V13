@@ -496,7 +496,7 @@ class SessionManager(context: Context) {
         set(value) = prefs.edit().putBoolean("is_fyers_connected", value).apply()
 
     fun isFyersConfigured(): Boolean {
-        return !fyersAppId.isBlank() && !fyersAccessToken.isNullOrBlank()
+        return !fyersAppId.isBlank() && (!fyersSecretId.isBlank() || !fyersAccessToken.isNullOrBlank())
     }
 
     fun clearFyersSession() {
@@ -546,7 +546,7 @@ class SessionManager(context: Context) {
         set(value) = prefs.edit().putBoolean("is_upstox_connected", value).apply()
 
     fun isUpstoxConfigured(): Boolean {
-        return !upstoxApiKey.isBlank() && !upstoxAccessToken.isNullOrBlank()
+        return !upstoxApiKey.isBlank() && (!upstoxApiSecret.isBlank() || !upstoxAccessToken.isNullOrBlank())
     }
 
     fun saveUpstoxCredentials(apiKey: String, apiSecret: String = "", redirectUri: String = "https://application-beige-psi.vercel.app/oauth") {

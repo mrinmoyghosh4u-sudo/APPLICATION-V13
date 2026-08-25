@@ -180,8 +180,16 @@ class BrokerAuthManager(
         val hasSession = !sessionManager.upstoxAccessToken.isNullOrBlank()
         val isConfigured = sessionManager.isUpstoxConfigured()
 
+        brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_UPSTOX, isConfigured || hasSession)
+
         if (!isConfigured && !hasSession) {
             updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            return
+        }
+
+        val currentHealth = brokerManager.healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        if (!hasSession && (currentHealth.authenticationState == ProviderHealthManager.STATE_AUTHENTICATING || currentHealth.authenticationState == ProviderHealthManager.STATE_WAITING_FOR_CALLBACK || currentHealth.authenticationState == ProviderHealthManager.STATE_EXCHANGING_TOKEN)) {
+            Log.d(TAG, "Upstox OAuth currently in progress: preserving active state '${currentHealth.authenticationState}'")
             return
         }
 
@@ -189,6 +197,7 @@ class BrokerAuthManager(
         val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
 
         if (hasSession && !isExpired) {
+            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
             try {
                 val token = sessionManager.upstoxAccessToken ?: ""
                 val authHeader = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
@@ -206,14 +215,19 @@ class BrokerAuthManager(
             return
         }
 
-        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Authentication Required. Tap LOGIN VIA BROWSER.")
     }
 
     suspend fun exchangeUpstoxCode(code: String): Result<String> = withContext(Dispatchers.IO) {
         val res = brokerManager.upstoxAuthManager.exchangeAuthCode(code)
         if (res.isSuccess) {
+            brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_UPSTOX, true)
+            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
             updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
             brokerManager.upstoxMarketDataService.connect()
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Exchange failed"
+            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, err)
         }
         res
     }
@@ -225,7 +239,10 @@ class BrokerAuthManager(
     private suspend fun validateFyersSession() {
         val hasSession = !sessionManager.fyersAccessToken.isNullOrBlank()
         val hasRefreshToken = !sessionManager.fyersRefreshToken.isNullOrBlank()
+        val isConfigured = !sessionManager.fyersAppId.isNullOrBlank()
         
+        brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, isConfigured || hasSession)
+
         if (!hasSession && !hasRefreshToken) {
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
             return
@@ -236,6 +253,7 @@ class BrokerAuthManager(
         val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
         
         if (hasSession && !isExpired) {
+            brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
             // Reconnect WebSocket
             brokerManager.fyersMarketDataService.connect()
@@ -246,6 +264,7 @@ class BrokerAuthManager(
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
             val result = reconnectBroker("Fyers")
             if (result.isSuccess) {
+                brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
             } else {
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")

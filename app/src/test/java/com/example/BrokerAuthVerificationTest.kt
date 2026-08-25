@@ -174,4 +174,54 @@ class BrokerAuthVerificationTest {
         assertEquals("secr****6789", masked)
         assertFalse("Logs/diagnostics MUST NOT contain unmasked sensitive secrets", masked.contains("12345"))
     }
+
+    @Test
+    fun test13_missingCredentialsReturnsNotConfigured() {
+        healthManager.reportConfigured(ProviderHealthManager.PROVIDER_UPSTOX, false)
+        val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("NOT_CONFIGURED", state.status)
+        assertFalse(state.healthy)
+    }
+
+    @Test
+    fun test14_invalidClientIdTriggersAuthFailed() {
+        healthManager.reportAuthenticating(ProviderHealthManager.PROVIDER_UPSTOX)
+        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, "Invalid Client ID: client_id_not_found")
+        val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("AUTH_FAILED", state.authenticationState)
+        assertEquals("Invalid Client ID: client_id_not_found", state.lastError)
+    }
+
+    @Test
+    fun test15_webSocketDisconnectStateTransition() {
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis())
+
+        val stateLive = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("LIVE", stateLive.status)
+
+        healthManager.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
+        val stateDisconnected = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("DISCONNECTED", stateDisconnected.status)
+        assertFalse(stateDisconnected.healthy)
+    }
+
+    @Test
+    fun test16_upstoxUnavailableFyersHealthyFailover() {
+        // Upstox disconnected
+        healthManager.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
+        
+        // Fyers healthy & LIVE
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
+        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis())
+
+        val upstoxState = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        val fyersState = healthManager.getHealthState(ProviderHealthManager.PROVIDER_FYERS)
+
+        assertFalse(upstoxState.healthy)
+        assertTrue(fyersState.healthy)
+        assertEquals("LIVE", fyersState.status)
+    }
 }
