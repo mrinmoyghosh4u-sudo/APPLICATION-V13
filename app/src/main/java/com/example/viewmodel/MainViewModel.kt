@@ -894,12 +894,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 2. Read provider ONLY from pendingSession.provider
+                // 2. Read and validate provider ONLY from pendingSession.provider
                 val rawProvider = pendingSession.provider.uppercase().trim()
-                val providerName = if (rawProvider == "UPSTOX") ProviderHealthManager.PROVIDER_UPSTOX else ProviderHealthManager.PROVIDER_FYERS
-                val logPrefix = if (rawProvider == "UPSTOX") "UPSTOX" else "FYERS"
-
-                // 3. Reject if provider is missing
                 if (rawProvider.isBlank()) {
                     val errMsg = "OAuth callback rejected: Provider is missing in pending session"
                     android.util.Log.e("Auth", "[PROVIDER_MISSING] $errMsg")
@@ -909,14 +905,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 4. Reject if provider is unknown
-                if (rawProvider != "UPSTOX" && rawProvider != "FYERS") {
-                    val errMsg = "OAuth callback rejected: Unknown provider '$rawProvider' in pending session"
-                    android.util.Log.e("Auth", "[UNKNOWN_PROVIDER] $errMsg")
-                    _authErrorMessage.value = "Login Failed: Unknown Provider"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "UNKNOWN_PROVIDER", errMsg)
-                    return@launch
+                val providerName = when (rawProvider) {
+                    "UPSTOX" -> ProviderHealthManager.PROVIDER_UPSTOX
+                    "FYERS" -> ProviderHealthManager.PROVIDER_FYERS
+                    else -> {
+                        val errMsg = "OAuth callback rejected: Unknown provider '$rawProvider' in pending session"
+                        android.util.Log.e("Auth", "[UNKNOWN_PROVIDER] $errMsg")
+                        _authErrorMessage.value = "Login Failed: Unknown Provider"
+                        _isAuthInProgress.value = false
+                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "UNKNOWN_PROVIDER", errMsg)
+                        return@launch
+                    }
+                }
+                val logPrefix = when (rawProvider) {
+                    "UPSTOX" -> "UPSTOX"
+                    "FYERS" -> "FYERS"
+                    else -> "UNKNOWN"
                 }
 
                 // 5. Check session expiry (e.g., 15 minutes)
