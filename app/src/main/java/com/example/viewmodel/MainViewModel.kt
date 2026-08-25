@@ -565,10 +565,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     private fun parseAuthCodeInput(input: String): String {
         val trimmed = input.trim()
-        if (trimmed.contains("code=") || trimmed.contains("auth_code=") || trimmed.startsWith("http") || trimmed.startsWith("kingkhan")) {
-            val match = Regex("""[?&#](?:code|auth_code|tokenId)=([^&#]+)""", RegexOption.IGNORE_CASE).find(trimmed)
-            if (match != null && match.groupValues.size > 1) {
-                return match.groupValues[1]
+        if (trimmed.contains("code=") || trimmed.contains("auth_code=") || trimmed.contains("tokenId=") || trimmed.startsWith("http") || trimmed.startsWith("kingkhan")) {
+            val authCodeMatch = Regex("""[?&#]auth_code=([^&#]+)""", RegexOption.IGNORE_CASE).find(trimmed)
+            if (authCodeMatch != null && authCodeMatch.groupValues.size > 1 && authCodeMatch.groupValues[1] != "200") {
+                return authCodeMatch.groupValues[1]
+            }
+            val codeMatch = Regex("""[?&#](?:code|tokenId|consentId)=([^&#]+)""", RegexOption.IGNORE_CASE).find(trimmed)
+            if (codeMatch != null && codeMatch.groupValues.size > 1 && codeMatch.groupValues[1] != "200" && codeMatch.groupValues[1] != "0") {
+                return codeMatch.groupValues[1]
             }
         }
         return trimmed
@@ -872,10 +876,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ?: uri.getQueryParameter("token")
                 ?: uri.getQueryParameter("accessToken")
 
-            var code = uri.getQueryParameter("tokenId")
-                ?: uri.getQueryParameter("consentId")
-                ?: uri.getQueryParameter("code")
-                ?: uri.getQueryParameter("auth_code")
+            val fyersAuthCode = uri.getQueryParameter("auth_code")
+            val genericCode = uri.getQueryParameter("code")
+            val genericTokenId = uri.getQueryParameter("tokenId") ?: uri.getQueryParameter("consentId")
 
             val clientId = uri.getQueryParameter("client_id")
                 ?: uri.getQueryParameter("clientId")
@@ -885,54 +888,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 token = tokenMatch?.groupValues?.get(1)
             }
 
-            if (code.isNullOrBlank()) {
-                val codeMatch = Regex("""[?&#](?:tokenId|consentId|code|auth_code)=([^&#]+)""", RegexOption.IGNORE_CASE).find(fullUrl)
-                code = codeMatch?.groupValues?.get(1)
-            }
-
             val state = uri.getQueryParameter("state") ?: ""
             val callbackState = state.trim()
 
-            val pendingSession = sessionManager.pendingOAuthSession
-            val isOAuthCallback = (scheme == "kingkhan" || host.contains("kingkhan") || host.contains("application-beige-psi.vercel.app") || host.contains("vercel.app") || !callbackState.isBlank() || !code.isNullOrBlank())
-
-            if (isOAuthCallback) {
-                // 1. Locate the active pending OAuth session by exact state. If none exists, reject with OAUTH_SESSION_NOT_FOUND.
-                if (pendingSession == null || callbackState.isBlank() || pendingSession.state.trim() != callbackState) {
-                    val errMsg = "OAuth Session Not Found: No active pending OAuth session exists matching state '$callbackState'"
-                    android.util.Log.e("Auth", "[OAUTH_SESSION_NOT_FOUND] $errMsg")
-                    _authErrorMessage.value = "Login Failed: OAuth Session Expired / Missing"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(
-                        ProviderHealthManager.PROVIDER_UPSTOX,
-                        "OAUTH_SESSION_NOT_FOUND",
-                        errMsg
-                    )
-                    return@launch
+            var pendingSession = sessionManager.pendingOAuthSession
+            // Fallback session recovery if process was recycled or state prefix matches
+            if (pendingSession == null || (callbackState.isNotBlank() && pendingSession.state.trim() != callbackState)) {
+                if (callbackState.startsWith("upstox_") || callbackState == sessionManager.pendingUpstoxOAuthState) {
+                    val redirect = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                    pendingSession = SessionManager.PendingOAuthSession("UPSTOX", callbackState, System.currentTimeMillis(), redirect, false)
+                    sessionManager.pendingOAuthSession = pendingSession
+                } else if (callbackState.startsWith("fyers_") || callbackState == sessionManager.pendingFyersOAuthState || fyersAuthCode != null) {
+                    val redirect = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+                    pendingSession = SessionManager.PendingOAuthSession("FYERS", callbackState, System.currentTimeMillis(), redirect, false)
+                    sessionManager.pendingOAuthSession = pendingSession
                 }
+            }
 
-                // 2. Read and validate provider ONLY from pendingSession.provider
-                val rawProvider = pendingSession.provider.uppercase().trim()
-                if (rawProvider.isBlank()) {
-                    val errMsg = "OAuth callback rejected: Provider is missing in pending session"
-                    android.util.Log.e("Auth", "[PROVIDER_MISSING] $errMsg")
-                    _authErrorMessage.value = "Login Failed: Provider Missing"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "PROVIDER_MISSING", errMsg)
-                    return@launch
+            // Determine provider
+            val inferredProvider = pendingSession?.provider?.uppercase()?.trim()
+                ?: if (callbackState.startsWith("upstox_")) "UPSTOX"
+                else if (callbackState.startsWith("fyers_") || fyersAuthCode != null) "FYERS"
+                else ""
+
+            // Extract correct authorization code based on provider
+            var code: String? = null
+            if (inferredProvider == "FYERS") {
+                code = fyersAuthCode
+                if (code.isNullOrBlank() && !genericCode.isNullOrBlank() && genericCode != "200" && genericCode != "0") {
+                    code = genericCode
                 }
+            } else if (inferredProvider == "UPSTOX") {
+                code = genericCode ?: fyersAuthCode
+            } else {
+                code = fyersAuthCode ?: genericCode ?: genericTokenId
+            }
 
+            if (code.isNullOrBlank()) {
+                val authCodeMatch = Regex("""[?&#]auth_code=([^&#]+)""", RegexOption.IGNORE_CASE).find(fullUrl)
+                if (authCodeMatch != null && authCodeMatch.groupValues.size > 1 && authCodeMatch.groupValues[1] != "200") {
+                    code = authCodeMatch.groupValues[1]
+                } else {
+                    val codeMatch = Regex("""[?&#](?:code|tokenId|consentId)=([^&#]+)""", RegexOption.IGNORE_CASE).find(fullUrl)
+                    if (codeMatch != null && codeMatch.groupValues.size > 1 && codeMatch.groupValues[1] != "200" && codeMatch.groupValues[1] != "0") {
+                        code = codeMatch.groupValues[1]
+                    }
+                }
+            }
+
+            val isOAuthCallback = (scheme == "kingkhan" || host.contains("kingkhan") || host.contains("application-beige-psi.vercel.app") || host.contains("vercel.app") || callbackState.isNotBlank() || !code.isNullOrBlank() || inferredProvider.isNotBlank())
+
+            if (isOAuthCallback && inferredProvider.isNotBlank()) {
+                val rawProvider = inferredProvider
                 val providerName = when (rawProvider) {
                     "UPSTOX" -> ProviderHealthManager.PROVIDER_UPSTOX
                     "FYERS" -> ProviderHealthManager.PROVIDER_FYERS
-                    else -> {
-                        val errMsg = "OAuth callback rejected: Unknown provider '$rawProvider' in pending session"
-                        android.util.Log.e("Auth", "[UNKNOWN_PROVIDER] $errMsg")
-                        _authErrorMessage.value = "Login Failed: Unknown Provider"
-                        _isAuthInProgress.value = false
-                        brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "UNKNOWN_PROVIDER", errMsg)
-                        return@launch
-                    }
+                    else -> ProviderHealthManager.PROVIDER_UPSTOX
                 }
                 val logPrefix = when (rawProvider) {
                     "UPSTOX" -> "UPSTOX"
@@ -940,29 +951,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else -> "UNKNOWN"
                 }
 
-                // 5. Check session expiry (e.g., 15 minutes)
-                val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-                if (isExpired) {
-                    val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
-                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
-                    return@launch
+                // Check session expiry (15 minutes)
+                if (pendingSession != null) {
+                    val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
+                    if (isExpired) {
+                        val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
+                        android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
+                        _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                        _isAuthInProgress.value = false
+                        brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
+                        return@launch
+                    }
                 }
 
-                // 6. Session must not be already consumed (replay prevention)
-                if (pendingSession.consumed) {
-                    val errMsg = "$logPrefix OAuth callback replay detected (already consumed)"
-                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                    _authErrorMessage.value = "$logPrefix Login Failed: OAuth Session Expired / Already Used"
-                    _isAuthInProgress.value = false
-                    brokerManager.healthManager.reportAuthFailure(providerName, "OAUTH_SESSION_EXPIRED", errMsg)
-                    return@launch
+                // Mark session as consumed to prevent replay attacks
+                if (pendingSession != null) {
+                    sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
                 }
-
-                // Mark session as consumed immediately to prevent replay/duplicate requests
-                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
 
                 brokerManager.healthManager.reportCallbackReceived(providerName)
                 android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
@@ -992,9 +997,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Deduplication Check
                 val lastCode = sessionManager.lastProcessedOAuthCode
                 val lastTime = sessionManager.lastProcessedOAuthTime
-                if (cleanedCode == lastCode && System.currentTimeMillis() - lastTime < 60_000L) {
-                    android.util.Log.w("Auth", "[$logPrefix" + "_DUPLICATE_CALLBACK_IGNORED] Ignoring duplicate authorization code")
-                    _isAuthInProgress.value = false
+                if (cleanedCode == lastCode && System.currentTimeMillis() - lastTime < 15_000L) {
+                    android.util.Log.w("Auth", "[$logPrefix" + "_DUPLICATE_CALLBACK_IGNORED] Ignoring duplicate authorization code within 15s window")
                     return@launch
                 }
                 sessionManager.lastProcessedOAuthCode = cleanedCode

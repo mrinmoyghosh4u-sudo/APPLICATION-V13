@@ -219,7 +219,7 @@ class SessionManager(context: Context) {
                     .remove("pending_session_created_at")
                     .remove("pending_session_redirect_uri")
                     .remove("pending_session_consumed")
-                    .apply()
+                    .commit()
             } else {
                 prefs.edit()
                     .putString("pending_session_provider", value.provider)
@@ -227,17 +227,17 @@ class SessionManager(context: Context) {
                     .putLong("pending_session_created_at", value.createdAt)
                     .putString("pending_session_redirect_uri", value.redirectUri)
                     .putBoolean("pending_session_consumed", value.consumed)
-                    .apply()
+                    .commit()
             }
     }
 
     var lastProcessedOAuthCode: String
         get() = prefs.getString("last_processed_oauth_code", "") ?: ""
-        set(value) = prefs.edit().putString("last_processed_oauth_code", value).apply()
+        set(value) { prefs.edit().putString("last_processed_oauth_code", value).commit() }
 
     var lastProcessedOAuthTime: Long
         get() = prefs.getLong("last_processed_oauth_time", 0L)
-        set(value) = prefs.edit().putLong("last_processed_oauth_time", value).apply()
+        set(value) { prefs.edit().putLong("last_processed_oauth_time", value).commit() }
 
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution
