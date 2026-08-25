@@ -95,7 +95,12 @@ class UpstoxAuthManager(
         val authHeader = if (accessToken.startsWith("Bearer ", ignoreCase = true)) accessToken else "Bearer $accessToken"
         val profileRes = upstoxApi.getUserProfile(authHeader)
         if (profileRes.isSuccessful) {
-            Log.d(TAG, "Upstox profile validated: user=${profileRes.body()?.data?.userName ?: ""}")
+            val body = profileRes.body()
+            if (body == null || !body.status.equals("success", ignoreCase = true)) {
+                val statusMsg = body?.status ?: "null"
+                throw Exception("Upstox Profile Validation Failed: response status is '$statusMsg'")
+            }
+            Log.d(TAG, "Upstox profile validated: user=${body.data?.userName ?: ""}")
         } else {
             val errBody = profileRes.errorBody()?.string() ?: "HTTP ${profileRes.code()}"
             throw Exception("Upstox Profile Validation Failed (${profileRes.code()}): $errBody")
@@ -105,6 +110,7 @@ class UpstoxAuthManager(
     suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
         val token = sessionManager.upstoxAccessToken
         if (token.isNullOrBlank()) {
+            sessionManager.isUpstoxConnected = false
             _authStatus.value = if (sessionManager.upstoxApiKey.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
             return@withContext false
         }
@@ -115,6 +121,7 @@ class UpstoxAuthManager(
 
         if (isExpired) {
             Log.w(TAG, "Upstox access token expired. Re-authentication required.")
+            sessionManager.isUpstoxConnected = false
             _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
             return@withContext false
         }
@@ -122,26 +129,26 @@ class UpstoxAuthManager(
         try {
             val authHeader = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
             val profileRes = upstoxApi.getUserProfile(authHeader)
-            if (profileRes.isSuccessful) {
+            if (profileRes.isSuccessful && profileRes.body()?.status?.equals("success", ignoreCase = true) == true) {
                 android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
                 android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
+                sessionManager.isUpstoxConnected = true
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 true
-            } else if (profileRes.code() == 401 || profileRes.code() == 403) {
-                _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
-                false
             } else {
-                android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
-                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
-                _authStatus.value = BrokerAuthStatus.CONNECTED
-                true
+                sessionManager.isUpstoxConnected = false
+                val code = profileRes.code()
+                if (code == 401 || code == 403) {
+                    _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                } else {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                }
+                false
             }
         } catch (e: Exception) {
-            // Network failure during validation - don't invalidate session if token looks valid
-            android.util.Log.d("UpstoxAuth", "[9] Account verified: PASS")
-                android.util.Log.d("UpstoxAuth", "[10] Authentication SUCCESS: PASS")
-                _authStatus.value = BrokerAuthStatus.CONNECTED
-            true
+            sessionManager.isUpstoxConnected = false
+            _authStatus.value = BrokerAuthStatus.ERROR
+            false
         }
     }
 
