@@ -607,7 +607,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (res.isSuccess) {
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
-                _brokerSwitchStatus.value = "Upstox Feed Connected • Primary Market Data"
+                _brokerSwitchStatus.value = "✓ UPSTOX CONNECTED"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.upstoxMarketDataService.connect()
@@ -671,7 +671,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (res.isSuccess) {
                 brokerManager.healthManager.reportTokenValidated(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
                 brokerManager.healthManager.reportAuthentication(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
-                _brokerSwitchStatus.value = "Broker Connected • Fyers (Market Data)"
+                _brokerSwitchStatus.value = "✓ FYERS CONNECTED"
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.fyersMarketDataService.connect()

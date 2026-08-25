@@ -486,9 +486,19 @@ fun BrokerCard(
 
             val failureStage = when {
                 !hasCredentials -> "CREDENTIALS_MISSING"
-                !isAuthenticated && lastError.isNotBlank() -> "AUTHENTICATION_FAILED"
-                !isAuthenticated -> "NOT_AUTHENTICATED"
-                wsState == "DISCONNECTED" || wsState == "OFFLINE" -> "WEBSOCKET_DISCONNECTED"
+                !isAuthenticated -> {
+                    val authStageUpper = authStage.uppercase(java.util.Locale.ENGLISH)
+                    val lastErrorUpper = lastError.uppercase(java.util.Locale.ENGLISH)
+                    when {
+                        authStageUpper.contains("AUTHORIZATION_STARTED") || authStageUpper.contains("START") -> "OAUTH_START_FAILED"
+                        authStageUpper.contains("CALLBACK") || lastErrorUpper.contains("CALLBACK") -> "CALLBACK_NOT_RECEIVED"
+                        authStageUpper.contains("STATE") || lastErrorUpper.contains("STATE") -> "INVALID_STATE"
+                        authStageUpper.contains("TOKEN") || lastErrorUpper.contains("TOKEN") -> "TOKEN_EXCHANGE_FAILED"
+                        lastError.isNotBlank() -> "AUTHENTICATION_FAILED"
+                        else -> "NOT_AUTHENTICATED"
+                    }
+                }
+                wsState == "ERROR" || wsState == "DISCONNECTED" || wsState == "OFFLINE" -> "WEBSOCKET_FAILED"
                 !isActiveSubscription -> "SUBSCRIPTION_FAILED"
                 !hasRealTick -> "WAITING_FOR_FIRST_TICK"
                 tickAgeMs > 15000L -> "TICK_STALE"

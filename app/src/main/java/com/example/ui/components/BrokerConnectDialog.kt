@@ -287,7 +287,7 @@ fun BrokerConnectDialog(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
                         ) {
-                            Text("LOGIN WITH UPSTOX", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("LOGIN VIA BROWSER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
 
                         if (!localErrorMsg.isNullOrBlank()) {
@@ -511,7 +511,7 @@ fun BrokerConnectDialog(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen)
                         ) {
-                            Text("LOGIN WITH FYERS", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("LOGIN VIA BROWSER", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
 
                         if (!localErrorMsg.isNullOrBlank()) {
