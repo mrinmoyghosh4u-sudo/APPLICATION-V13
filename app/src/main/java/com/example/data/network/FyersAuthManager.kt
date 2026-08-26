@@ -105,6 +105,8 @@ class FyersAuthManager(
 
                 if (tokenBody == null) {
                     val err = directExchangeError ?: "Failed to exchange Fyers auth code. Please verify Secret ID."
+                    sessionManager.isFyersConnected = false
+                    sessionManager.fyersAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
                     Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
                     throw Exception("TOKEN_EXCHANGE_FAILED: $err")
@@ -129,6 +131,8 @@ class FyersAuthManager(
                     Log.i(TAG, "[PROFILE_VALIDATED] FYERS token profile validation passed")
                     Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
                 } catch (e: Exception) {
+                    sessionManager.isFyersConnected = false
+                    sessionManager.fyersAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
                     if (e.message?.startsWith("PROFILE_VALIDATION_FAILED") == true) {
                         throw e

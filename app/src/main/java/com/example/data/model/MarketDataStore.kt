@@ -336,29 +336,29 @@ object MarketDataStore {
     ) {
         // 1. Invalid Price Validation
         if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
-            Log.w("MarketDataStore", "[$source] REJECTED INVALID LTP: $ltp for $symbol")
+            try { Log.w("MarketDataStore", "[$source] REJECTED INVALID LTP: $ltp for $symbol") } catch (_: Throwable) {}
             return
         }
 
         val normSymCheck = symbol.trim().uppercase()
         if (normSymCheck == "SENSEX" && (ltp < 50000.0 || ltp > 120000.0)) {
-            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR SENSEX: $ltp")
+            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR SENSEX: $ltp") } catch (_: Throwable) {}
             return
         }
         if ((normSymCheck == "NIFTY 50" || normSymCheck == "NIFTY") && (ltp < 15000.0 || ltp > 35000.0)) {
-            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR NIFTY: $ltp")
+            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR NIFTY: $ltp") } catch (_: Throwable) {}
             return
         }
         if (normSymCheck == "BANKNIFTY" && (ltp < 30000.0 || ltp > 70000.0)) {
-            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKNIFTY: $ltp")
+            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKNIFTY: $ltp") } catch (_: Throwable) {}
             return
         }
         if (normSymCheck == "BANKEX" && (ltp < 40000.0 || ltp > 85000.0)) {
-            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKEX: $ltp")
+            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKEX: $ltp") } catch (_: Throwable) {}
             return
         }
         if (normSymCheck == "FINNIFTY" && (ltp < 15000.0 || ltp > 35000.0)) {
-            Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR FINNIFTY: $ltp")
+            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR FINNIFTY: $ltp") } catch (_: Throwable) {}
             return
         }
 

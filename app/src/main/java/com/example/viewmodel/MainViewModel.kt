@@ -745,7 +745,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.upstoxApiKey = cleanKey
         sessionManager.upstoxApiSecret = cleanSecret
         val redirectUri = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-        val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
+        val randomState = com.example.util.UpstoxAuthHelper.generateSecureState()
         sessionManager.pendingUpstoxOAuthState = randomState
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Upstox"
@@ -785,7 +785,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             sessionManager.fyersSecretId = cleanSecretId
         }
         val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
-        val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
+        val randomState = com.example.util.FyersAuthHelper.generateSecureState()
         sessionManager.pendingFyersOAuthState = randomState
         sessionManager.pendingOAuthState = randomState
         sessionManager.pendingOAuthBroker = "Fyers"

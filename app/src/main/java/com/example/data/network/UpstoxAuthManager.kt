@@ -105,6 +105,8 @@ class UpstoxAuthManager(
 
                 if (tokenBody == null) {
                     val err = directExchangeError ?: "Failed to exchange Upstox code. Please check API Key and Secret."
+                    sessionManager.isUpstoxConnected = false
+                    sessionManager.upstoxAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
                     Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
                     throw Exception("TOKEN_EXCHANGE_FAILED: $err")
@@ -113,6 +115,8 @@ class UpstoxAuthManager(
             val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
             val accessToken = body.effectiveAccessToken
             if (accessToken.isNullOrBlank()) {
+                sessionManager.isUpstoxConnected = false
+                sessionManager.upstoxAccessToken = null
                 _authStatus.value = BrokerAuthStatus.ERROR
                 Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Access Token is empty in response")
                 throw Exception("TOKEN_EXCHANGE_FAILED: Access token is empty")
@@ -125,6 +129,8 @@ class UpstoxAuthManager(
             try {
                 validateUserProfile(accessToken)
             } catch (e: Exception) {
+                sessionManager.isUpstoxConnected = false
+                sessionManager.upstoxAccessToken = null
                 _authStatus.value = BrokerAuthStatus.ERROR
                 Log.e(TAG, "[UPSTOX_PROFILE_VALIDATION_FAILED] Token validation failed: ${e.message}")
                 throw Exception("PROFILE_VALIDATION_FAILED: ${e.message}")

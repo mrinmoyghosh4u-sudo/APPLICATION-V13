@@ -12,6 +12,7 @@ data class UpstoxDecodedFeed(
     val low: Double = 0.0,
     val close: Double = 0.0,
     val volume: Long = 0L,
+    val ltq: Long = 0L,
     val oi: Double = 0.0,
     val timestamp: Long = 0L,
     val bidPrice: Double = 0.0,
@@ -52,20 +53,27 @@ object UpstoxProtobufDecoder {
                 val wireType = (tag and 0x07).toInt()
 
                 when (fieldNum) {
-                    1 -> { // Type type
-                        feedType = readVarint(buffer).toInt()
-                    }
-                    2 -> { // map<string, Feed> feeds
-                        val len = readVarint(buffer).toInt()
-                        if (len in 1..buffer.remaining()) {
-                            val subBuf = sliceBuffer(buffer, len)
-                            parseFeedMapEntry(subBuf)?.let { (key, feed) ->
-                                feeds[key] = feed
+                    1, 2 -> {
+                        if (wireType == 0) {
+                            feedType = readVarint(buffer).toInt()
+                        } else if (wireType == 2) {
+                            val len = readVarint(buffer).toInt()
+                            if (len in 1..buffer.remaining()) {
+                                val subBuf = sliceBuffer(buffer, len)
+                                parseFeedMapEntry(subBuf)?.let { (key, feed) ->
+                                    feeds[key] = feed
+                                }
                             }
+                        } else {
+                            skipField(buffer, wireType)
                         }
                     }
                     3 -> { // int64 currentTs
-                        currentTs = readVarint(buffer)
+                        if (wireType == 0) {
+                            currentTs = readVarint(buffer)
+                        } else {
+                            skipField(buffer, wireType)
+                        }
                     }
                     else -> skipField(buffer, wireType)
                 }
@@ -123,6 +131,7 @@ object UpstoxProtobufDecoder {
         var low = 0.0
         var close = 0.0
         var volume = 0L
+        var ltq = 0L
         var oi = 0.0
         var timestamp = 0L
         var bidPrice = 0.0
@@ -146,10 +155,11 @@ object UpstoxProtobufDecoder {
                     val len = readVarint(buffer).toInt()
                     if (len in 1..buffer.remaining()) {
                         val subBuf = sliceBuffer(buffer, len)
-                        val (pLtp, pTs, pClose) = parseLtpc(subBuf)
+                        val (pLtp, pTs, pClose, pLtq) = parseLtpc(subBuf)
                         if (pLtp > 0.0) ltp = pLtp
                         if (pTs > 0L) timestamp = pTs
                         if (pClose > 0.0) close = pClose
+                        if (pLtq > 0L) ltq = pLtq
                     }
                 }
                 2 -> { // FullFeed fullFeed
@@ -174,10 +184,11 @@ object UpstoxProtobufDecoder {
                                                 1 -> { // LTPC
                                                     val lLen = readVarint(mBuf).toInt()
                                                     if (lLen in 1..mBuf.remaining()) {
-                                                        val (pLtp, pTs, pClose) = parseLtpc(sliceBuffer(mBuf, lLen))
+                                                        val (pLtp, pTs, pClose, pLtq) = parseLtpc(sliceBuffer(mBuf, lLen))
                                                         if (pLtp > 0.0) ltp = pLtp
                                                         if (pTs > 0L) timestamp = pTs
                                                         if (pClose > 0.0) close = pClose
+                                                        if (pLtq > 0L) ltq = pLtq
                                                     }
                                                 }
                                                 2 -> { // MarketLevel marketLevel
@@ -222,10 +233,11 @@ object UpstoxProtobufDecoder {
                                                 1 -> { // LTPC
                                                     val lLen = readVarint(iBuf).toInt()
                                                     if (lLen in 1..iBuf.remaining()) {
-                                                        val (pLtp, pTs, pClose) = parseLtpc(sliceBuffer(iBuf, lLen))
+                                                        val (pLtp, pTs, pClose, pLtq) = parseLtpc(sliceBuffer(iBuf, lLen))
                                                         if (pLtp > 0.0) ltp = pLtp
                                                         if (pTs > 0L) timestamp = pTs
                                                         if (pClose > 0.0) close = pClose
+                                                        if (pLtq > 0L) ltq = pLtq
                                                     }
                                                 }
                                                 2 -> { // IndexOHLC eFeedDetails
@@ -283,6 +295,7 @@ object UpstoxProtobufDecoder {
             low = low,
             close = close,
             volume = volume,
+            ltq = ltq,
             oi = oi,
             timestamp = timestamp,
             bidPrice = bidPrice,
@@ -298,12 +311,13 @@ object UpstoxProtobufDecoder {
         )
     }
 
-    private data class LtpcResult(val ltp: Double, val timestamp: Long, val close: Double)
+    private data class LtpcResult(val ltp: Double, val timestamp: Long, val close: Double, val ltq: Long)
 
     private fun parseLtpc(buffer: ByteBuffer): LtpcResult {
         var ltp = 0.0
         var ts = 0L
         var close = 0.0
+        var ltq = 0L
 
         while (buffer.hasRemaining()) {
             val tag = readVarint(buffer)
@@ -312,12 +326,12 @@ object UpstoxProtobufDecoder {
             when (field) {
                 1 -> ltp = readDoubleOrFloat(buffer, wire) // double ltp
                 2 -> ts = readVarint(buffer)  // int64 ltt
-                3 -> readVarint(buffer)       // int64 ltq
+                3 -> ltq = readVarint(buffer) // int64 ltq
                 4 -> close = readDoubleOrFloat(buffer, wire) // double cp
                 else -> skipField(buffer, wire)
             }
         }
-        return LtpcResult(ltp, ts, close)
+        return LtpcResult(ltp, ts, close, ltq)
     }
 
     private data class MarketLevelResult(val bidPrice: Double, val bidQty: Long, val askPrice: Double, val askQty: Long)

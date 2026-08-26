@@ -40,10 +40,10 @@ import java.util.Locale
 class MarketDataEngine(
     var upstoxMarketDataService: UpstoxMarketDataService? = null,
     var fyersMarketDataService: FyersMarketDataService? = null,
-    val angelMarketDataService: AngelOneMarketDataService,
-    val mStockMarketDataService: MStockMarketDataService,
-    private val sessionManager: SessionManager,
-    private val healthManager: ProviderHealthManager
+    val angelMarketDataService: AngelOneMarketDataService? = null,
+    val mStockMarketDataService: MStockMarketDataService? = null,
+    private val sessionManager: SessionManager? = null,
+    private val healthManager: ProviderHealthManager? = null
 ) {
     companion object {
         private const val TAG = "MarketDataEngine"
@@ -127,11 +127,11 @@ class MarketDataEngine(
             val startUpstox = System.currentTimeMillis()
             val upstoxRes = upstoxMarketDataService!!.getOptionChain(symbol, expiry ?: "")
             if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
                 return upstoxRes
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
-            healthManager.logFailover(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.PROVIDER_FYERS)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
+            healthManager?.logFailover(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.PROVIDER_FYERS)
         }
 
         // Priority 2: Fyers
@@ -139,32 +139,34 @@ class MarketDataEngine(
             val startFyers = System.currentTimeMillis()
             val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry ?: "")
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
                 return fyersRes
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_FYERS)
-            healthManager.logFailover(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.PROVIDER_ANGEL_ONE)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS)
+            healthManager?.logFailover(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.PROVIDER_ANGEL_ONE)
         }
 
         // Priority 3: Angel One
-        val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry ?: "")
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
-            healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
-            return angelRes
+        if (angelMarketDataService?.isConfigured() == true) {
+            val startAngel = System.currentTimeMillis()
+            val angelRes = angelMarketDataService.getOptionChain(symbol, expiry ?: "")
+            if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
+                return angelRes
+            }
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
+            healthManager?.logFailover(ProviderHealthManager.PROVIDER_ANGEL_ONE, ProviderHealthManager.PROVIDER_MSTOCK)
         }
-        healthManager.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
-        healthManager.logFailover(ProviderHealthManager.PROVIDER_ANGEL_ONE, ProviderHealthManager.PROVIDER_MSTOCK)
 
         // Priority 4: m.Stock
-        if (mStockMarketDataService.isConfigured()) {
+        if (mStockMarketDataService?.isConfigured() == true) {
             val startMStock = System.currentTimeMillis()
             val mStockRes = mStockMarketDataService.getOptionChain(symbol, expiry ?: "")
             if (mStockRes.isSuccess && mStockRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
                 return mStockRes
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
         }
 
         return Result.failure(Exception("REAL OPTION CHAIN UNAVAILABLE"))
@@ -189,8 +191,10 @@ class MarketDataEngine(
         }
         
         // Priority 3: Angel One
-        val angelRes = angelMarketDataService.getOptionExpiries(symbol)
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) return angelRes
+        if (angelMarketDataService?.isConfigured() == true) {
+            val angelRes = angelMarketDataService.getOptionExpiries(symbol)
+            if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) return angelRes
+        }
         
         return Result.failure(Exception("REAL EXPIRIES UNAVAILABLE"))
     }
@@ -207,10 +211,10 @@ class MarketDataEngine(
             val startUpstox = System.currentTimeMillis()
             val upstoxRes = upstoxMarketDataService!!.getHistoricalCandles(symbol, interval, fromDate, toDate)
             if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
                 return upstoxRes
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
         }
 
         // Priority 2: Fyers
@@ -218,33 +222,35 @@ class MarketDataEngine(
             val startFyers = System.currentTimeMillis()
             val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval, fromDate, toDate)
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
                 return fyersRes
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_FYERS)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS)
         }
 
         // Priority 3: Angel One
-        val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getHistoricalCandles(symbol, interval)
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
-            healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
-            return angelRes
+        if (angelMarketDataService?.isConfigured() == true) {
+            val startAngel = System.currentTimeMillis()
+            val angelRes = angelMarketDataService.getHistoricalCandles(symbol, interval)
+            if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
+                return angelRes
+            }
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
         }
-        healthManager.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
 
         // Priority 4: m.Stock
-        if (mStockMarketDataService.isConfigured()) {
+        if (mStockMarketDataService?.isConfigured() == true) {
             val startMStock = System.currentTimeMillis()
             val mStockRes = mStockMarketDataService.getHistoricalCandles(symbol, interval)
             if (mStockRes.isSuccess && mStockRes.getOrDefault(emptyList()).isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
+                healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
                 val mapped = mStockRes.getOrDefault(emptyList()).map {
                     CandleData(open = it.open.toFloat(), high = it.high.toFloat(), low = it.low.toFloat(), close = it.close.toFloat(), volume = it.volume.toFloat())
                 }
                 return Result.success(mapped)
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
         }
 
         return Result.failure(Exception("REAL HISTORICAL DATA UNAVAILABLE"))
@@ -270,14 +276,14 @@ class MarketDataEngine(
             if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
-                    healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
+                    healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
                     _unifiedFeedStatus.value = "LIVE • UPSTOX"
                     _internalActiveProvider.value = "UPSTOX"
                     updateLastTickTime()
                     return Result.success(valid)
                 }
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX)
         }
     
         // Priority 2: Fyers
@@ -287,46 +293,48 @@ class MarketDataEngine(
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
-                    healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
+                    healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
                     _unifiedFeedStatus.value = "LIVE • FYERS"
                     _internalActiveProvider.value = "FYERS"
                     updateLastTickTime()
                     return Result.success(valid)
                 }
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_FYERS)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS)
         }
         
         // Priority 3: Angel One
-        val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getMarketQuotes(symbols)
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
-            val valid = angelRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
-            if (valid.isNotEmpty()) {
-                healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
-                _unifiedFeedStatus.value = "LIVE • ANGEL ONE"
-                _internalActiveProvider.value = "ANGEL ONE"
-                updateLastTickTime()
-                return Result.success(valid)
+        if (angelMarketDataService?.isConfigured() == true) {
+            val startAngel = System.currentTimeMillis()
+            val angelRes = angelMarketDataService.getMarketQuotes(symbols)
+            if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
+                val valid = angelRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+                if (valid.isNotEmpty()) {
+                    healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
+                    _unifiedFeedStatus.value = "LIVE • ANGEL ONE"
+                    _internalActiveProvider.value = "ANGEL ONE"
+                    updateLastTickTime()
+                    return Result.success(valid)
+                }
             }
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
         }
-        healthManager.reportError(ProviderHealthManager.PROVIDER_ANGEL_ONE)
 
         // Priority 4: m.Stock
-        if (mStockMarketDataService.isConfigured()) {
+        if (mStockMarketDataService?.isConfigured() == true) {
             val startMStock = System.currentTimeMillis()
             val mStockRes = mStockMarketDataService.getMarketQuotes(symbols)
             if (mStockRes.isSuccess && mStockRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = mStockRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
-                    healthManager.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
+                    healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
                     _unifiedFeedStatus.value = "LIVE • m.STOCK"
                     _internalActiveProvider.value = "m.STOCK"
                     updateLastTickTime()
                     return Result.success(valid)
                 }
             }
-            healthManager.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
+            healthManager?.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
         }
 
         _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
@@ -377,7 +385,7 @@ class MarketDataEngine(
             state = "LIVE"
         )
 
-        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, tick.timestamp)
+        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, tick.timestamp)
         _unifiedFeedStatus.value = "LIVE • UPSTOX"
         _internalActiveProvider.value = "UPSTOX"
         updateLastTickTime()
@@ -402,7 +410,7 @@ class MarketDataEngine(
             state = "LIVE"
         )
         
-        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, tick.timestamp)
+        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, tick.timestamp)
         _unifiedFeedStatus.value = "LIVE • FYERS"
         _internalActiveProvider.value = "FYERS"
         updateLastTickTime()
@@ -418,7 +426,7 @@ class MarketDataEngine(
         if (fyersMarketDataService?.isConfigured() == true) {
             fyersMarketDataService?.subscribeToMarketData(symbols)
         }
-                if (angelMarketDataService.isConfigured()) {
+        if (angelMarketDataService?.isConfigured() == true) {
             val exchType = when(exchange.uppercase()) {
                 "NSE" -> 1
                 "NFO" -> 2
@@ -430,7 +438,7 @@ class MarketDataEngine(
             }
             angelMarketDataService.subscribeToTokens(exchType, symbols)
         }
-        if (mStockMarketDataService.isConfigured()) {
+        if (mStockMarketDataService?.isConfigured() == true) {
             mStockMarketDataService.subscribe(exchange, symbols)
         }
     }
@@ -443,8 +451,8 @@ class MarketDataEngine(
         if (fyersMarketDataService?.isConfigured() == true) {
             CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
         }
-        angelMarketDataService.reconnect()
-        if (mStockMarketDataService.isConfigured()) {
+        angelMarketDataService?.reconnect()
+        if (mStockMarketDataService?.isConfigured() == true) {
             mStockMarketDataService.reconnect()
         }
     }

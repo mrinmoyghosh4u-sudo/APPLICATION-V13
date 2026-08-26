@@ -280,7 +280,7 @@ fun BrokerConnectDialog(
                                     if (onStartUpstoxOAuth != null) {
                                         onStartUpstoxOAuth(keyToUse, secretToUse)
                                     } else {
-                                        val randomState = "upstox_" + java.util.UUID.randomUUID().toString()
+                                        val randomState = com.example.util.UpstoxAuthHelper.generateSecureState()
                                         sessionManager.pendingOAuthState = randomState
                                         sessionManager.pendingOAuthBroker = "Upstox"
                                         sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
@@ -590,7 +590,7 @@ fun BrokerConnectDialog(
                                     if (onStartFyersOAuth != null) {
                                         onStartFyersOAuth(appToUse, secretToUse)
                                     } else {
-                                        val randomState = "fyers_" + java.util.UUID.randomUUID().toString()
+                                        val randomState = com.example.util.FyersAuthHelper.generateSecureState()
                                         sessionManager.pendingOAuthState = randomState
                                         sessionManager.pendingOAuthBroker = "Fyers"
                                         sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(

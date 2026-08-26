@@ -25,13 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * 
  * Implements:
  * - Real WebSocket connection to wss://ws.mstock.trade
- * - Real authentication login handshake
- * - Real subscription & unsubscription for LTP and Quote modes
- * - Binary & JSON tick frame parsing
- * - Real-time heartbeat and stale connection detection
- * - Automatic exponential backoff reconnection
- * - Integration with InstrumentMasterService for symbol/token resolution
- * - Dispatching validated ticks to MarketDataStore with source = "MSTOCK"
+ * - Strict State Flow: DISCONNECTED -> CONNECTING -> AUTHENTICATING -> AUTHENTICATED -> SUBSCRIBING -> LIVE
+ * - Confirmation of server authentication before subscription
+ * - Subscription registry preventing duplicates
+ * - Robust binary parser for Little-Endian packet format handling truncated/malformed frames
+ * - Dynamic Exchange Code mapping (1=NSE, 2=NFO, 3=BSE, 4=BFO, 5=CDS, 6=MCX)
+ * - LIVE state set ONLY on genuine first real market tick
  */
 class MStockMarketDataService(
     private val sessionManager: SessionManager? = null,
@@ -50,24 +49,29 @@ class MStockMarketDataService(
     private var webSocket: WebSocket? = null
     private val isConnecting = AtomicBoolean(false)
     private val isConnected = AtomicBoolean(false)
+    private val isAuthenticated = AtomicBoolean(false)
+    private val isReconnecting = AtomicBoolean(false)
     private val reconnectAttempts = AtomicInteger(0)
 
-    private val subscribedTokens = ConcurrentHashMap<String, String>() // token -> exchange
+    // Subscription registry: token -> exchange
+    private val subscribedTokens = ConcurrentHashMap<String, String>()
     private var heartbeatJob: Job? = null
     private var staleCheckJob: Job? = null
     private var lastTickReceivedTime: Long = 0L
 
-    private val _connectionState = MutableStateFlow("NOT_CONFIGURED")
+    private val _connectionState = MutableStateFlow("DISCONNECTED")
     val connectionState: StateFlow<String> = _connectionState.asStateFlow()
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS) // Keep alive
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
+    @Volatile
     private var hasFirstTick = false
+    @Volatile
     private var hasSubscription = false
 
     init {
@@ -90,7 +94,7 @@ class MStockMarketDataService(
 
     fun hasFirstTickReceived(): Boolean = hasFirstTick
 
-    fun hasActiveSubscription(): Boolean = hasSubscription || isConfigured()
+    fun hasActiveSubscription(): Boolean = subscribedTokens.isNotEmpty() || hasSubscription || isConfigured()
 
     fun getTickAgeMs(): Long {
         if (lastTickReceivedTime <= 0L) return -1L
@@ -107,19 +111,62 @@ class MStockMarketDataService(
         return isConfigured() && hasFirstTick && _connectionState.value == "LIVE" && age >= 0L && age <= STALE_THRESHOLD_MS
     }
 
+    private fun safeLogD(tag: String, msg: String) { try { Log.d(tag, msg) } catch (_: Throwable) {} }
+    private fun safeLogI(tag: String, msg: String) { try { Log.i(tag, msg) } catch (_: Throwable) {} }
+    private fun safeLogW(tag: String, msg: String) { try { Log.w(tag, msg) } catch (_: Throwable) {} }
+    private fun safeLogE(tag: String, msg: String, t: Throwable? = null) {
+        try {
+            if (t != null) Log.e(tag, msg, t) else Log.e(tag, msg)
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Map m.Stock Exchange Codes
+     * 1 -> NSE
+     * 2 -> NFO
+     * 3 -> BSE
+     * 4 -> BFO
+     * 5 -> CDS
+     * 6 -> MCX
+     * Else -> UNKNOWN
+     */
+    fun mapExchangeCode(code: Int): String {
+        return when (code) {
+            1 -> "NSE"
+            2 -> "NFO"
+            3 -> "BSE"
+            4 -> "BFO"
+            5 -> "CDS"
+            6 -> "MCX"
+            else -> "UNKNOWN"
+        }
+    }
+
+    fun mapExchangeToCode(exchange: String): Int {
+        return when (exchange.trim().uppercase()) {
+            "NSE" -> 1
+            "NFO" -> 2
+            "BSE" -> 3
+            "BFO" -> 4
+            "CDS" -> 5
+            "MCX" -> 6
+            else -> 1
+        }
+    }
+
     fun reconnect() {
+        isReconnecting.set(true)
+        _connectionState.value = "RECONNECTING"
         disconnect()
         connect()
     }
 
     /**
-     * Connects to m.Stock Live WebSocket and initiates authentication handshake & live feed
+     * Connects to m.Stock Live WebSocket and initiates authentication handshake
      */
     fun connect() {
-        hasSubscription = true
-
         if (!isConfigured()) {
-            Log.w(TAG, "[MSTOCK_AUTH_FAILED] m.Stock credentials not configured. Connection skipped.")
+            safeLogW(TAG, "[MSTOCK_ERROR] m.Stock credentials not configured. Connection skipped.")
             _connectionState.value = "NOT_CONFIGURED"
             healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_MSTOCK, false)
             MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "OFFLINE")
@@ -129,8 +176,14 @@ class MStockMarketDataService(
         if (isConnected.get() || isConnecting.get()) return
 
         isConnecting.set(true)
-        Log.d(TAG, "[MSTOCK_AUTH_START] Initiating m.Stock WebSocket connection...")
-        _connectionState.value = "CONNECTING"
+        isAuthenticated.set(false)
+        hasFirstTick = false
+
+        if (isReconnecting.get()) {
+            _connectionState.value = "RECONNECTING"
+        } else {
+            _connectionState.value = "CONNECTING"
+        }
         healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_MSTOCK)
 
         val token = sessionManager?.mstockAccessToken ?: ""
@@ -153,26 +206,19 @@ class MStockMarketDataService(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnecting.set(false)
                 isConnected.set(true)
+                isReconnecting.set(false)
                 reconnectAttempts.set(0)
-                _connectionState.value = "CONNECTED"
+
+                safeLogD(TAG, "[MSTOCK_WS_OPEN]")
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_MSTOCK, true)
-                
+
                 _connectionState.value = "AUTHENTICATING"
                 healthManager?.reportAuthenticating(ProviderHealthManager.PROVIDER_MSTOCK)
-                Log.d(TAG, "[MSTOCK_WS_CONNECTED] WebSocket open. Sending authentication handshake payload...")
+                safeLogD(TAG, "[MSTOCK_AUTHENTICATING] WebSocket open. Sending authentication handshake payload...")
 
-                // Send Login / Authentication Handshake
                 val token = sessionManager?.mstockAccessToken ?: ""
                 webSocket.send("LOGIN:$token")
-                
-                // Wait for auth confirmation in onMessage
-                healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
-                resubscribeAll()
-                _connectionState.value = "WAITING_FOR_TICK"
-                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
 
-
-                MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "CONNECTED")
                 startHeartbeat()
                 startStaleChecker()
             }
@@ -186,17 +232,17 @@ class MStockMarketDataService(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "[MSTOCK_DISCONNECTED] m.Stock WebSocket closing: code=$code reason=$reason")
+                safeLogW(TAG, "[MSTOCK_ERROR] m.Stock WebSocket closing: code=$code reason=$reason")
                 handleDisconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "[MSTOCK_DISCONNECTED] m.Stock WebSocket closed: code=$code reason=$reason")
+                safeLogW(TAG, "[MSTOCK_ERROR] m.Stock WebSocket closed: code=$code reason=$reason")
                 handleDisconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "[MSTOCK_DISCONNECTED] m.Stock WebSocket connection failure: ${t.localizedMessage}")
+                safeLogE(TAG, "[MSTOCK_ERROR] m.Stock WebSocket connection failure: ${t.localizedMessage}", t)
                 healthManager?.reportError(ProviderHealthManager.PROVIDER_MSTOCK, t.localizedMessage ?: "WS Failure")
                 handleDisconnect()
                 scheduleReconnect()
@@ -210,19 +256,8 @@ class MStockMarketDataService(
             val type = json.optString("type", json.optString("action", json.optString("status", "")))
 
             when (type.lowercase()) {
-                "auth", "login", "success", "ok" -> {
-                    _connectionState.value = "AUTHENTICATED"
-                    healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
-                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
-                    try { Log.i(TAG, "[MSTOCK_AUTH_SUCCESS] m.Stock authentication verified!") } catch (_: Throwable) {}
-                    
-                    _connectionState.value = "SUBSCRIBING"
-                    healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
-                    resubscribeAll()
-                    try { Log.d(TAG, "[MSTOCK_SUBSCRIPTION_SENT] Subscribed to instruments") } catch (_: Throwable) {}
-                    
-                    _connectionState.value = "WAITING_FOR_TICK"
-                    healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
+                "auth", "login", "success", "ok", "authenticated" -> {
+                    onAuthenticationSuccess()
                 }
                 "tick", "quote", "ltp" -> {
                     val token = json.optString("token", json.optString("scripCode", ""))
@@ -233,129 +268,183 @@ class MStockMarketDataService(
                     val low = json.optDouble("low", 0.0)
                     val close = json.optDouble("close", 0.0)
                     val volume = json.optLong("volume", 0L)
-                    val ts = json.optLong("timestamp", System.currentTimeMillis())
-                    val seq = json.optLong("sequenceNumber", 0L)
 
-                    val symbol = resolveSymbol(exch, token)
-
-                    if (ltp > 0.0) {
-                        val now = System.currentTimeMillis()
-                        if (!hasFirstTick) {
-                            try { Log.i(TAG, "[MSTOCK_FIRST_REAL_TICK] / MSTOCK_LIVE First valid m.Stock real tick received!") } catch (_: Throwable) {}
-                        }
-                        hasFirstTick = true
-                        lastTickReceivedTime = now
-                        _connectionState.value = "LIVE"
-                        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
-                        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
-
-                        MarketDataStore.updateTick(
-                            source = MarketDataSourceNames.MSTOCK,
-                            symbol = symbol,
-                            token = token,
-                            exchange = exch,
-                            ltp = ltp,
-                            open = open,
-                            high = high,
-                            low = low,
-                            close = close,
-                            volume = volume,
-                            exchangeTimestamp = ts,
-                            receivedTimestamp = now,
-                            state = "LIVE",
-                            sequenceNumber = seq
-                        )
+                    if (ltp > 0.0 && !ltp.isNaN() && !ltp.isInfinite()) {
+                        processRealTick(exch, token, ltp, open, high, low, close, volume)
                     }
+                }
+                "error", "auth_failed", "unauthorized" -> {
+                    val errMsg = json.optString("message", "Authentication error")
+                    safeLogE(TAG, "[MSTOCK_ERROR] Authentication failed: $errMsg")
+                    isAuthenticated.set(false)
+                    _connectionState.value = "AUTH_FAILED"
+                    healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, false, errMsg)
                 }
                 "pong", "heartbeat" -> {
                     // Handled heartbeat
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse m.Stock text frame: ${e.localizedMessage}")
+            if (text.contains("LOGIN_SUCCESS") || text.contains("AUTH_OK") || text.contains("SUCCESS")) {
+                onAuthenticationSuccess()
+            } else if (text.contains("AUTH_FAILED") || text.contains("INVALID")) {
+                safeLogE(TAG, "[MSTOCK_ERROR] Text auth failed: $text")
+                isAuthenticated.set(false)
+                _connectionState.value = "AUTH_FAILED"
+                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, false, text)
+            } else {
+                safeLogE(TAG, "[MSTOCK_ERROR] Failed to parse m.Stock text frame: ${e.localizedMessage}", e)
+            }
+        }
+    }
+
+    fun onAuthenticationSuccess() {
+        if (isAuthenticated.compareAndSet(false, true)) {
+            safeLogI(TAG, "[MSTOCK_AUTHENTICATED] m.Stock authentication verified!")
+            _connectionState.value = "AUTHENTICATED"
+            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
+            MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
+
+            _connectionState.value = "SUBSCRIBING"
+            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
+            safeLogI(TAG, "[MSTOCK_SUBSCRIBED] Subscribed to registered tokens")
+
+            resubscribeAll()
+
+            _connectionState.value = if (hasFirstTick) "LIVE" else "SUBSCRIBED"
+            healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
         }
     }
 
     /**
-     * Parses m.Stock Binary Market Data Packets
-     * Supports single and multi-packet binary frames.
+     * Parses m.Stock Binary Market Data Packets using Little Endian byte order.
+     * Safely handles truncated, malformed, and concatenated multi-packet binary frames.
      */
     fun parseBinaryPacket(bytes: ByteArray) {
+        if (bytes.isEmpty() || bytes.size < 12) {
+            safeLogW(TAG, "[MSTOCK_ERROR] Binary packet too short (${bytes.size} bytes)")
+            return
+        }
+
         try {
-            if (bytes.size < 32) return
-            val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            val length = buffer.short.toInt() and 0xFFFF
-            if (length > bytes.size || length < 4) return
-            
-            val mode = buffer.get().toInt()
-            val exchangeCode = buffer.get().toInt()
-            val token = buffer.int
-            
-            // Map exchange
-            val exchange = when (exchangeCode) {
-                1 -> "NSE"
-                2 -> "NFO"
-                3 -> "BSE"
-                4 -> "BFO"
-                5 -> "CDS"
-                6 -> "MCX"
-                else -> "NSE"
-            }
-            
-            var ltp = 0.0
-            var open = 0.0
-            var high = 0.0
-            var low = 0.0
-            var close = 0.0
-            var volume = 0L
-            
-            // LTP is at offset 8, 4 bytes
-            if (buffer.remaining() >= 4) {
-                ltp = buffer.int / 100.0
-            }
-            if (buffer.remaining() >= 16) {
-                open = buffer.int / 100.0
-                high = buffer.int / 100.0
-                low = buffer.int / 100.0
-                close = buffer.int / 100.0
-            }
-            if (buffer.remaining() >= 8) {
-                volume = buffer.long
-            }
-            
-            if (ltp > 0.0) {
-                val tokenStr = token.toString()
-                val symbol = resolveSymbol(exchange, tokenStr)
-                
-                val now = System.currentTimeMillis()
-                if (!hasFirstTick) {
-                    try { android.util.Log.i(TAG, "[MSTOCK_FIRST_REAL_TICK] / MSTOCK_LIVE First valid m.Stock binary real tick received!") } catch (_: Throwable) {}
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+            while (buffer.remaining() >= 12) {
+                val startPos = buffer.position()
+                val packetLen = buffer.short.toInt() and 0xFFFF
+
+                if (packetLen < 12 || packetLen > buffer.remaining() + 2) {
+                    safeLogW(TAG, "[MSTOCK_ERROR] Invalid packet length: $packetLen (remaining=${buffer.remaining() + 2})")
+                    break
                 }
-                hasFirstTick = true
-                lastTickReceivedTime = now
-                _connectionState.value = "LIVE"
-                healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
-                
-                MarketDataStore.updateTick(
-                    source = MarketDataSourceNames.MSTOCK,
-                    symbol = symbol,
-                    token = tokenStr,
-                    exchange = exchange,
-                    ltp = ltp,
-                    open = open,
-                    high = high,
-                    low = low,
-                    close = close,
-                    volume = volume,
-                    exchangeTimestamp = now,
-                    receivedTimestamp = now,
-                    state = "LIVE"
-                )
+
+                val mode = buffer.get().toInt() and 0xFF
+                val exchangeCode = buffer.get().toInt() and 0xFF
+                val token = buffer.int
+
+                val exchange = mapExchangeCode(exchangeCode)
+                if (exchange == "UNKNOWN") {
+                    safeLogW(TAG, "[MSTOCK_ERROR] Unknown exchange code $exchangeCode for token $token")
+                    val bytesRead = buffer.position() - startPos
+                    val bytesToSkip = packetLen - bytesRead
+                    if (bytesToSkip > 0 && bytesToSkip <= buffer.remaining()) {
+                        buffer.position(buffer.position() + bytesToSkip)
+                    } else {
+                        break
+                    }
+                    continue
+                }
+
+                var ltp = 0.0
+                var open = 0.0
+                var high = 0.0
+                var low = 0.0
+                var close = 0.0
+                var volume = 0L
+
+                if (buffer.remaining() >= 4) {
+                    ltp = buffer.int / 100.0
+                }
+
+                if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
+                    val bytesRead = buffer.position() - startPos
+                    val bytesToSkip = packetLen - bytesRead
+                    if (bytesToSkip > 0 && bytesToSkip <= buffer.remaining()) {
+                        buffer.position(buffer.position() + bytesToSkip)
+                    } else {
+                        break
+                    }
+                    continue
+                }
+
+                if (buffer.remaining() >= 16 && (buffer.position() - startPos + 16 <= packetLen)) {
+                    open = buffer.int / 100.0
+                    high = buffer.int / 100.0
+                    low = buffer.int / 100.0
+                    close = buffer.int / 100.0
+                }
+
+                if (buffer.remaining() >= 8 && (buffer.position() - startPos + 8 <= packetLen)) {
+                    volume = buffer.long
+                } else if (buffer.remaining() >= 4 && (buffer.position() - startPos + 4 <= packetLen)) {
+                    volume = buffer.int.toLong()
+                }
+
+                val bytesRead = buffer.position() - startPos
+                if (bytesRead < packetLen && (packetLen - bytesRead) <= buffer.remaining()) {
+                    buffer.position(startPos + packetLen)
+                }
+
+                processRealTick(exchange, token.toString(), ltp, open, high, low, close, volume)
             }
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to parse m.Stock binary frame: ${e.localizedMessage}")
+            safeLogE(TAG, "[MSTOCK_ERROR] Failed to parse m.Stock binary frame: ${e.localizedMessage}", e)
         }
     }
+
+    private fun processRealTick(
+        exchange: String,
+        tokenStr: String,
+        ltp: Double,
+        open: Double,
+        high: Double,
+        low: Double,
+        close: Double,
+        volume: Long
+    ) {
+        val symbol = resolveSymbol(exchange, tokenStr)
+        val now = System.currentTimeMillis()
+
+        safeLogD(TAG, "[MSTOCK_TICK_RECEIVED] exch=$exchange token=$tokenStr ltp=$ltp")
+
+        if (!hasFirstTick) {
+            hasFirstTick = true
+            safeLogI(TAG, "[MSTOCK_FIRST_REAL_TICK] First valid m.Stock real tick received! symbol=$symbol ltp=$ltp")
+            safeLogI(TAG, "[MSTOCK_LIVE] m.Stock feed is now LIVE")
+        }
+
+        lastTickReceivedTime = now
+        _connectionState.value = "LIVE"
+        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
+        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+
+        MarketDataStore.updateTick(
+            source = MarketDataSourceNames.MSTOCK,
+            symbol = symbol,
+            token = tokenStr,
+            exchange = exchange,
+            ltp = ltp,
+            open = open,
+            high = high,
+            low = low,
+            close = close,
+            volume = volume,
+            exchangeTimestamp = now,
+            receivedTimestamp = now,
+            state = "LIVE"
+        )
+    }
+
     private fun resolveSymbol(exchange: String, token: String): String {
         val master = instrumentMasterService
         if (master != null && master.isLoaded) {
@@ -379,7 +468,7 @@ class MStockMarketDataService(
                     }
                     webSocket?.send(ping.toString())
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to send m.Stock heartbeat: ${e.localizedMessage}")
+                    safeLogW(TAG, "[MSTOCK_ERROR] Failed to send m.Stock heartbeat: ${e.localizedMessage}")
                 }
             }
         }
@@ -402,10 +491,11 @@ class MStockMarketDataService(
     private fun handleDisconnect() {
         isConnected.set(false)
         isConnecting.set(false)
+        isAuthenticated.set(false)
         hasSubscription = false
         heartbeatJob?.cancel()
         staleCheckJob?.cancel()
-        _connectionState.value = "OFFLINE"
+        _connectionState.value = "DISCONNECTED"
         MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "OFFLINE")
     }
 
@@ -416,36 +506,47 @@ class MStockMarketDataService(
         if (attempt > MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts.set(1)
         }
-        Log.d(TAG, "Scheduling m.Stock reconnect attempt $attempt in ${delayMs}ms...")
+        safeLogD(TAG, "Scheduling m.Stock reconnect attempt $attempt in ${delayMs}ms...")
         scope.launch {
             delay(delayMs)
-            connect()
+            reconnect()
         }
     }
 
     fun subscribe(exchange: String, tokens: List<String>, mode: Int = 1) {
-        val validTokens = mutableListOf<String>()
+        val newTokensToSend = mutableListOf<String>()
+
         tokens.forEach { tok ->
             val trimmed = tok.trim()
             if (trimmed.isNotBlank()) {
-                subscribedTokens[trimmed] = exchange
-                validTokens.add(trimmed)
+                // Prevent duplicate subscriptions in registry
+                val existingExch = subscribedTokens[trimmed]
+                if (existingExch == null || existingExch != exchange) {
+                    subscribedTokens[trimmed] = exchange
+                    newTokensToSend.add(trimmed)
+                }
             } else {
-                Log.w(TAG, "MSTOCK SUBSCRIPTION FAILED SYMBOL=UNKNOWN REASON=TOKEN_NOT_FOUND")
+                safeLogW(TAG, "[MSTOCK_ERROR] Subscription failed: token blank")
             }
         }
 
-        if (validTokens.isEmpty()) return
-
-        if (!isConnected.get()) {
-            connect()
+        // Do not send WebSocket payload if not authenticated yet;
+        // tokens are saved in registry and will be subscribed upon authentication success!
+        if (!isAuthenticated.get() || !isConnected.get()) {
+            safeLogD(TAG, "Stored tokens in registry. Subscription will be sent upon authentication.")
             return
         }
 
+        if (newTokensToSend.isEmpty()) return
+
+        sendSubscriptionPayload(exchange, newTokensToSend, mode)
+    }
+
+    private fun sendSubscriptionPayload(exchange: String, tokens: List<String>, mode: Int = 1) {
         try {
-            val validIntTokens = validTokens.mapNotNull { it.toIntOrNull() }
+            val validIntTokens = tokens.mapNotNull { it.toIntOrNull() }
             if (validIntTokens.isEmpty()) return
-            
+
             val subMsg = JSONObject().apply {
                 put("a", "subscribe")
                 put("v", JSONArray(validIntTokens))
@@ -458,32 +559,42 @@ class MStockMarketDataService(
                 put("v", vArr)
             }
             _connectionState.value = "SUBSCRIBING"
+            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
+
             webSocket?.send(subMsg.toString())
             webSocket?.send(modeMsg.toString())
+
             hasSubscription = true
-            _connectionState.value = "SUBSCRIBED"
-            if (!hasFirstTick) {
-                _connectionState.value = "WAITING_FOR_TICK"
-            }
-            Log.d(TAG, "[MSTOCK_SUBSCRIBED] tokens=$validTokens exch=$exchange mode=$mode")
+            _connectionState.value = if (hasFirstTick) "LIVE" else "SUBSCRIBED"
+            healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
+
+            safeLogD(TAG, "[MSTOCK_SUBSCRIBED] tokens=$tokens exch=$exchange mode=$mode")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send m.Stock subscribe frame", e)
+            safeLogE(TAG, "[MSTOCK_ERROR] Failed to send m.Stock subscribe frame", e)
         }
     }
 
     fun unsubscribe(exchange: String, tokens: List<String>) {
-        tokens.forEach { subscribedTokens.remove(it) }
-        if (!isConnected.get()) return
+        val removedTokens = mutableListOf<String>()
+        tokens.forEach {
+            val trimmed = it.trim()
+            if (subscribedTokens.containsKey(trimmed)) {
+                subscribedTokens.remove(trimmed)
+                removedTokens.add(trimmed)
+            }
+        }
+
+        if (!isConnected.get() || !isAuthenticated.get() || removedTokens.isEmpty()) return
 
         try {
             val unsubMsg = JSONObject().apply {
                 put("action", "unsubscribe")
                 put("exchange", exchange)
-                put("tokens", JSONArray(tokens))
+                put("tokens", JSONArray(removedTokens))
             }
             webSocket?.send(unsubMsg.toString())
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send m.Stock unsubscribe frame", e)
+            safeLogE(TAG, "[MSTOCK_ERROR] Failed to send m.Stock unsubscribe frame", e)
         }
     }
 
@@ -507,25 +618,14 @@ class MStockMarketDataService(
         }
 
         if (subscribedTokens.isEmpty()) return
-        val validIntTokens = subscribedTokens.keys.mapNotNull { it.toIntOrNull() }
-        if (validIntTokens.isEmpty()) return
-        
-        try {
-            val subMsg = JSONObject().apply {
-                put("a", "subscribe")
-                put("v", JSONArray(validIntTokens))
-            }
-            val modeMsg = JSONObject().apply {
-                put("a", "mode")
-                val vArr = JSONArray()
-                vArr.put("full")
-                vArr.put(JSONArray(validIntTokens))
-                put("v", vArr)
-            }
-            webSocket?.send(subMsg.toString())
-            webSocket?.send(modeMsg.toString())
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send m.Stock resubscribe msg", e)
+
+        val exchangeGroups = ConcurrentHashMap<String, MutableList<String>>()
+        subscribedTokens.forEach { (token, exch) ->
+            exchangeGroups.getOrPut(exch) { mutableListOf() }.add(token)
+        }
+
+        exchangeGroups.forEach { (exch, tokens) ->
+            sendSubscriptionPayload(exch, tokens)
         }
     }
 
@@ -534,7 +634,7 @@ class MStockMarketDataService(
         try {
             webSocket?.close(1000, "User disconnected")
         } catch (e: Exception) {
-            Log.e(TAG, "Error closing m.Stock WebSocket", e)
+            Log.e(TAG, "[MSTOCK_ERROR] Error closing m.Stock WebSocket", e)
         }
         webSocket = null
     }
@@ -567,3 +667,4 @@ class MStockMarketDataService(
         return Result.failure(Exception("m.Stock market breadth REST endpoint unavailable."))
     }
 }
+

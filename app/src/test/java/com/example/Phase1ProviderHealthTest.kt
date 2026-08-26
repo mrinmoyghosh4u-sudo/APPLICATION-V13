@@ -112,7 +112,8 @@ class Phase1ProviderHealthTest {
             0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Open
             0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // High
             0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Low
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte()  // Close
+            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Close
+            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte()  // Volume
         )
         parseService.parseBinaryPacket(sampleBytes)
 
