@@ -53,9 +53,17 @@ object UpstoxProtobufDecoder {
                 val wireType = (tag and 0x07).toInt()
 
                 when (fieldNum) {
-                    1 -> { // Type feedType
+                    1 -> { // Type feedType (wireType == 0) OR map<string, Feed> feeds (wireType == 2)
                         if (wireType == 0) {
                             feedType = readVarint(buffer).toInt()
+                        } else if (wireType == 2) {
+                            val len = readVarint(buffer).toInt()
+                            if (len in 1..buffer.remaining()) {
+                                val subBuf = sliceBuffer(buffer, len)
+                                parseFeedMapEntry(subBuf)?.let { (key, feed) ->
+                                    feeds[key] = feed
+                                }
+                            }
                         } else {
                             skipField(buffer, wireType)
                         }
@@ -80,7 +88,19 @@ object UpstoxProtobufDecoder {
                             skipField(buffer, wireType)
                         }
                     }
-                    else -> skipField(buffer, wireType)
+                    else -> {
+                        if (wireType == 2) {
+                            val len = readVarint(buffer).toInt()
+                            if (len in 1..buffer.remaining()) {
+                                val subBuf = sliceBuffer(buffer, len)
+                                parseFeedMapEntry(subBuf)?.let { (key, feed) ->
+                                    feeds[key] = feed
+                                }
+                            }
+                        } else {
+                            skipField(buffer, wireType)
+                        }
+                    }
                 }
             }
 
