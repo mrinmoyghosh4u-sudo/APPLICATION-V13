@@ -794,14 +794,9 @@ class MainActivity : FragmentActivity() {
                                 onStartUpstoxOAuth = { apiKey, apiSecret ->
                                     viewModel.startUpstoxOAuth(apiKey, apiSecret,
                                         onUrlGenerated = { loginUrl ->
-                                            try {
-                                                android.util.Log.i("UpstoxAuth", "[BROWSER_OPENED] Browser opened for Upstox authorization")
-                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                                                this@MainActivity.startActivity(intent)
-                                                viewModel.closeConnectDialog()
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("Auth", "Failed to open browser: ${e.message}")
-                                            }
+                                            android.util.Log.i("UpstoxAuth", "[BROWSER_OPENED] Browser opened for Upstox authorization")
+                                            openAuthBrowser(loginUrl)
+                                            viewModel.closeConnectDialog()
                                         },
                                         onError = { /* error reported via live data/diagnostics */ }
                                     )
@@ -809,14 +804,9 @@ class MainActivity : FragmentActivity() {
                                 onStartFyersOAuth = { appId, secretId ->
                                     viewModel.startFyersOAuth(appId, secretId,
                                         onUrlGenerated = { loginUrl ->
-                                            try {
-                                                android.util.Log.i("FyersAuth", "[BROWSER_OPENED] Browser opened for Fyers authorization")
-                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                                                this@MainActivity.startActivity(intent)
-                                                viewModel.closeConnectDialog()
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("Auth", "Failed to open browser: ${e.message}")
-                                            }
+                                            android.util.Log.i("FyersAuth", "[BROWSER_OPENED] Browser opened for Fyers authorization")
+                                            openAuthBrowser(loginUrl)
+                                            viewModel.closeConnectDialog()
                                         },
                                         onError = { /* error reported via live data/diagnostics */ }
                                     )
@@ -858,6 +848,25 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    private fun openAuthBrowser(url: String) {
+        try {
+            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .build()
+            customTabsIntent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NO_HISTORY)
+            customTabsIntent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            customTabsIntent.launchUrl(this, android.net.Uri.parse(url))
+        } catch (e: Exception) {
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+            } catch (err: Exception) {
+                android.util.Log.e("Auth", "Failed to open auth browser: ${err.message}")
+            }
+        }
     }
 
     private fun handleIntent(intent: android.content.Intent?) {
