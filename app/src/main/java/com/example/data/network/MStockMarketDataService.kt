@@ -137,7 +137,7 @@ class MStockMarketDataService(
             4 -> "BFO"
             5 -> "CDS"
             6 -> "MCX"
-            else -> "UNKNOWN"
+            else -> "UNKNOWN_EXCHANGE"
         }
     }
 
@@ -380,9 +380,11 @@ class MStockMarketDataService(
      */
     fun parseBinaryPacket(bytes: ByteArray) {
         if (bytes.isEmpty() || bytes.size < 12) {
-            safeLogW(TAG, "[MSTOCK_ERROR] Binary packet too short (${bytes.size} bytes)")
+            safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Binary packet too short (${bytes.size} bytes)")
             return
         }
+
+        safeLogD(TAG, "[MSTOCK_BINARY_RECEIVED] Received ${bytes.size} binary bytes")
 
         try {
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -392,7 +394,7 @@ class MStockMarketDataService(
                 val packetLen = buffer.short.toInt() and 0xFFFF
 
                 if (packetLen < 12 || packetLen > buffer.remaining() + 2) {
-                    safeLogW(TAG, "[MSTOCK_ERROR] Invalid packet length: $packetLen (remaining=${buffer.remaining() + 2})")
+                    safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Invalid packet length: $packetLen (remaining=${buffer.remaining() + 2})")
                     break
                 }
 
@@ -401,8 +403,8 @@ class MStockMarketDataService(
                 val token = buffer.int
 
                 val exchange = mapExchangeCode(exchangeCode)
-                if (exchange == "UNKNOWN") {
-                    safeLogW(TAG, "[MSTOCK_ERROR] Unknown exchange code $exchangeCode for token $token")
+                if (exchange == "UNKNOWN_EXCHANGE") {
+                    safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Unknown exchange code $exchangeCode for token $token")
                     val bytesRead = buffer.position() - startPos
                     val bytesToSkip = packetLen - bytesRead
                     if (bytesToSkip > 0 && bytesToSkip <= buffer.remaining()) {
@@ -425,6 +427,7 @@ class MStockMarketDataService(
                 }
 
                 if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
+                    safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Non-positive or invalid LTP for token $token: $ltp")
                     val bytesRead = buffer.position() - startPos
                     val bytesToSkip = packetLen - bytesRead
                     if (bytesToSkip > 0 && bytesToSkip <= buffer.remaining()) {
@@ -453,10 +456,11 @@ class MStockMarketDataService(
                     buffer.position(startPos + packetLen)
                 }
 
+                safeLogD(TAG, "[MSTOCK_PACKET_PARSED] Successfully parsed packet: exch=$exchange token=$token ltp=$ltp")
                 processRealTick(exchange, token.toString(), ltp, open, high, low, close, volume)
             }
         } catch (e: Exception) {
-            safeLogE(TAG, "[MSTOCK_ERROR] Failed to parse m.Stock binary frame: ${e.localizedMessage}", e)
+            safeLogE(TAG, "[MSTOCK_INVALID_PACKET] Failed to parse m.Stock binary frame: ${e.localizedMessage}", e)
         }
     }
 

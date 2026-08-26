@@ -77,7 +77,7 @@ class Phase2MarketDataWsTest {
         val key = "NSE_INDEX|Nifty 50"
         val keyBytes = key.toByteArray(Charsets.UTF_8)
 
-        val ltpcBuf = ByteBuffer.allocate(64)
+        val ltpcBuf = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
         ltpcBuf.put(0x09.toByte())
         ltpcBuf.putDouble(22500.50)
         ltpcBuf.put(0x10.toByte())
@@ -88,14 +88,14 @@ class Phase2MarketDataWsTest {
         val ltpcBytes = ByteArray(ltpcBuf.position())
         System.arraycopy(ltpcBuf.array(), 0, ltpcBytes, 0, ltpcBytes.size)
 
-        val feedBuf = ByteBuffer.allocate(128)
+        val feedBuf = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN)
         feedBuf.put(0x0A.toByte())
         writeVarint(feedBuf, ltpcBytes.size.toLong())
         feedBuf.put(ltpcBytes)
         val feedBytes = ByteArray(feedBuf.position())
         System.arraycopy(feedBuf.array(), 0, feedBytes, 0, feedBytes.size)
 
-        val mapEntryBuf = ByteBuffer.allocate(200)
+        val mapEntryBuf = ByteBuffer.allocate(200).order(ByteOrder.LITTLE_ENDIAN)
         mapEntryBuf.put(0x0A.toByte())
         writeVarint(mapEntryBuf, keyBytes.size.toLong())
         mapEntryBuf.put(keyBytes)
@@ -105,7 +105,7 @@ class Phase2MarketDataWsTest {
         val mapBytes = ByteArray(mapEntryBuf.position())
         System.arraycopy(mapEntryBuf.array(), 0, mapBytes, 0, mapBytes.size)
 
-        val outerBuf = ByteBuffer.allocate(256)
+        val outerBuf = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
         outerBuf.put(0x0A.toByte())
         writeVarint(outerBuf, mapBytes.size.toLong())
         outerBuf.put(mapBytes)

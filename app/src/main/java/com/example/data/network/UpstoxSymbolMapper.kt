@@ -127,4 +127,25 @@ object UpstoxSymbolMapper {
                 key.equals(KEY_SENSEX, ignoreCase = true) ||
                 key.equals(KEY_BANKEX, ignoreCase = true)
     }
+
+    /**
+     * Checks if a string is a valid Upstox instrument key format.
+     */
+    fun isValidInstrumentKey(key: String?): Boolean {
+        if (key.isNullOrBlank()) return false
+        val clean = key.trim()
+        if (!clean.contains("|")) return false
+        val prefix = clean.substringBefore("|").uppercase(Locale.ENGLISH)
+        return prefix in listOf("NSE_INDEX", "NSE_EQ", "NSE_FO", "BSE_INDEX", "BSE_EQ", "BSE_FO", "MCX_FO", "CDS_FO")
+    }
+
+    /**
+     * Filters a list of instrument keys to ensure only valid, non-blank keys are included.
+     */
+    fun filterValidKeys(keys: List<String>): List<String> {
+        return keys.mapNotNull { raw ->
+            val mapped = toUpstoxInstrumentKey(raw)
+            if (isValidInstrumentKey(mapped)) mapped else null
+        }.distinct()
+    }
 }
