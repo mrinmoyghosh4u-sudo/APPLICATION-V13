@@ -165,12 +165,12 @@ class MStockMarketDataService(
                 val token = sessionManager?.mstockAccessToken ?: ""
                 webSocket.send("LOGIN:$token")
                 
-                // Immediately assume authenticated since connection succeeded
-                _connectionState.value = "AUTHENTICATED"
-                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
-                MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
-                
-                _connectionState.value = "SUBSCRIBING"
+                // Keep state as AUTHENTICATING, wait for message response to confirm
+                // Re-subscribe if needed
+                CoroutineScope(Dispatchers.IO).launch {
+                    delay(500)
+                    resubscribeAll()
+                }
                 healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
                 resubscribeAll()
                 _connectionState.value = "WAITING_FOR_TICK"
