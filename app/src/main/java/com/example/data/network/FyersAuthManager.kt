@@ -23,13 +23,6 @@ class FyersAuthManager(
             runCatching {
                 var cleanCode = authCode.trim()
 
-                // Check if user passed an access token directly (e.g. JWT starts with "ey" or raw token)
-                if (cleanCode.startsWith("ey", ignoreCase = true) || (cleanCode.length > 50 && !cleanCode.contains("&") && !cleanCode.contains("?") && !cleanCode.contains("="))) {
-                    Log.i(TAG, "[FYERS_DIRECT_TOKEN] Input recognized as direct Access Token, validating...")
-                    val tokenResult = authenticateWithToken(cleanCode)
-                    return@runCatching tokenResult.getOrThrow()
-                }
-
                 // If already authenticated and token valid, return existing token
                 val existingToken = sessionManager.fyersAccessToken
                 if (!existingToken.isNullOrBlank() && sessionManager.isFyersConnected) {
@@ -97,34 +90,24 @@ class FyersAuthManager(
                     }
                 }
 
-                // Fallback to secure backend endpoint if direct failed or secret missing
+                // If code is already an Access Token, test it directly via Profile endpoint
                 if (tokenBody == null) {
-                    val backendBase = if (redirectUri.startsWith("http://") || redirectUri.startsWith("https://")) {
-                        redirectUri.substringBefore("/oauth").substringBefore("/api").trimEnd('/')
-                    } else {
-                        "https://application-beige-psi.vercel.app"
-                    }
-                    val tokenExchangeUrl = "$backendBase/api/fyers-token-exchange"
-                    Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code via secure backend endpoint: $tokenExchangeUrl...")
-                    val response = try {
-                        fyersApi.exchangeTokenSecurely(
-                            url = tokenExchangeUrl,
-                            code = cleanCode,
-                            redirectUri = redirectUri
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
+                    val authHeader = if (cleanCode.contains(":")) cleanCode else "$fullAppId:$cleanCode"
+                    val directProfileTest = try {
+                        fyersApi.getProfile(authHeader)
+                    } catch (_: Exception) { null }
 
-                    if (response != null && response.isSuccessful && response.body()?.access_token?.isNotBlank() == true) {
-                        tokenBody = response.body()
-                    } else {
-                        val errBody = response?.errorBody()?.string() ?: directExchangeError ?: "Token exchange failed"
-                        val sanitizedErr = errBody.take(150).replace("\n", " ")
-                        _authStatus.value = BrokerAuthStatus.ERROR
-                        Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Token exchange failed: $sanitizedErr")
-                        throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+                    if (directProfileTest != null && directProfileTest.isSuccessful && directProfileTest.body()?.s == "ok") {
+                        Log.i(TAG, "[FYERS_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")
+                        tokenBody = FyersTokenResponse(s = "ok", code = 200, access_token = if (cleanCode.contains(":")) cleanCode.substringAfter(":") else cleanCode)
                     }
+                }
+
+                if (tokenBody == null) {
+                    val err = directExchangeError ?: "Failed to exchange Fyers auth code. Please verify Secret ID."
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $err")
                 }
 
             val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")

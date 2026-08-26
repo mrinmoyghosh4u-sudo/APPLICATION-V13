@@ -26,13 +26,6 @@ class UpstoxAuthManager(
             runCatching {
                 var cleanCode = authCode.trim()
 
-                // Check if user passed an access token directly (e.g. JWT starts with "ey" or token without code structure)
-                if (cleanCode.startsWith("ey", ignoreCase = true) || (cleanCode.length > 50 && !cleanCode.contains("&") && !cleanCode.contains("?") && !cleanCode.contains("="))) {
-                    Log.i(TAG, "[UPSTOX_DIRECT_TOKEN] Input recognized as direct Access Token, validating...")
-                    val tokenResult = authenticateWithToken(cleanCode)
-                    return@runCatching tokenResult.getOrThrow()
-                }
-
                 // If already authenticated and token valid, return existing token
                 val existingToken = sessionManager.upstoxAccessToken
                 if (!existingToken.isNullOrBlank() && sessionManager.isUpstoxConnected) {
@@ -98,32 +91,23 @@ class UpstoxAuthManager(
                     }
                 }
 
-                // Fallback to secure backend endpoint if direct failed or secret missing
+                // Check if user passed an access token directly
                 if (tokenBody == null) {
-                    val backendBase = redirectUri.substringBefore("/oauth")
-                    val tokenExchangeUrl = "$backendBase/api/token-exchange"
-                    Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Exchanging code via secure backend endpoint: $tokenExchangeUrl...")
-                    val response = try {
-                        upstoxApi.exchangeTokenSecurely(
-                            url = tokenExchangeUrl,
-                            code = cleanCode,
-                            redirectUri = redirectUri,
-                            clientId = apiKey,
-                            clientSecret = secret
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
+                    val directProfileTest = try {
+                        upstoxApi.getUserProfile(token = "Bearer $cleanCode")
+                    } catch (_: Exception) { null }
 
-                    if (response != null && response.isSuccessful && response.body()?.effectiveAccessToken?.isNotBlank() == true) {
-                        tokenBody = response.body()
-                    } else {
-                        val rawErr = response?.errorBody()?.string() ?: directExchangeError ?: "Token exchange failed"
-                        val sanitizedErr = rawErr.take(150).replace("\n", " ")
-                        _authStatus.value = BrokerAuthStatus.ERROR
-                        Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed: $sanitizedErr")
-                        throw Exception("TOKEN_EXCHANGE_FAILED: $sanitizedErr")
+                    if (directProfileTest != null && directProfileTest.isSuccessful && directProfileTest.body()?.status == "success") {
+                        Log.i(TAG, "[UPSTOX_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")
+                        tokenBody = UpstoxTokenResponse(accessToken = cleanCode)
                     }
+                }
+
+                if (tokenBody == null) {
+                    val err = directExchangeError ?: "Failed to exchange Upstox code. Please check API Key and Secret."
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $err")
                 }
 
             val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")

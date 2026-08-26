@@ -623,11 +623,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
             brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
 
-            val res = if (isDirectToken) {
-                brokerManager.upstoxAuthManager.authenticateWithToken(cleanedCode)
-            } else {
-                brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
-            }
+            val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
@@ -703,11 +699,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
             brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
-            val res = if (isDirectToken) {
-                brokerManager.fyersAuthManager.authenticateWithToken(cleanedCode)
-            } else {
-                brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
-            }
+            val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {

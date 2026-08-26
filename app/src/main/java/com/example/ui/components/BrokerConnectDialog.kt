@@ -76,6 +76,8 @@ fun BrokerConnectDialog(
     var upstoxApiSecret by remember { mutableStateOf(sessionManager.upstoxApiSecret ?: "") }
     var upstoxRedirectUri by remember { mutableStateOf(sessionManager.upstoxRedirectUri) }
     var upstoxAuthCode by remember { mutableStateOf("") }
+    var showManualUpstox by remember { mutableStateOf(false) }
+    var showManualFyers by remember { mutableStateOf(false) }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -288,10 +290,6 @@ fun BrokerConnectDialog(
                                             redirectUri = redirectUriToUse,
                                             consumed = false
                                         )
-                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_OAUTH_STARTED] Initialized Upstox OAuth with state=$randomState")
-                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_BROWSER_OPENED] Opening browser for Upstox authentication")
-                                        android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
-
                                         val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(keyToUse, redirectUriToUse, state = randomState)
                                         try {
                                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
@@ -304,92 +302,90 @@ fun BrokerConnectDialog(
                                 }
                             },
                             enabled = !isAuthInProgress,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
                         ) {
                             if (isAuthInProgress) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("U", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("LOGIN WITH UPSTOX (BROWSER)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("⚡", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("ONE-CLICK AUTO LOGIN (UPSTOX)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
-                            Text(
-                                "  OR MANUAL CODE / TOKEN  ",
-                                color = TextGray,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = upstoxAuthCode,
-                            onValueChange = { upstoxAuthCode = it },
-                            label = { Text("Auth Code / Callback URL / Access Token") },
-                            placeholder = { Text("Paste code, redirect URL or token", color = TextGray) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = Color(0xFF673AB7),
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = Color(0xFF673AB7),
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                val codeOrToken = upstoxAuthCode.trim()
-                                val keyToUse = upstoxApiKey.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiKey
-                                val secretToUse = upstoxApiSecret.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiSecret
-                                val redirectUriToUse = upstoxRedirectUri.trim().takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-                                
-                                if (codeOrToken.isBlank()) {
-                                    localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
-                                } else {
-                                    localErrorMsg = null
-                                    sessionManager.saveUpstoxCredentials(keyToUse, secretToUse, redirectUriToUse)
-                                    onUpstoxLogin?.invoke(keyToUse, secretToUse, codeOrToken)
-                                }
-                            },
-                            enabled = !isAuthInProgress && upstoxAuthCode.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color(0xFFB39DDB)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF673AB7))
-                        ) {
-                            Text("CONNECT WITH CODE / TOKEN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
+                            "Automatic Zero-Touch: Authenticate in browser and the app connects automatically.",
+                            color = Color(0xFF9E9E9E),
+                            fontSize = 11.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { showManualUpstox = !showManualUpstox },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (showManualUpstox) "Hide Manual Entry ▲" else "Advanced: Manual Code / Token Entry ▼",
+                                color = TextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        if (showManualUpstox) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = upstoxAuthCode,
+                                onValueChange = { upstoxAuthCode = it },
+                                label = { Text("Auth Code / Token") },
+                                placeholder = { Text("Paste code or token", color = TextGray) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedBorderColor = Color(0xFF673AB7),
+                                    unfocusedBorderColor = DarkCardBorder,
+                                    focusedLabelColor = Color(0xFF673AB7),
+                                    unfocusedLabelColor = TextGray,
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val codeOrToken = upstoxAuthCode.trim()
+                                    val keyToUse = upstoxApiKey.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiKey
+                                    val secretToUse = upstoxApiSecret.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiSecret
+                                    val redirectUriToUse = upstoxRedirectUri.trim().takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                    
+                                    if (codeOrToken.isBlank()) {
+                                        localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
+                                    } else {
+                                        localErrorMsg = null
+                                        sessionManager.saveUpstoxCredentials(keyToUse, secretToUse, redirectUriToUse)
+                                        onUpstoxLogin?.invoke(keyToUse, secretToUse, codeOrToken)
+                                    }
+                                },
+                                enabled = !isAuthInProgress && upstoxAuthCode.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB39DDB)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF673AB7))
+                            ) {
+                                Text("CONNECT MANUALLY", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
                             "Registered Redirect URI: https://application-beige-psi.vercel.app/oauth",
-                            color = TextGray,
+                            color = TextGray.copy(alpha = 0.7f),
                             fontSize = 10.sp
                         )
                     }
@@ -604,10 +600,6 @@ fun BrokerConnectDialog(
                                             redirectUri = redirectUriToUse,
                                             consumed = false
                                         )
-                                        android.util.Log.i("FyersAuth", "[FYERS_OAUTH_STARTED] Initialized Fyers OAuth with state=$randomState")
-                                        android.util.Log.i("FyersAuth", "[FYERS_BROWSER_OPENED] Opening browser for Fyers authentication")
-                                        android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
-
                                         val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(appToUse, redirectUriToUse, state = randomState)
                                         try {
                                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
@@ -620,93 +612,90 @@ fun BrokerConnectDialog(
                                 }
                             },
                             enabled = !isAuthInProgress,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen)
                         ) {
                             if (isAuthInProgress) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("F", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("LOGIN WITH FYERS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Text("⚡", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("ONE-CLICK AUTO LOGIN (FYERS)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
-                            Text(
-                                "  OR MANUAL CODE / TOKEN  ",
-                                color = TextGray,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = fyersAuthCode,
-                            onValueChange = { fyersAuthCode = it },
-                            label = { Text("Auth Code / Callback URL / Access Token") },
-                            placeholder = { Text("Paste code, redirect URL or token", color = TextGray) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedBorderColor = ProfitGreen,
-                                unfocusedBorderColor = DarkCardBorder,
-                                focusedLabelColor = ProfitGreen,
-                                unfocusedLabelColor = TextGray,
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                val codeOrToken = fyersAuthCode.trim()
-                                val appToUse = fyersAppId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersAppId
-                                val secretToUse = fyersSecretId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersSecretId
-                                val redirectUriToUse = fyersRedirectUri.trim().takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
-                                
-                                if (codeOrToken.isBlank()) {
-                                    localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
-                                } else {
-                                    localErrorMsg = null
-                                    sessionManager.saveFyersCredentials(appToUse, secretToUse, redirectUriToUse)
-                                    onFyersLogin?.invoke(appToUse, secretToUse, codeOrToken)
-                                }
-                            },
-                            enabled = !isAuthInProgress && fyersAuthCode.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = ProfitGreen
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen)
-                        ) {
-                            Text("CONNECT WITH CODE / TOKEN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
+                            "Automatic Zero-Touch: Authenticate in browser and the app connects automatically.",
+                            color = Color(0xFF9E9E9E),
+                            fontSize = 11.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { showManualFyers = !showManualFyers },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (showManualFyers) "Hide Manual Entry ▲" else "Advanced: Manual Code / Token Entry ▼",
+                                color = TextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        if (showManualFyers) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = fyersAuthCode,
+                                onValueChange = { fyersAuthCode = it },
+                                label = { Text("Auth Code / Token") },
+                                placeholder = { Text("Paste code or token", color = TextGray) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedBorderColor = ProfitGreen,
+                                    unfocusedBorderColor = DarkCardBorder,
+                                    focusedLabelColor = ProfitGreen,
+                                    unfocusedLabelColor = TextGray,
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val codeOrToken = fyersAuthCode.trim()
+                                    val appToUse = fyersAppId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersAppId
+                                    val secretToUse = fyersSecretId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersSecretId
+                                    val redirectUriToUse = fyersRedirectUri.trim().takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+                                    
+                                    if (codeOrToken.isBlank()) {
+                                        localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
+                                    } else {
+                                        localErrorMsg = null
+                                        sessionManager.saveFyersCredentials(appToUse, secretToUse, redirectUriToUse)
+                                        onFyersLogin?.invoke(appToUse, secretToUse, codeOrToken)
+                                    }
+                                },
+                                enabled = !isAuthInProgress && fyersAuthCode.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen)
+                            ) {
+                                Text("CONNECT MANUALLY", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
                             "Registered Redirect URI: https://application-beige-psi.vercel.app/oauth",
-                            color = TextGray,
+                            color = TextGray.copy(alpha = 0.7f),
                             fontSize = 10.sp
                         )
                     }
