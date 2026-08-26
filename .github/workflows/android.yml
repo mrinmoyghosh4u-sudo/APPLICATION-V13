@@ -147,15 +147,20 @@ jobs:
 
           echo "Checking if release $TAG_NAME already exists..."
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            echo "ERROR: GitHub Release $TAG_NAME already exists! Failing build to prevent overwriting existing release."
-            exit 1
+            echo "Release $TAG_NAME already exists. Uploading/updating release assets..."
+          else
+            echo "Creating Published GitHub Release $TAG_NAME via GitHub API..."
+            gh api "repos/${{ github.repository }}/releases" \
+              -f tag_name="$TAG_NAME" \
+              -f target_commitish="${{ github.sha }}" \
+              -f name="$TITLE" \
+              -f body="$BODY" \
+              -F draft=false \
+              -F prerelease=false
           fi
 
-          echo "Creating Published GitHub Release $TAG_NAME with $NAMED_APK_PATH and $APK_PATH..."
-          if ! gh release create "$TAG_NAME" "$NAMED_APK_PATH" "$APK_PATH" --target "${{ github.sha }}" --title "$TITLE" --notes "$BODY"; then
-            echo "ERROR: GitHub Release creation failed."
-            exit 1
-          fi
+          echo "Uploading release assets ($NAMED_APK_PATH, $APK_PATH)..."
+          gh release upload "$TAG_NAME" "$NAMED_APK_PATH" "$APK_PATH" --clobber
 
       - name: Verify GitHub Release and Asset
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'

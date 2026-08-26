@@ -53,10 +53,15 @@ object UpstoxProtobufDecoder {
                 val wireType = (tag and 0x07).toInt()
 
                 when (fieldNum) {
-                    1, 2 -> {
+                    1 -> { // Type feedType
                         if (wireType == 0) {
                             feedType = readVarint(buffer).toInt()
-                        } else if (wireType == 2) {
+                        } else {
+                            skipField(buffer, wireType)
+                        }
+                    }
+                    2 -> { // map<string, Feed> feeds
+                        if (wireType == 2) {
                             val len = readVarint(buffer).toInt()
                             if (len in 1..buffer.remaining()) {
                                 val subBuf = sliceBuffer(buffer, len)
