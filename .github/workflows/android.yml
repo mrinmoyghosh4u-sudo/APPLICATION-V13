@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: write
-  workflows: write
+  actions: write
 
 env:
   GRADLE_OPTS: "-Djava.awt.headless=true -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
