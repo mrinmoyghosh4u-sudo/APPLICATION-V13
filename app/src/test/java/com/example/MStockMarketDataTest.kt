@@ -155,4 +155,74 @@ class MStockMarketDataTest {
         // When unconfigured, reconnect transitions through RECONNECTING -> DISCONNECTED -> NOT_CONFIGURED
         assertEquals("NOT_CONFIGURED", service.connectionState.value)
     }
+
+    @Test
+    fun test7_strictTextMessageAuthValidation() {
+        val service = MStockMarketDataService(null, null, healthManager)
+
+        // 1. Non-auth message with status="success" must NOT trigger authentication
+        val nonAuthJson = """{"type": "market_status", "status": "success", "message": "Market is open"}"""
+        service.parseTextMessage(nonAuthJson)
+        assertFalse("Generic message must not authenticate service", healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK).authenticated)
+
+        // 2. Explicit auth response with status="success" MUST trigger authentication
+        val validAuthJson = """{"type": "auth_response", "status": "success", "code": 200, "message": "Authentication successful"}"""
+        service.parseTextMessage(validAuthJson)
+        assertEquals("SUBSCRIBED", service.connectionState.value)
+        assertTrue("Valid auth response must authenticate service", healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK).authenticated)
+
+        // 3. Explicit auth error response must set AUTH_FAILED
+        val failService = MStockMarketDataService(null, null, healthManager)
+        val errorAuthJson = """{"type": "login_response", "status": "failed", "code": 401, "message": "Invalid token"}"""
+        failService.parseTextMessage(errorAuthJson)
+        assertEquals("AUTH_FAILED", failService.connectionState.value)
+    }
+
+    @Test
+    fun test8_multiPacketBinaryStream_parsesSequentially() {
+        val service = MStockMarketDataService(null, null, healthManager)
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_MSTOCK, true)
+        service.onAuthenticationSuccess()
+
+        val buffer = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN)
+
+        // Packet 1: NSE Token 2885, LTP 2500.50
+        buffer.putShort(36.toShort())
+        buffer.put(1.toByte()) // Mode
+        buffer.put(1.toByte()) // Exchange Code 1 = NSE
+        buffer.putInt(2885)
+        buffer.putInt(250050)  // LTP
+        buffer.putInt(249000)
+        buffer.putInt(251000)
+        buffer.putInt(248000)
+        buffer.putInt(249500)
+        buffer.putLong(100000L)
+
+        // Packet 2: NFO Token 54321, LTP 125.50
+        buffer.putShort(36.toShort())
+        buffer.put(1.toByte()) // Mode
+        buffer.put(2.toByte()) // Exchange Code 2 = NFO
+        buffer.putInt(54321)
+        buffer.putInt(12550)   // LTP
+        buffer.putInt(12000)
+        buffer.putInt(13000)
+        buffer.putInt(11500)
+        buffer.putInt(12200)
+        buffer.putLong(50000L)
+
+        val multiPacketBytes = buffer.array()
+        service.parseBinaryPacket(multiPacketBytes)
+
+        val tick1 = MarketDataStore.getTick("NSE", "2885") ?: MarketDataStore.getTick("2885")
+        assertNotNull("Tick 1 (NSE:2885) must be ingested", tick1)
+        assertEquals(2500.50, tick1?.ltp ?: 0.0, 0.01)
+
+        val tick2 = MarketDataStore.getTick("NFO", "54321") ?: MarketDataStore.getTick("54321")
+        assertNotNull("Tick 2 (NFO:54321) must be ingested", tick2)
+        assertEquals(125.50, tick2?.ltp ?: 0.0, 0.01)
+
+        val healthState = healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK)
+        assertTrue(healthState.firstTickReceived)
+        assertEquals("LIVE", healthState.status)
+    }
 }

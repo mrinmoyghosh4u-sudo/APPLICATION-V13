@@ -75,14 +75,13 @@ class MStockMarketDataService(
     private var hasSubscription = false
 
     init {
-        scope.launch {
-            delay(500)
-            if (isConfigured()) {
+        if (isConfigured()) {
+            scope.launch {
                 connect()
-            } else {
-                _connectionState.value = "NOT_CONFIGURED"
-                healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_MSTOCK, false)
             }
+        } else {
+            _connectionState.value = "NOT_CONFIGURED"
+            healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_MSTOCK, false)
         }
     }
 
@@ -250,44 +249,103 @@ class MStockMarketDataService(
         }
     }
 
-    private fun parseTextMessage(text: String) {
+    private fun parseJsonSafely(text: String): Map<String, Any> {
+        val map = mutableMapOf<String, Any>()
         try {
             val json = JSONObject(text)
-            val type = json.optString("type", json.optString("action", json.optString("status", "")))
+            map["type"] = (if (json.has("type")) json.optString("type") else if (json.has("action")) json.optString("action") else "").lowercase()
+            map["status"] = (if (json.has("status")) json.optString("status") else "").lowercase()
+            map["code"] = json.optInt("code", 0)
+            map["msg"] = if (json.has("message")) json.optString("message") else if (json.has("msg")) json.optString("msg") else ""
+            map["token"] = if (json.has("token")) json.optString("token") else if (json.has("scripCode")) json.optString("scripCode") else ""
+            map["exch"] = if (json.has("exchange")) json.optString("exchange") else "NSE"
+            map["ltp"] = json.optDouble("ltp", json.optDouble("lastPrice", 0.0))
+            map["open"] = json.optDouble("open", 0.0)
+            map["high"] = json.optDouble("high", 0.0)
+            map["low"] = json.optDouble("low", 0.0)
+            map["close"] = json.optDouble("close", 0.0)
+            map["volume"] = json.optLong("volume", 0L)
+            map["has_ltp"] = json.has("ltp") || json.has("lastPrice")
+            return map
+        } catch (_: Throwable) {
+            val type = Regex(""""(?:type|action)"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.lowercase() ?: ""
+            val status = Regex(""""status"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.lowercase() ?: ""
+            val code = Regex(""""code"\s*:\s*(\d+)""").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val msg = Regex(""""(?:message|msg)"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1) ?: ""
+            val token = Regex(""""(?:token|scripCode)"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1) ?: ""
+            val exch = Regex(""""exchange"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1) ?: "NSE"
+            val ltp = Regex(""""(?:ltp|lastPrice)"\s*:\s*([\d.]+)""").find(text)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
 
-            when (type.lowercase()) {
-                "auth", "login", "success", "ok", "authenticated" -> {
-                    onAuthenticationSuccess()
-                }
-                "tick", "quote", "ltp" -> {
-                    val token = json.optString("token", json.optString("scripCode", ""))
-                    val exch = json.optString("exchange", "NSE")
-                    val ltp = json.optDouble("ltp", json.optDouble("lastPrice", 0.0))
-                    val open = json.optDouble("open", 0.0)
-                    val high = json.optDouble("high", 0.0)
-                    val low = json.optDouble("low", 0.0)
-                    val close = json.optDouble("close", 0.0)
-                    val volume = json.optLong("volume", 0L)
+            map["type"] = type
+            map["status"] = status
+            map["code"] = code
+            map["msg"] = msg
+            map["token"] = token
+            map["exch"] = exch
+            map["ltp"] = ltp
+            map["open"] = 0.0
+            map["high"] = 0.0
+            map["low"] = 0.0
+            map["close"] = 0.0
+            map["volume"] = 0L
+            map["has_ltp"] = ltp > 0.0
+            return map
+        }
+    }
 
-                    if (ltp > 0.0 && !ltp.isNaN() && !ltp.isInfinite()) {
-                        processRealTick(exch, token, ltp, open, high, low, close, volume)
-                    }
+    fun parseTextMessage(text: String) {
+        try {
+            val jsonMap = parseJsonSafely(text)
+            val type = jsonMap["type"] as String
+            val status = jsonMap["status"] as String
+            val code = jsonMap["code"] as Int
+            val msg = jsonMap["msg"] as String
+
+            // Strict Authentication Response Validation according to m.Stock protocol
+            val isExplicitAuthType = type in listOf("auth", "login", "auth_response", "login_response", "cn", "connect") ||
+                    msg.contains("login", ignoreCase = true) || msg.contains("auth", ignoreCase = true)
+
+            val isAuthSuccess = isExplicitAuthType && (
+                    status in listOf("success", "ok", "authenticated") ||
+                    code == 200 ||
+                    msg.contains("successful", ignoreCase = true)
+            ) && !status.contains("fail") && !status.contains("error")
+
+            val isAuthFailed = (isExplicitAuthType || type in listOf("error", "auth_failed", "unauthorized")) && (
+                    status in listOf("failed", "error", "unauthorized") ||
+                    (code != 0 && code != 200) ||
+                    msg.contains("fail", ignoreCase = true) || msg.contains("invalid", ignoreCase = true)
+            )
+
+            if (isAuthSuccess) {
+                onAuthenticationSuccess()
+            } else if (isAuthFailed) {
+                val errMsg = if (msg.isNotBlank()) msg else "Authentication failed"
+                safeLogE(TAG, "[MSTOCK_ERROR] Authentication failed: $errMsg")
+                isAuthenticated.set(false)
+                _connectionState.value = "AUTH_FAILED"
+                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, false, errMsg)
+            } else if (type in listOf("tick", "quote", "ltp") || (jsonMap["has_ltp"] as Boolean)) {
+                val token = jsonMap["token"] as String
+                val exch = jsonMap["exch"] as String
+                val ltp = jsonMap["ltp"] as Double
+                val open = jsonMap["open"] as Double
+                val high = jsonMap["high"] as Double
+                val low = jsonMap["low"] as Double
+                val close = jsonMap["close"] as Double
+                val volume = jsonMap["volume"] as Long
+
+                if (ltp > 0.0 && !ltp.isNaN() && !ltp.isInfinite()) {
+                    processRealTick(exch, token, ltp, open, high, low, close, volume)
                 }
-                "error", "auth_failed", "unauthorized" -> {
-                    val errMsg = json.optString("message", "Authentication error")
-                    safeLogE(TAG, "[MSTOCK_ERROR] Authentication failed: $errMsg")
-                    isAuthenticated.set(false)
-                    _connectionState.value = "AUTH_FAILED"
-                    healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, false, errMsg)
-                }
-                "pong", "heartbeat" -> {
-                    // Handled heartbeat
-                }
+            } else if (type in listOf("pong", "heartbeat") || status == "pong") {
+                // Heartbeat frame
             }
         } catch (e: Exception) {
-            if (text.contains("LOGIN_SUCCESS") || text.contains("AUTH_OK") || text.contains("SUCCESS")) {
+            val trimmedText = text.trim()
+            if (trimmedText.equals("LOGIN_SUCCESS", ignoreCase = true) || trimmedText.equals("AUTH_OK", ignoreCase = true)) {
                 onAuthenticationSuccess()
-            } else if (text.contains("AUTH_FAILED") || text.contains("INVALID")) {
+            } else if (trimmedText.equals("AUTH_FAILED", ignoreCase = true) || trimmedText.contains("INVALID_TOKEN", ignoreCase = true)) {
                 safeLogE(TAG, "[MSTOCK_ERROR] Text auth failed: $text")
                 isAuthenticated.set(false)
                 _connectionState.value = "AUTH_FAILED"
