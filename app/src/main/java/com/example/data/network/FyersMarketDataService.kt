@@ -45,13 +45,40 @@ class FyersMarketDataService(
     private val _connectionState = MutableStateFlow("NOT_CONFIGURED")
     val connectionState: StateFlow<String> = _connectionState
 
-    private val subscribedSymbols = mutableSetOf<String>()
+    private val subscribedSymbols = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var isConnected = false
     private var reconnectJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var hasFirstTick = false
     private var isAuthSent = false
     private var isSubscribed = false
     private var lastTickReceivedTime: Long = 0L
+
+    init {
+        startHeartbeatMonitor()
+    }
+
+    private fun startHeartbeatMonitor() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (true) {
+                delay(5000)
+                if (isConnected && (_connectionState.value == "WEBSOCKET_LIVE" || _connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "STALE")) {
+                    val age = getTickAgeMs()
+                    if (age > 15000L && _connectionState.value != "STALE" && hasFirstTick) {
+                        Log.w(TAG, "[FYERS_STALE] No market ticks received for over 15s (age: ${age}ms)")
+                        _connectionState.value = "STALE"
+                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "STALE")
+                    }
+                    if (age > 30000L && _connectionState.value == "STALE") {
+                        Log.e(TAG, "[FYERS_STALE_TIMEOUT] Market data stale for >30s. Triggering automatic reconnect.")
+                        disconnect()
+                        scheduleReconnect()
+                    }
+                }
+            }
+        }
+    }
 
     // For parsing
     data class FyersMarketTick(
@@ -67,7 +94,7 @@ class FyersMarketDataService(
         val timestamp: Long
     )
 
-    fun isConnectionLive(): Boolean = isConnected && _connectionState.value == "LIVE"
+    fun isConnectionLive(): Boolean = isConnected && (_connectionState.value == "LIVE" || _connectionState.value == "WEBSOCKET_LIVE")
     fun hasFirstTickReceived(): Boolean = hasFirstTick
     fun hasActiveSubscription(): Boolean = subscribedSymbols.isNotEmpty() || isConfigured()
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
@@ -75,7 +102,6 @@ class FyersMarketDataService(
 
     private val WS_URL_CANDIDATES = listOf("wss://socket.fyers.in/hsm/v1-5/prod")
     private var currentUrlIndex = 0
-    
 
     fun isConfigured(): Boolean {
         return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
@@ -97,7 +123,7 @@ class FyersMarketDataService(
     }
 
     private fun connectWebSocket() {
-        if (isConnected || _connectionState.value == "CONNECTING" || _connectionState.value == "AUTHENTICATING") return
+        if (isConnected || _connectionState.value == "CONNECTING" || _connectionState.value == "AUTHENTICATING" || _connectionState.value == "SUBSCRIBING") return
         Log.d(TAG, "[FYERS_AUTH_START] Initiating FYERS WebSocket connection...")
         _connectionState.value = "CONNECTING"
         healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_FYERS)
@@ -110,6 +136,12 @@ class FyersMarketDataService(
             healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, "Missing credentials")
             return
         }
+
+        // Clean existing WebSocket instance if any
+        try {
+            webSocket?.cancel()
+            webSocket = null
+        } catch (_: Exception) {}
 
         val url = "wss://socket.fyers.in/hsm/v1-5/prod"
         Log.i(TAG, "[FYERS_WS_CONNECTING] Connecting to $url...")
@@ -172,7 +204,7 @@ class FyersMarketDataService(
                     isAuthSent = true
                     _connectionState.value = "AUTHENTICATING"
                     healthManager?.reportAuthenticating(ProviderHealthManager.PROVIDER_FYERS)
-                    Log.i(TAG, "[FYERS_AUTH_SENT] Sent binary authentication message")
+                    Log.i(TAG, "[FYERS_AUTH_SENT] Sent binary authentication message. Awaiting server response.")
                     
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to send Fyers auth: ${e.message}")
@@ -221,10 +253,11 @@ class FyersMarketDataService(
     private fun scheduleReconnect() {
         if (reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
+            _connectionState.value = "RECONNECTING"
             delay(backoffDelayMs)
             backoffDelayMs = minOf(backoffDelayMs * 2, 30000L) // Exponential backoff up to 30s
             if (!isConnected && isConfigured()) {
-                Log.d(TAG, "Attempting FYERS WebSocket reconnect...")
+                Log.d(TAG, "[FYERS_RECONNECTING] Re-initiating FYERS WebSocket connection & auth...")
                 connectWebSocket()
             }
         }
@@ -232,11 +265,13 @@ class FyersMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
-        
-        
-        webSocket?.close(1000, "User disconnected")
+        try {
+            webSocket?.close(1000, "User disconnected")
+        } catch (_: Exception) {}
         webSocket = null
         isConnected = false
+        isSubscribed = false
+        isAuthSent = false
         _connectionState.value = "DISCONNECTED"
         com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
         subscribedSymbols.clear()
@@ -249,7 +284,10 @@ class FyersMarketDataService(
 
     fun subscribeSymbols(symbols: List<String>, type: String = "symbolUpdate") {
         if (symbols.isEmpty()) return
-        subscribedSymbols.addAll(symbols)
+        val newSymbols = symbols.filter { !subscribedSymbols.contains(it) }
+        if (newSymbols.isNotEmpty()) {
+            subscribedSymbols.addAll(newSymbols)
+        }
         if (isConnected && isSubscribed && webSocket != null) {
             try {
                 val payload = JSONObject().apply {
@@ -367,12 +405,11 @@ class FyersMarketDataService(
                 scripsLen += 1 + scrip.length
             }
             
-            val subDataLen = 18 + scripsLen + hsmToken.length + source.length
-            val subMsg = ByteBuffer.allocate(subDataLen)
+            val subMsg = ByteBuffer.allocate(1024 + scripsLen)
             subMsg.order(ByteOrder.BIG_ENDIAN)
-            subMsg.putShort((subDataLen - 2).toShort())
-            subMsg.put(4.toByte()) // reqtype
-            subMsg.put(2.toByte()) // field count
+            subMsg.putShort(0.toShort()) // Placeholder for total message length
+            subMsg.put(4.toByte()) // reqtype = 4
+            subMsg.put(2.toByte()) // field count = 2
             
             // Field 1: Scrips
             subMsg.put(1.toByte())
@@ -390,7 +427,13 @@ class FyersMarketDataService(
             subMsg.putShort(1.toShort())
             subMsg.put(1.toByte()) // channel_num = 1
             
-            webSocket?.send(okio.ByteString.of(*subMsg.array()))
+            val finalSubLen = subMsg.position()
+            subMsg.putShort(0, (finalSubLen - 2).toShort())
+            val subBytes = ByteArray(finalSubLen)
+            subMsg.rewind()
+            subMsg.get(subBytes)
+
+            webSocket?.send(okio.ByteString.of(*subBytes))
             _connectionState.value = "SUBSCRIBED"
             healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, symbolsToSub.size)
             Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
@@ -404,6 +447,7 @@ class FyersMarketDataService(
             isSubscribed = true
             _connectionState.value = "AUTHENTICATED"
             healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+            Log.i(TAG, "[FYERS_AUTH_SUCCESS] FYERS server confirmed authentication response")
             _connectionState.value = "SUBSCRIBING"
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
             sendSubscription()

@@ -17,11 +17,52 @@ class FyersAuthManager(
     val authStatus: StateFlow<BrokerAuthStatus> = _authStatus
     private val exchangeMutex = kotlinx.coroutines.sync.Mutex()
 
-    suspend fun exchangeAuthCode(authCode: String): Result<String> = withContext(Dispatchers.IO) {
+    private val consumedAuthCodes = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    suspend fun exchangeAuthCode(authCode: String, expectedState: String? = null): Result<String> = withContext(Dispatchers.IO) {
         exchangeMutex.lock()
         try {
             runCatching {
                 var cleanCode = authCode.trim()
+                var extractedState: String? = expectedState
+
+                if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {
+                    try {
+                        val parsedUri = android.net.Uri.parse(cleanCode)
+                        val extracted = parsedUri.getQueryParameter("auth_code") ?: parsedUri.getQueryParameter("code")
+                        if (!extracted.isNullOrBlank()) {
+                            cleanCode = extracted
+                        }
+                        val stateFromUrl = parsedUri.getQueryParameter("state")
+                        if (!stateFromUrl.isNullOrBlank()) {
+                            extractedState = stateFromUrl
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (cleanCode.contains("auth_code=")) {
+                    cleanCode = cleanCode.substringAfter("auth_code=").substringBefore("&")
+                }
+                if (cleanCode.contains("code=") && cleanCode != "200") {
+                    cleanCode = cleanCode.substringAfter("code=").substringBefore("&")
+                }
+
+                // 1. Validate state if pending OAuth session exists or state provided
+                val pendingSession = sessionManager.pendingOAuthSession
+                val storedState = pendingSession?.state?.takeIf { it.isNotBlank() }
+                    ?: sessionManager.pendingFyersOAuthState.takeIf { it.isNotBlank() }
+
+                if (!storedState.isNullOrBlank()) {
+                    if (!extractedState.isNullOrBlank() && extractedState != storedState) {
+                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISMATCH] Returned state '$extractedState' != stored state '$storedState'")
+                        throw Exception("OAUTH_STATE_MISMATCH: Invalid state token in OAuth callback")
+                    }
+                }
+
+                // 2. Prevent reuse of authorization code (Single-use enforcement)
+                if (consumedAuthCodes.contains(cleanCode) || sessionManager.lastProcessedOAuthCode == cleanCode) {
+                    Log.e(TAG, "[FYERS_CODE_REUSED] Authorization code '$cleanCode' has already been consumed")
+                    throw Exception("AUTHORIZATION_CODE_REUSED: This code was already used. Please login again.")
+                }
 
                 // If already authenticated and token valid, return existing token
                 val existingToken = sessionManager.fyersAccessToken
@@ -43,21 +84,6 @@ class FyersAuthManager(
                     ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
                 val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
-                if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {
-                    try {
-                        val parsedUri = android.net.Uri.parse(cleanCode)
-                        val extracted = parsedUri.getQueryParameter("auth_code") ?: parsedUri.getQueryParameter("code")
-                        if (!extracted.isNullOrBlank()) {
-                            cleanCode = extracted
-                        }
-                    } catch (_: Exception) {}
-                }
-                if (cleanCode.contains("auth_code=")) {
-                    cleanCode = cleanCode.substringAfter("auth_code=").substringBefore("&")
-                }
-                if (cleanCode.contains("code=") && cleanCode != "200") {
-                    cleanCode = cleanCode.substringAfter("code=").substringBefore("&")
-                }
 
                 Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange...")
                 Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
@@ -112,51 +138,53 @@ class FyersAuthManager(
                     throw Exception("TOKEN_EXCHANGE_FAILED: $err")
                 }
 
-            val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
+                val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
 
-            if ((body.s == "ok" || body.code == 200 || body.code == null) && !body.access_token.isNullOrBlank()) {
-                val accessToken = body.access_token
-                Log.i(TAG, "[TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
-                Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
+                if ((body.s == "ok" || body.code == 200 || body.code == null) && !body.access_token.isNullOrBlank()) {
+                    val accessToken = body.access_token
+                    Log.i(TAG, "[TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
 
-                // Validate access token with profile API call
-                val authHeader = "$fullAppId:$accessToken"
-                try {
-                    val profileRes = fyersApi.getProfile(authHeader)
-                    if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {
-                        val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
-                        Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
-                        throw Exception("PROFILE_VALIDATION_FAILED: $pErr")
+                    // Mark code as consumed to prevent reuse
+                    consumedAuthCodes.add(cleanCode)
+                    sessionManager.lastProcessedOAuthCode = cleanCode
+                    sessionManager.lastProcessedOAuthTime = System.currentTimeMillis()
+
+                    // Validate access token with profile API call
+                    val authHeader = "$fullAppId:$accessToken"
+                    try {
+                        val profileRes = fyersApi.getProfile(authHeader)
+                        if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {
+                            val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                            Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
+                            throw Exception("PROFILE_VALIDATION_FAILED: $pErr")
+                        }
+                        Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
+                    } catch (e: Exception) {
+                        sessionManager.isFyersConnected = false
+                        sessionManager.fyersAccessToken = null
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        if (e.message?.startsWith("PROFILE_VALIDATION_FAILED") == true) {
+                            throw e
+                        } else {
+                            throw Exception("PROFILE_VALIDATION_FAILED: ${e.localizedMessage}")
+                        }
                     }
-                    Log.i(TAG, "[PROFILE_VALIDATED] FYERS token profile validation passed")
-                    Log.i(TAG, "[FYERS_TOKEN_VALIDATED] FYERS token profile validation: PASS")
-                } catch (e: Exception) {
-                    sessionManager.isFyersConnected = false
-                    sessionManager.fyersAccessToken = null
+
+                    sessionManager.fyersAccessToken = accessToken
+                    sessionManager.fyersRefreshToken = body.refresh_token
+                    sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
+                    sessionManager.isFyersConnected = true
+
+                    Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS OAuth session successfully authenticated")
+                    _authStatus.value = BrokerAuthStatus.CONNECTED
+                    accessToken
+                } else {
+                    val errorMsg = body.message ?: "Unknown error from Fyers"
                     _authStatus.value = BrokerAuthStatus.ERROR
-                    if (e.message?.startsWith("PROFILE_VALIDATION_FAILED") == true) {
-                        throw e
-                    } else {
-                        throw Exception("PROFILE_VALIDATION_FAILED: ${e.localizedMessage}")
-                    }
+                    Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS Token Exchange Failed: $errorMsg")
+                    throw Exception("TOKEN_EXCHANGE_FAILED: $errorMsg")
                 }
-
-                sessionManager.fyersAccessToken = accessToken
-                sessionManager.fyersRefreshToken = body.refresh_token
-                sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
-                sessionManager.isFyersConnected = true
-
-                Log.i(TAG, "[BROKER_CONNECTED] FYERS OAuth session successfully connected and authenticated")
-                Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS OAuth session successfully authenticated")
-                _authStatus.value = BrokerAuthStatus.CONNECTED
-                accessToken
-            } else {
-                val errorMsg = body.message ?: "Unknown error from Fyers"
-                _authStatus.value = BrokerAuthStatus.ERROR
-                Log.e(TAG, "[FYERS_TOKEN_EXCHANGE_FAILED] FYERS Token Exchange Failed: $errorMsg")
-                throw Exception("TOKEN_EXCHANGE_FAILED: $errorMsg")
             }
-        }
         } finally {
             exchangeMutex.unlock()
         }

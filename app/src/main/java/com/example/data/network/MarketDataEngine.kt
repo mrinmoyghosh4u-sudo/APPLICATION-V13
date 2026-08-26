@@ -294,7 +294,7 @@ class MarketDataEngine(
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
-                    _unifiedFeedStatus.value = "LIVE • FYERS"
+                    _unifiedFeedStatus.value = "REST_DATA_AVAILABLE • FYERS"
                     _internalActiveProvider.value = "FYERS"
                     updateLastTickTime()
                     return Result.success(valid)
@@ -411,7 +411,7 @@ class MarketDataEngine(
         )
         
         healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, tick.timestamp)
-        _unifiedFeedStatus.value = "LIVE • FYERS"
+        _unifiedFeedStatus.value = "WEBSOCKET_LIVE • FYERS"
         _internalActiveProvider.value = "FYERS"
         updateLastTickTime()
     }

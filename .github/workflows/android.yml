@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  workflows: write
 
 env:
   GRADLE_OPTS: "-Djava.awt.headless=true -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
@@ -150,14 +151,8 @@ jobs:
             exit 1
           fi
 
-          echo "Creating Git Tag $TAG_NAME..."
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$TAG_NAME"
-          git push origin "$TAG_NAME" || echo "Tag already pushed or remote exists"
-
           echo "Creating Published GitHub Release $TAG_NAME with $NAMED_APK_PATH and $APK_PATH..."
-          if ! gh release create "$TAG_NAME" "$NAMED_APK_PATH" "$APK_PATH" --title "$TITLE" --notes "$BODY"; then
+          if ! gh release create "$TAG_NAME" "$NAMED_APK_PATH" "$APK_PATH" --target "${{ github.sha }}" --title "$TITLE" --notes "$BODY"; then
             echo "ERROR: GitHub Release creation failed."
             exit 1
           fi
