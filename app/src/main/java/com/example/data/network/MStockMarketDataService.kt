@@ -162,15 +162,20 @@ class MStockMarketDataService(
                 Log.d(TAG, "[MSTOCK_WS_CONNECTED] WebSocket open. Sending authentication handshake payload...")
 
                 // Send Login / Authentication Handshake
-                val authPayload = JSONObject().apply {
-                    put("action", "login")
-                    put("apiKey", sessionManager?.mstockApiKey ?: "")
-                    put("clientId", sessionManager?.mstockClientId ?: "")
-                    put("token", sessionManager?.mstockAccessToken ?: "")
-                    put("feedToken", sessionManager?.mstockFeedToken ?: "")
-                    put("timestamp", System.currentTimeMillis())
-                }
-                webSocket.send(authPayload.toString())
+                val token = sessionManager?.mstockAccessToken ?: ""
+                webSocket.send("LOGIN:$token")
+                
+                // Immediately assume authenticated since connection succeeded
+                _connectionState.value = "AUTHENTICATED"
+                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
+                MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
+                
+                _connectionState.value = "SUBSCRIBING"
+                healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
+                resubscribeAll()
+                _connectionState.value = "WAITING_FOR_TICK"
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
+
 
                 MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "CONNECTED")
                 startHeartbeat()
@@ -282,95 +287,90 @@ class MStockMarketDataService(
      */
     fun parseBinaryPacket(bytes: ByteArray) {
         try {
-            if (bytes.size < 8) return
-            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-
-            while (buffer.remaining() >= 8) {
-                val startPos = buffer.position()
-                val packetLength = buffer.short.toInt() and 0xFFFF
-                val packetType = buffer.get().toInt()
-                val exchangeCode = buffer.get().toInt()
-                val tokenNumber = buffer.int
-
-                val exchange = when (exchangeCode) {
-                    1 -> "NSE"
-                    2 -> "NFO"
-                    3 -> "BSE"
-                    4 -> "BFO"
-                    5 -> "MCX"
-                    else -> "NSE"
-                }
-
-                val token = tokenNumber.toString()
-
-                if (buffer.remaining() >= 4) {
-                    val rawLtp = buffer.int
-                    val ltp = rawLtp / 100.0
-
-                    var open = 0.0
-                    var high = 0.0
-                    var low = 0.0
-                    var close = 0.0
-                    var volume = 0L
-                    var ts = System.currentTimeMillis()
-
-                    if (buffer.remaining() >= 16) {
-                        open = buffer.int / 100.0
-                        high = buffer.int / 100.0
-                        low = buffer.int / 100.0
-                        close = buffer.int / 100.0
-                    }
-
-                    if (buffer.remaining() >= 8) {
-                        volume = buffer.long
-                    }
-
-                    if (buffer.remaining() >= 8) {
-                        val rawTs = buffer.long
-                        if (rawTs > 0) ts = rawTs
-                    }
-
-                    val symbol = resolveSymbol(exchange, token)
-
-                    if (ltp > 0.0) {
-                        val now = System.currentTimeMillis()
-                        if (!hasFirstTick) {
-                            try { Log.i(TAG, "[MSTOCK_FIRST_REAL_TICK] First valid m.Stock binary real tick received!") } catch (_: Throwable) {}
-                        }
-                        hasFirstTick = true
-                        lastTickReceivedTime = now
-                        _connectionState.value = "LIVE"
-                        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
-                        MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
-
-                        MarketDataStore.updateTick(
-                            source = MarketDataSourceNames.MSTOCK,
-                            symbol = symbol,
-                            token = token,
-                            exchange = exchange,
-                            ltp = ltp,
-                            open = open,
-                            high = high,
-                            low = low,
-                            close = close,
-                            volume = volume,
-                            exchangeTimestamp = ts,
-                            receivedTimestamp = now,
-                            state = "LIVE"
-                        )
-                    }
-                }
-
-                if (packetLength > 0 && packetLength <= (bytes.size - startPos)) {
-                    val nextPos = startPos + packetLength
-                    if (nextPos > buffer.position() && nextPos <= bytes.size) {
-                        buffer.position(nextPos)
-                    } else {
-                        break
-                    }
-                } else {
+            if (bytes.size < 2) return
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN) // DataView false is BigEndian
+            val count = buffer.short.toInt() and 0xFFFF
+            
+            for (i in 0 until count) {
+                if (buffer.remaining() < 2) break
+                val length = buffer.short.toInt() and 0xFFFF
+                if (buffer.remaining() < length || length < 4) {
+                    // Skip if not enough bytes or invalid length
+                    if (buffer.remaining() >= length) buffer.position(buffer.position() + length)
                     break
                 }
+                
+                val startPos = buffer.position()
+                val instrumentToken = buffer.int
+                val segment = instrumentToken and 0xFF
+                val divisor = when (segment) {
+                    3 -> 10000000.0
+                    6 -> 10000.0
+                    else -> 100.0
+                }
+                
+                var ltp = 0.0
+                var open = 0.0
+                var high = 0.0
+                var low = 0.0
+                var close = 0.0
+                var volume = 0L
+                
+                when (length) {
+                    8 -> {
+                        // LTP mode
+                        ltp = buffer.int / divisor
+                    }
+                    44, 184, 200 -> {
+                        // Quote / Full mode
+                        ltp = buffer.int / divisor
+                        val lastQty = buffer.int
+                        val avgPrice = buffer.int / divisor
+                        volume = buffer.int.toLong() and 0xFFFFFFFFL
+                        val buyQty = buffer.int
+                        val sellQty = buffer.int
+                        open = buffer.int / divisor
+                        high = buffer.int / divisor
+                        low = buffer.int / divisor
+                        close = buffer.int / divisor
+                    }
+                    else -> {
+                        // Unknown length, skip it
+                    }
+                }
+                
+                if (ltp > 0.0) {
+                    val tokenStr = instrumentToken.toString()
+                    val exchange = subscribedTokens[tokenStr] ?: "NSE"
+                    val symbol = resolveSymbol(exchange, tokenStr)
+                    
+                    val now = System.currentTimeMillis()
+                    if (!hasFirstTick) {
+                        try { Log.i(TAG, "[MSTOCK_FIRST_REAL_TICK] First valid m.Stock binary real tick received!") } catch (_: Throwable) {}
+                    }
+                    hasFirstTick = true
+                    lastTickReceivedTime = now
+                    _connectionState.value = "LIVE"
+                    healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
+                    MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
+                    MarketDataStore.updateTick(
+                        source = MarketDataSourceNames.MSTOCK,
+                        symbol = symbol,
+                        token = tokenStr,
+                        exchange = exchange,
+                        ltp = ltp,
+                        open = open,
+                        high = high,
+                        low = low,
+                        close = close,
+                        volume = volume,
+                        exchangeTimestamp = now,
+                        receivedTimestamp = now,
+                        state = "LIVE"
+                    )
+                }
+                
+                buffer.position(startPos + length)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse m.Stock binary packet: ${e.localizedMessage}")
@@ -464,14 +464,23 @@ class MStockMarketDataService(
         }
 
         try {
+            val validIntTokens = validTokens.mapNotNull { it.toIntOrNull() }
+            if (validIntTokens.isEmpty()) return
+            
             val subMsg = JSONObject().apply {
-                put("action", "subscribe")
-                put("mode", mode) // 1: LTP, 2: QUOTE
-                put("exchange", exchange)
-                put("tokens", JSONArray(validTokens))
+                put("a", "subscribe")
+                put("v", JSONArray(validIntTokens))
+            }
+            val modeMsg = JSONObject().apply {
+                put("a", "mode")
+                val vArr = JSONArray()
+                vArr.put("full")
+                vArr.put(JSONArray(validIntTokens))
+                put("v", vArr)
             }
             _connectionState.value = "SUBSCRIBING"
             webSocket?.send(subMsg.toString())
+            webSocket?.send(modeMsg.toString())
             hasSubscription = true
             _connectionState.value = "SUBSCRIBED"
             if (!hasFirstTick) {
@@ -519,9 +528,25 @@ class MStockMarketDataService(
         }
 
         if (subscribedTokens.isEmpty()) return
-        val grouped = subscribedTokens.entries.groupBy({ it.value }, { it.key })
-        grouped.forEach { (exchange, tokens) ->
-            subscribe(exchange, tokens)
+        val validIntTokens = subscribedTokens.keys.mapNotNull { it.toIntOrNull() }
+        if (validIntTokens.isEmpty()) return
+        
+        try {
+            val subMsg = JSONObject().apply {
+                put("a", "subscribe")
+                put("v", JSONArray(validIntTokens))
+            }
+            val modeMsg = JSONObject().apply {
+                put("a", "mode")
+                val vArr = JSONArray()
+                vArr.put("full")
+                vArr.put(JSONArray(validIntTokens))
+                put("v", vArr)
+            }
+            webSocket?.send(subMsg.toString())
+            webSocket?.send(modeMsg.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send m.Stock resubscribe msg", e)
         }
     }
 
