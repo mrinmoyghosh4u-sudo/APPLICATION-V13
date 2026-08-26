@@ -664,7 +664,7 @@ fun ProfileScreen(
                     letter = "ধ",
                     letterBg = Color(0xFF00C853),
                     status = dhanStatus,
-                    onConnect = { onSwitchBroker("Dhan") },
+                    onConnect = { onReconnectBroker("Dhan") },
                     onReconnect = { onReconnectBroker("Dhan") },
                     onDisconnect = { onDisconnectBroker("Dhan") },
                     onRemoveAccount = { onRemoveAccountBroker("Dhan") }

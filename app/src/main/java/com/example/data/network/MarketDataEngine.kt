@@ -418,8 +418,17 @@ class MarketDataEngine(
         if (fyersMarketDataService?.isConfigured() == true) {
             fyersMarketDataService?.subscribeToMarketData(symbols)
         }
-        if (angelMarketDataService.isConfigured()) {
-            angelMarketDataService.subscribeToTokens(1, symbols) // Assuming NSE
+                if (angelMarketDataService.isConfigured()) {
+            val exchType = when(exchange.uppercase()) {
+                "NSE" -> 1
+                "NFO" -> 2
+                "BSE" -> 3
+                "BFO" -> 4
+                "MCX" -> 5
+                "CDS" -> 7
+                else -> 1
+            }
+            angelMarketDataService.subscribeToTokens(exchType, symbols)
         }
         if (mStockMarketDataService.isConfigured()) {
             mStockMarketDataService.subscribe(exchange, symbols)

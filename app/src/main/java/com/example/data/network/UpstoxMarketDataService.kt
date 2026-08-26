@@ -76,7 +76,6 @@ class UpstoxMarketDataService(
                 val json = org.json.JSONObject()
                 val data = org.json.JSONObject()
                 data.put("instrumentKeys", org.json.JSONArray(newKeys))
-                data.put("mode", "full")
                 json.put("guid", java.util.UUID.randomUUID().toString())
                 json.put("method", "sub")
                 json.put("data", data)
@@ -203,8 +202,12 @@ class UpstoxMarketDataService(
                 webSocket = client.newWebSocket(request, object : okhttp3.WebSocketListener() {
                     override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
                         isConnected = true
-                        _connectionState.value = "AUTHENTICATING"
+                        _connectionState.value = "AUTHENTICATED"
                         healthManager?.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+                        healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
+                        
+                        _connectionState.value = "SUBSCRIBING"
+                        healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
                         
                         // Send subscription message
                         val keys = if (subscribedInstrumentKeys.isNotEmpty()) {
@@ -222,7 +225,6 @@ class UpstoxMarketDataService(
                         val json = org.json.JSONObject()
                         val data = org.json.JSONObject()
                         data.put("instrumentKeys", org.json.JSONArray(keys))
-                        data.put("mode", "full")
                         json.put("guid", java.util.UUID.randomUUID().toString())
                         json.put("method", "sub")
                         json.put("data", data)
@@ -286,6 +288,9 @@ class UpstoxMarketDataService(
                                 }
                                 
                                 if (receivedTick) {
+                                    if (!hasFirstTick) {
+                                        android.util.Log.i(TAG, "[UPSTOX_FIRST_REAL_TICK] / UPSTOX_LIVE First valid Upstox real tick received!")
+                                    }
                                     hasFirstTick = true
                                     lastTickReceivedTime = now
                                     _connectionState.value = "LIVE"

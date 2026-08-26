@@ -390,7 +390,7 @@ fun MarketTabContent(
             border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                if (candleList.isNotEmpty()) {
+                if (true) {
                     com.example.ui.components.CandlestickChart(
                         candles = candleList,
                         currentPrice = ltp.toFloat(),
@@ -806,11 +806,10 @@ fun HistoricalDataTabContent(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                if (candleList.isNotEmpty()) {
-                    com.example.ui.components.CandlestickChart(
-                        candles = candleList,
-                        currentPrice = ltp.toFloat(),
-                        modifier = Modifier.fillMaxWidth().height(220.dp)
+                if (true) {
+                    com.example.ui.components.TradingViewChart(
+                        symbol = indexName,
+                        modifier = Modifier.fillMaxWidth().height(350.dp)
                     )
                 } else {
                     Box(

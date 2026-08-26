@@ -3,13 +3,9 @@ import re
 with open("app/src/main/java/com/example/data/network/FyersMarketDataService.kt", "r") as f:
     content = f.read()
 
-# Remove restPollingJob and its calls
-content = re.sub(r'private var restPollingJob: Job\? = null', '', content)
-content = re.sub(r'startRestPolling\(\)', '', content)
-content = re.sub(r'private fun startRestPolling\(\) \{.*?(?=\n    private fun connectWebSocket)', '', content, flags=re.DOTALL)
-
-# Fix connect()
-new_connect = """    suspend fun connect() {
+new_content = """    private var backoffDelayMs = 2000L
+    
+    suspend fun connect() {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
             healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, false)
@@ -19,10 +15,18 @@ new_connect = """    suspend fun connect() {
         _connectionState.value = "CONNECTING"
         reconnectJob?.cancel()
         backoffDelayMs = 2000L
+        
         connectWebSocket()
-    }"""
-content = re.sub(r'suspend fun connect\(\) \{.*?(?=\n    private fun connectWebSocket)', new_connect, content, flags=re.DOTALL)
+    }
+
+    private fun connectWebSocket() {"""
+
+content = re.sub(
+    r'    private var backoffDelayMs = 2000L.*?private fun connectWebSocket\(\) \{',
+    new_content,
+    content,
+    flags=re.DOTALL
+)
 
 with open("app/src/main/java/com/example/data/network/FyersMarketDataService.kt", "w") as f:
     f.write(content)
-

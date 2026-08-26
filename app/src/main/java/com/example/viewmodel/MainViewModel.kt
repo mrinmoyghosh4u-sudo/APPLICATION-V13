@@ -906,18 +906,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val callbackState = state.trim()
 
             var pendingSession = sessionManager.pendingOAuthSession
-            // Fallback session recovery if process was recycled or state prefix matches
-            if (pendingSession == null || (callbackState.isNotBlank() && pendingSession.state.trim() != callbackState)) {
-                if (callbackState.startsWith("upstox_") || callbackState == sessionManager.pendingUpstoxOAuthState) {
-                    val redirect = sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
-                    pendingSession = SessionManager.PendingOAuthSession("UPSTOX", callbackState, System.currentTimeMillis(), redirect, false)
-                    sessionManager.pendingOAuthSession = pendingSession
-                } else if (callbackState.startsWith("fyers_") || callbackState == sessionManager.pendingFyersOAuthState || fyersAuthCode != null) {
-                    val redirect = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
-                    pendingSession = SessionManager.PendingOAuthSession("FYERS", callbackState, System.currentTimeMillis(), redirect, false)
-                    sessionManager.pendingOAuthSession = pendingSession
-                }
+            
+            // STRICT VALIDATION
+            if (pendingSession == null) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "OAuth Error: No pending session found. Please try again."
+                return@launch
             }
+            
+            if (pendingSession.consumed) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "OAuth Error: This callback has already been processed (duplicate)."
+                return@launch
+            }
+            
+            if (callbackState.isBlank() || pendingSession.state != callbackState) {
+                _isAuthInProgress.value = false
+                _authErrorMessage.value = "OAuth Error: State mismatch. Possible CSRF attack."
+                return@launch
+            }
+
 
             // Determine provider
             val inferredProvider = pendingSession?.provider?.uppercase()?.trim()

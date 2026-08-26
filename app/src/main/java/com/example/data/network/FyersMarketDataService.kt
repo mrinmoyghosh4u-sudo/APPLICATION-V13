@@ -49,6 +49,8 @@ class FyersMarketDataService(
     private var isConnected = false
     private var reconnectJob: Job? = null
     private var hasFirstTick = false
+    private var isAuthSent = false
+    private var isSubscribed = false
     private var lastTickReceivedTime: Long = 0L
 
     // For parsing
@@ -73,14 +75,14 @@ class FyersMarketDataService(
 
     private val WS_URL_CANDIDATES = listOf("wss://socket.fyers.in/hsm/v1-5/prod")
     private var currentUrlIndex = 0
-    private var restPollingJob: Job? = null
+    
 
     fun isConfigured(): Boolean {
         return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
     }
 
     private var backoffDelayMs = 2000L
-
+    
     suspend fun connect() {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
@@ -88,64 +90,14 @@ class FyersMarketDataService(
             Log.e(TAG, "[FYERS_AUTH_FAILED] Cannot connect: Fyers credentials missing")
             return
         }
-        _connectionState.value = "AUTHENTICATED"
+        _connectionState.value = "CONNECTING"
         reconnectJob?.cancel()
         backoffDelayMs = 2000L
-        startRestPolling()
+        
         connectWebSocket()
     }
 
-    private fun startRestPolling() {
-        if (restPollingJob?.isActive == true) return
-        restPollingJob = scope.launch {
-            while (isConfigured()) {
-                try {
-                    val appId = sessionManager.fyersAppId
-                    val token = sessionManager.fyersAccessToken
-                    if (!appId.isNullOrBlank() && !token.isNullOrBlank()) {
-                        val authHeader = "$appId:$token"
-                        val symbolsToFetch = if (subscribedSymbols.isNotEmpty()) {
-                            subscribedSymbols.map { getFyersSymbol(it) }.distinct()
-                        } else {
-                            listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
-                        }
-                        val csv = symbolsToFetch.joinToString(",")
-                        val res = fyersApi.getQuotes(authHeader, csv)
-                        if (res.isSuccessful && res.body()?.s == "ok" && res.body()?.d != null) {
-                            val quotes = res.body()?.d.orEmpty()
-                            for (q in quotes) {
-                                val sym = q.v?.original_name ?: q.n ?: q.v?.symbol ?: ""
-                                val ltp = q.v?.lp ?: Double.NaN
-                                if (sym.isNotBlank() && !ltp.isNaN() && ltp > 0.0) {
-                                    val op = q.v?.open_price ?: ltp
-                                    val hi = q.v?.high_price ?: ltp
-                                    val lo = q.v?.low_price ?: ltp
-                                    val cl = q.v?.prev_close_price ?: ltp
-                                    val vol = q.v?.volume ?: 0L
-                                    val tt = q.v?.tt ?: System.currentTimeMillis()
-                                    processValidTick(
-                                        rawSymbol = sym,
-                                        ltp = ltp,
-                                        open = op,
-                                        high = hi,
-                                        low = lo,
-                                        close = cl,
-                                        volume = vol,
-                                        ts = tt
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "FYERS REST quote poll error: ${e.message}")
-                }
-                delay(2000L)
-            }
-        }
-    }
-
-        private fun connectWebSocket() {
+    private fun connectWebSocket() {
         if (isConnected) return
         Log.d(TAG, "[FYERS_AUTH_START] Initiating FYERS WebSocket connection...")
         _connectionState.value = "CONNECTING"
@@ -215,69 +167,11 @@ class FyersMarketDataService(
                     buffer.putShort(source.length.toShort())
                     buffer.put(source.toByteArray(Charsets.UTF_8))
                     
-                    webSocket.send(okio.ByteString.of(*buffer.array()))
+                    webSocket?.send(okio.ByteString.of(*buffer.array()))
                     Log.i(TAG, "[FYERS_AUTH_SENT] Sent binary authentication message")
 
-                    // 2. Send Lite mode message
-                    val liteData = java.nio.ByteBuffer.allocate(11)
-                    liteData.order(java.nio.ByteOrder.BIG_ENDIAN)
-                    liteData.putShort(0.toShort()) // place holder
-                    liteData.put(12.toByte()) // Msg type
-                    liteData.put(2.toByte()) // count
-                    // Field 1
-                    liteData.put(1.toByte())
-                    liteData.putShort(8.toShort())
-                    liteData.putLong(2L) // channel_bits for channel_num=1
-                    // Field 2
-                    liteData.put(2.toByte())
-                    liteData.putShort(1.toShort())
-                    liteData.put(76.toByte())
-                    
-                    // fix length
-                    val liteLen = liteData.position()
-                    liteData.putShort(0, (liteLen - 2).toShort())
-                    webSocket.send(okio.ByteString.of(*liteData.array()))
-                    Log.i(TAG, "[FYERS_MODE_SENT] Sent lite mode message")
-
-                    // 3. Send Subscribe message
-                    val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
-                        subscribedSymbols.toList()
-                    } else {
-                        listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
-                    }
-                    subscribedSymbols.addAll(symbolsToSub)
-                    
-                    // Scrips data length
-                    var scripsLen = 2
-                    for (scrip in symbolsToSub) {
-                        scripsLen += 1 + scrip.length
-                    }
-                    
-                    val subDataLen = 18 + scripsLen + hsmToken.length + source.length
-                    val subMsg = java.nio.ByteBuffer.allocate(subDataLen)
-                    subMsg.order(java.nio.ByteOrder.BIG_ENDIAN)
-                    subMsg.putShort((subDataLen - 2).toShort())
-                    subMsg.put(4.toByte()) // reqtype
-                    subMsg.put(2.toByte()) // field count
-                    
-                    // Field 1: Scrips
-                    subMsg.put(1.toByte())
-                    subMsg.putShort(scripsLen.toShort())
-                    
-                    subMsg.put((symbolsToSub.size shr 8).toByte())
-                    subMsg.put((symbolsToSub.size and 0xFF).toByte())
-                    for (scrip in symbolsToSub) {
-                        subMsg.put(scrip.length.toByte())
-                        subMsg.put(scrip.toByteArray(Charsets.US_ASCII))
-                    }
-                    
-                    // Field 2: Channel
-                    subMsg.put(2.toByte())
-                    subMsg.putShort(1.toShort())
-                    subMsg.put(1.toByte()) // channel_num = 1
-                    
-                    webSocket.send(okio.ByteString.of(*subMsg.array()))
-                    Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
+                    Log.i(TAG, "Waiting for auth response before subscribing...")
+                    isAuthSent = true
                     
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to send Fyers auth/subscribe: ${e.message}")
@@ -326,8 +220,8 @@ class FyersMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
-        restPollingJob?.cancel()
-        restPollingJob = null
+        
+        
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         isConnected = false
@@ -369,6 +263,14 @@ class FyersMarketDataService(
     }
 
     private fun handleTextMessage(text: String) {
+        if (isAuthSent && !isSubscribed) {
+            isSubscribed = true
+            _connectionState.value = "AUTHENTICATED"
+            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+            _connectionState.value = "SUBSCRIBING"
+            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
+            sendSubscription()
+        }
         try {
             if (text.startsWith("{")) {
                 val json = JSONObject(text)
@@ -382,7 +284,95 @@ class FyersMarketDataService(
     private val topicToSymbolMap = mutableMapOf<Int, String>()
     private val topicToMultiplierMap = mutableMapOf<Int, Int>()
 
+        private fun sendSubscription() {
+        if (webSocket == null || !isConnected) return
+        try {
+            val sessionToken = sessionManager.fyersAccessToken ?: "" // We need the token here too. Let's just retrieve it from sessionManager
+            var actualToken = sessionToken
+            if (actualToken.contains(":")) {
+                actualToken = actualToken.split(":")[1]
+            }
+            val tokenParts = actualToken.split(".")
+            val hsmToken = if (tokenParts.size >= 2) {
+                val payloadBytes = android.util.Base64.decode(tokenParts[1], android.util.Base64.URL_SAFE)
+                org.json.JSONObject(String(payloadBytes)).optString("hsm_key", actualToken)
+            } else actualToken
+            val source = "PythonSDK-1.0.0"
+            
+// 2. Send Lite mode message
+                    val liteData = java.nio.ByteBuffer.allocate(11)
+                    liteData.order(java.nio.ByteOrder.BIG_ENDIAN)
+                    liteData.putShort(0.toShort()) // place holder
+                    liteData.put(12.toByte()) // Msg type
+                    liteData.put(2.toByte()) // count
+                    // Field 1
+                    liteData.put(1.toByte())
+                    liteData.putShort(8.toShort())
+                    liteData.putLong(2L) // channel_bits for channel_num=1
+                    // Field 2
+                    liteData.put(2.toByte())
+                    liteData.putShort(1.toShort())
+                    liteData.put(76.toByte())
+                    
+                    // fix length
+                    val liteLen = liteData.position()
+                    liteData.putShort(0, (liteLen - 2).toShort())
+                    webSocket?.send(okio.ByteString.of(*liteData.array()))
+                    Log.i(TAG, "[FYERS_MODE_SENT] Sent lite mode message")
+
+                    // 3. Send Subscribe message
+                    val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
+                        subscribedSymbols.toList()
+                    } else {
+                        listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
+                    }
+                    subscribedSymbols.addAll(symbolsToSub)
+                    
+                    // Scrips data length
+                    var scripsLen = 2
+                    for (scrip in symbolsToSub) {
+                        scripsLen += 1 + scrip.length
+                    }
+                    
+                    val subDataLen = 18 + scripsLen + hsmToken.length + source.length
+                    val subMsg = java.nio.ByteBuffer.allocate(subDataLen)
+                    subMsg.order(java.nio.ByteOrder.BIG_ENDIAN)
+                    subMsg.putShort((subDataLen - 2).toShort())
+                    subMsg.put(4.toByte()) // reqtype
+                    subMsg.put(2.toByte()) // field count
+                    
+                    // Field 1: Scrips
+                    subMsg.put(1.toByte())
+                    subMsg.putShort(scripsLen.toShort())
+                    
+                    subMsg.put((symbolsToSub.size shr 8).toByte())
+                    subMsg.put((symbolsToSub.size and 0xFF).toByte())
+                    for (scrip in symbolsToSub) {
+                        subMsg.put(scrip.length.toByte())
+                        subMsg.put(scrip.toByteArray(Charsets.US_ASCII))
+                    }
+                    
+                    // Field 2: Channel
+                    subMsg.put(2.toByte())
+                    subMsg.putShort(1.toShort())
+                    subMsg.put(1.toByte()) // channel_num = 1
+                    
+                    webSocket?.send(okio.ByteString.of(*subMsg.array()))
+                    Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send Fyers subscribe: ${e.message}")
+        }
+    }
+
     private fun handleBinaryMessage(bytes: ByteArray) {
+        if (isAuthSent && !isSubscribed) {
+            isSubscribed = true
+            _connectionState.value = "AUTHENTICATED"
+            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+            _connectionState.value = "SUBSCRIBING"
+            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
+            sendSubscription()
+        }
         try {
             val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.BIG_ENDIAN)
             if (buffer.remaining() < 3) return

@@ -1,24 +1,14 @@
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okhttp3.Response
+import java.io.File
+import java.util.regex.Pattern
 
-fun main() {
-    val client = OkHttpClient()
-    val request = Request.Builder()
-        .url("wss://api.fyers.in/socket/v2/data/")
-        .build()
-        
-    client.newWebSocket(request, object : WebSocketListener() {
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            println("OPENED: " + response.code)
-            System.exit(0)
-        }
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            println("FAILED: " + t.message + " code: " + response?.code)
-            System.exit(1)
-        }
-    })
-    Thread.sleep(5000)
-}
+def main():
+    f = open("app/src/main/java/com/example/data/network/FyersMarketDataService.kt", "r")
+    c = f.read()
+    f.close()
+    print("Has webSocket.send:", "webSocket.send" in c)
+    print("Has webSocket?.send:", "webSocket?.send" in c)
+    for i, line in enumerate(c.splitlines()):
+        if "webSocket.send(" in line:
+            print("Line", i+1, ":", line)
+
+main()
