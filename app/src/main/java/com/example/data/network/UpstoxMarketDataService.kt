@@ -65,6 +65,30 @@ class UpstoxMarketDataService(
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
+
+    suspend fun subscribeToMarketData(symbols: List<String>) = withContext(Dispatchers.IO) {
+        if (!isConfigured() || symbols.isEmpty()) return@withContext
+        val newKeys = symbols.mapNotNull { UpstoxSymbolMapper.toUpstoxInstrumentKey(it) }
+        subscribedInstrumentKeys.addAll(newKeys)
+        
+        if (isConnected && webSocket != null) {
+            try {
+                val json = org.json.JSONObject()
+                val data = org.json.JSONObject()
+                data.put("instrumentKeys", org.json.JSONArray(newKeys))
+                json.put("guid", java.util.UUID.randomUUID().toString())
+                json.put("method", "sub")
+                json.put("data", data)
+                
+                val payload = json.toString().toByteArray(Charsets.UTF_8)
+                webSocket?.send(okio.ByteString.of(*payload))
+                android.util.Log.i(TAG, "[UPSTOX_SUB_SENT] Subscribed to ${newKeys.size} instruments dynamically")
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Error sending subscription", e)
+            }
+        }
+    }
+
     fun isConfigured(): Boolean {
         return !sessionManager.upstoxApiKey.isNullOrBlank() && !sessionManager.upstoxAccessToken.isNullOrBlank()
     }
@@ -169,26 +193,6 @@ class UpstoxMarketDataService(
                 if (wsUrl.isNullOrBlank()) {
                     _connectionState.value = "AUTH_FAILED"
                     return@launch
-                }
-                
-                // Resolve HTTP 302 Redirect for Upstox WebSockets if it points to api.upstox.com
-                try {
-                    val httpUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://")
-                    val redirectRequest = okhttp3.Request.Builder()
-                        .url(httpUrl)
-                        .header("Authorization", authHeader)
-                        .build()
-                    val redirectClient = client.newBuilder().followRedirects(false).build()
-                    val redirectResponse = redirectClient.newCall(redirectRequest).execute()
-                    if (redirectResponse.isRedirect) {
-                        val location = redirectResponse.header("Location")
-                        if (!location.isNullOrBlank()) {
-                            wsUrl = location.replace("https://", "wss://").replace("http://", "ws://")
-                        }
-                    }
-                    redirectResponse.close()
-                } catch (e: Exception) {
-                    android.util.Log.w(TAG, "Failed to resolve Upstox WS redirect: ${e.message}")
                 }
                 
                 val request = okhttp3.Request.Builder()

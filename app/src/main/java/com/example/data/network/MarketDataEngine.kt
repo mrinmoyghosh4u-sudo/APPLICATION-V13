@@ -408,6 +408,24 @@ class MarketDataEngine(
         updateLastTickTime()
     }
 
+
+    suspend fun subscribeToTokens(exchange: String, symbols: List<String>) {
+        if (symbols.isEmpty()) return
+        
+        if (upstoxMarketDataService?.isConfigured() == true) {
+            upstoxMarketDataService?.subscribeToMarketData(symbols)
+        }
+        if (fyersMarketDataService?.isConfigured() == true) {
+            fyersMarketDataService?.subscribeToMarketData(symbols)
+        }
+        if (angelMarketDataService.isConfigured()) {
+            angelMarketDataService.subscribeToTokens(1, symbols) // Assuming NSE
+        }
+        if (mStockMarketDataService.isConfigured()) {
+            mStockMarketDataService.subscribe(exchange, symbols)
+        }
+    }
+
     fun retryConnection() {
         _unifiedFeedStatus.value = "CONNECTING"
         if (upstoxMarketDataService?.isConfigured() == true) {

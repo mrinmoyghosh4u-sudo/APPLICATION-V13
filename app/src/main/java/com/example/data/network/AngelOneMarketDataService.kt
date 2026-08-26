@@ -66,6 +66,11 @@ class AngelOneMarketDataService(
         }
     }
 
+
+    fun isConfigured(): Boolean {
+        return !sessionManager.angelJwtToken.isNullOrEmpty() && !sessionManager.angelClientId.isNullOrEmpty() && !sessionManager.angelFeedToken.isNullOrEmpty()
+    }
+
     fun isConnectingOrLive(): Boolean {
         val state = _connectionState.value
         return state == "CONNECTING" || state == "CONNECTED" || state == "SUBSCRIBING" || state == "SUBSCRIBED" || state == "LIVE"
