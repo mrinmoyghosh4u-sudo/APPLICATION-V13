@@ -221,7 +221,7 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
 
     val upstoxApi: UpstoxApi by lazy {
         Retrofit.Builder()
-            .baseUrl("https://api.upstox.com/")
+            .baseUrl("https://api-v2.upstox.com/")
             .client(upstoxClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

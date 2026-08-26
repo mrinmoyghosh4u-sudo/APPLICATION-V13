@@ -54,6 +54,7 @@ class UpstoxMarketDataService(
     private val subscribedInstrumentKeys = ConcurrentHashMap.newKeySet<String>()
     private var isConnected = false
     private var reconnectJob: Job? = null
+    private var restPollingJob: Job? = null
     private var backoffDelayMs = 1000L
     private var hasFirstTick = false
     private var lastTickReceivedTime: Long = 0L
@@ -73,6 +74,60 @@ class UpstoxMarketDataService(
         return if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
     }
 
+    private fun startRestPolling() {
+        if (restPollingJob?.isActive == true) return
+        restPollingJob = scope.launch {
+            while (isConfigured()) {
+                if (!isConnectionLive()) {
+                    try {
+                        val symbolsToFetch = if (subscribedInstrumentKeys.isNotEmpty()) {
+                            subscribedInstrumentKeys.map { com.example.data.network.UpstoxSymbolMapper.fromUpstoxInstrumentKey(it).first }
+                        } else {
+                            listOf(
+                                com.example.data.network.UpstoxSymbolMapper.KEY_NIFTY_50,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_BANK_NIFTY,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_FIN_NIFTY,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_MIDCP_NIFTY
+                            )
+                        }
+                        val quotes = getMarketQuotes(symbolsToFetch).getOrNull()
+                        if (quotes != null) {
+                            var hasValidTick = false
+                            val now = System.currentTimeMillis()
+                            for (q in quotes) {
+                                if (q.ltp > 0.0) {
+                                    hasValidTick = true
+                                    val tick = com.example.data.model.MarketTick(
+                                        symbol = q.symbol,
+                                        token = com.example.data.network.UpstoxSymbolMapper.toUpstoxInstrumentKey(q.symbol),
+                                        exchange = q.exchange,
+                                        ltp = q.ltp,
+                                        open = q.ltp,
+                                        high = q.ltp,
+                                        low = q.ltp,
+                                        close = q.ltp,
+                                        volume = 0L,
+                                        timestamp = now
+                                    )
+                                    marketDataEngine.updateUpstoxTick(tick)
+                                }
+                            }
+                            if (hasValidTick) {
+                                hasFirstTick = true
+                                lastTickReceivedTime = now
+                                _connectionState.value = "LIVE"
+                                healthManager?.reportTickReceived(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, now)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Upstox REST polling error: ${e.message}")
+                    }
+                }
+                kotlinx.coroutines.delay(2000L)
+            }
+        }
+    }
+
     suspend fun connect() = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
@@ -82,6 +137,8 @@ class UpstoxMarketDataService(
         }
         _connectionState.value = "AUTHENTICATED"
         reconnectJob?.cancel()
+        restPollingJob?.cancel()
+        startRestPolling()
         connectWebSocket()
     }
 
@@ -95,210 +152,186 @@ class UpstoxMarketDataService(
         if (token.isNullOrBlank()) {
             _connectionState.value = "AUTH_FAILED"
             healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, "Token missing")
-            Log.e(TAG, "[UPSTOX_AUTH_FAILED] Upstox Access Token missing")
             return
         }
         val authHeader = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
 
         scope.launch {
             try {
-                // Step 1: Request one-time authorized WebSocket URL via GET /v3/feed/market-data-feed/authorize
                 val authRes = upstoxApi.getWebSocketFeedAuth(authHeader)
                 if (!authRes.isSuccessful) {
-                    val errCode = authRes.code()
-                    val errBody = authRes.errorBody()?.string() ?: "Empty body"
-                    _connectionState.value = "ERROR"
-                    healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, "HTTP $errCode: $errBody")
-                    Log.e(TAG, "[UPSTOX_AUTH_FAILED] Upstox Market Data feed authorization failed: HTTP $errCode ($errBody)")
+                    _connectionState.value = "AUTH_FAILED"
+                    healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, "HTTP ${authRes.code()}")
                     return@launch
                 }
-
-                val targetUrl = authRes.body()?.data?.redirectUri
-                if (targetUrl.isNullOrBlank()) {
-                    _connectionState.value = "ERROR"
-                    healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, "Empty authorized WebSocket URL")
-                    Log.e(TAG, "[UPSTOX_AUTH_FAILED] Upstox returned empty authorized WebSocket URL")
+                
+                var wsUrl = authRes.body()?.data?.authorized_redirect_uri ?: authRes.body()?.data?.authorizedRedirectUri
+                if (wsUrl.isNullOrBlank()) {
+                    _connectionState.value = "AUTH_FAILED"
                     return@launch
                 }
-
-                Log.i(TAG, "[UPSTOX_AUTHORIZED_URL_RECEIVED] Successfully obtained one-time authorized WebSocket URL")
-                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
-
-                // Step 2: Connect WebSocket using the one-time authorized URL
-                val request = Request.Builder()
-                    .url(targetUrl)
-                    .header("Accept", "*/*")
+                
+                // Resolve HTTP 302 Redirect for Upstox WebSockets if it points to api.upstox.com
+                try {
+                    val httpUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://")
+                    val redirectRequest = okhttp3.Request.Builder()
+                        .url(httpUrl)
+                        .header("Authorization", authHeader)
+                        .build()
+                    val redirectClient = client.newBuilder().followRedirects(false).build()
+                    val redirectResponse = redirectClient.newCall(redirectRequest).execute()
+                    if (redirectResponse.isRedirect) {
+                        val location = redirectResponse.header("Location")
+                        if (!location.isNullOrBlank()) {
+                            wsUrl = location.replace("https://", "wss://").replace("http://", "ws://")
+                        }
+                    }
+                    redirectResponse.close()
+                } catch (e: Exception) {
+                    android.util.Log.w(TAG, "Failed to resolve Upstox WS redirect: ${e.message}")
+                }
+                
+                val request = okhttp3.Request.Builder()
+                    .url(wsUrl)
                     .build()
-
-                webSocket = client.newWebSocket(request, object : WebSocketListener() {
-                    override fun onOpen(webSocket: WebSocket, response: Response) {
-                        Log.i(TAG, "[UPSTOX_WS_OPEN] Upstox WebSocket connected")
+                
+                webSocket = client.newWebSocket(request, object : okhttp3.WebSocketListener() {
+                    override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
                         isConnected = true
-                        _connectionState.value = "CONNECTED"
-                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "CONNECTED")
+                        _connectionState.value = "AUTHENTICATING"
                         healthManager?.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
-                        backoffDelayMs = 1000L
-
-                        // Step 3: Send subscription
-                        _connectionState.value = "SUBSCRIBING"
-                        healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
-
-                        val keysToSub = if (subscribedInstrumentKeys.isNotEmpty()) {
+                        
+                        // Send subscription message
+                        val keys = if (subscribedInstrumentKeys.isNotEmpty()) {
                             subscribedInstrumentKeys.toList()
                         } else {
-                            listOf(UpstoxSymbolMapper.KEY_NIFTY_50)
+                            listOf(
+                                com.example.data.network.UpstoxSymbolMapper.KEY_NIFTY_50,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_BANK_NIFTY,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_FIN_NIFTY,
+                                com.example.data.network.UpstoxSymbolMapper.KEY_MIDCP_NIFTY
+                            )
                         }
-                        subscribedInstrumentKeys.addAll(keysToSub)
-                        sendSubscription(keysToSub, mode = "ltpc")
+                        subscribedInstrumentKeys.addAll(keys)
                         
-                        _connectionState.value = "WAITING_FOR_FIRST_TICK"
-                        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, keysToSub.size)
+                        val json = org.json.JSONObject()
+                        val data = org.json.JSONObject()
+                        data.put("instrumentKeys", org.json.JSONArray(keys))
+                        json.put("guid", java.util.UUID.randomUUID().toString())
+                        json.put("method", "sub")
+                        json.put("data", data)
+                        
+                        val payload = json.toString().toByteArray(Charsets.UTF_8)
+                        webSocket.send(okio.ByteString.of(*payload))
+                        Log.i(TAG, "[UPSTOX_SUB_SENT] Subscribed to ${keys.size} instruments")
                     }
-
-                    override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                        Log.d(TAG, "[UPSTOX_BINARY_MESSAGE_RECEIVED] Received ${bytes.size} bytes")
-                        handleBinaryFeed(bytes.toByteArray())
+                    
+                    override fun onMessage(webSocket: okhttp3.WebSocket, bytes: okio.ByteString) {
+                        try {
+                            val feedResponse = com.example.data.network.upstox.MarketDataFeedV3.FeedResponse.parseFrom(bytes.toByteArray())
+                            val type = feedResponse.type
+                            
+                            val now = System.currentTimeMillis()
+                            var receivedTick = false
+                            
+                            for ((key, feed) in feedResponse.feedsMap) {
+                                val standardSym = UpstoxSymbolMapper.fromUpstoxInstrumentKey(key).first
+                                val exch = if (standardSym.contains("-INDEX")) "NSE" else "NSE"
+                                
+                                var ltp = 0.0
+                                var close = 0.0
+                                var volume = 0L
+                                var ts = 0L
+                                var open = 0.0
+                                var high = 0.0
+                                var low = 0.0
+                                
+                                if (feed.hasFullFeed()) {
+                                    val full = feed.fullFeed
+                                    if (full.hasMarketFF()) {
+                                        ltp = full.marketFF.ltpc.ltp
+                                        close = full.marketFF.ltpc.cp
+                                        ts = full.marketFF.ltpc.ltt
+                                        volume = full.marketFF.vtt
+                                        if (full.marketFF.hasMarketOHLC() && full.marketFF.marketOHLC.ohlcCount > 0) {
+                                            val ohlc = full.marketFF.marketOHLC.getOhlc(0)
+                                            open = ohlc.open
+                                            high = ohlc.high
+                                            low = ohlc.low
+                                        }
+                                        receivedTick = true
+                                    } else if (full.hasIndexFF()) {
+                                        ltp = full.indexFF.ltpc.ltp
+                                        close = full.indexFF.ltpc.cp
+                                        ts = full.indexFF.ltpc.ltt
+                                        if (full.indexFF.hasMarketOHLC() && full.indexFF.marketOHLC.ohlcCount > 0) {
+                                            val ohlc = full.indexFF.marketOHLC.getOhlc(0)
+                                            open = ohlc.open
+                                            high = ohlc.high
+                                            low = ohlc.low
+                                        }
+                                        receivedTick = true
+                                    }
+                                } else if (feed.hasLtpc()) {
+                                    ltp = feed.ltpc.ltp
+                                    close = feed.ltpc.cp
+                                    ts = feed.ltpc.ltt
+                                    receivedTick = true
+                                }
+                                
+                                if (receivedTick) {
+                                    hasFirstTick = true
+                                    lastTickReceivedTime = now
+                                    _connectionState.value = "LIVE"
+                                    healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, now)
+                                    val tick = com.example.data.model.MarketTick(
+                                        symbol = standardSym,
+                                        token = key,
+                                        exchange = exch,
+                                        ltp = ltp,
+                                        open = open,
+                                        high = high,
+                                        low = low,
+                                        close = close,
+                                        volume = volume,
+                                        timestamp = if (ts > 0L) ts else now
+                                    )
+                                    scope.launch {
+                                        marketDataEngine.updateUpstoxTick(tick)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to parse Upstox Protobuf: ${e.message}")
+                        }
                     }
-
-                    override fun onMessage(webSocket: WebSocket, text: String) {
-                        Log.d(TAG, "[UPSTOX_MESSAGE_RECEIVED] Text frame: $text")
+                    
+                    override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                        Log.d(TAG, "Upstox text message: $text")
                     }
-
-                    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        Log.w(TAG, "[UPSTOX_DISCONNECTED] Upstox WebSocket closed: $code / $reason")
+                    
+                    override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
                         isConnected = false
                         _connectionState.value = "DISCONNECTED"
                         com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
-                        healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
+                        scheduleReconnect()
                     }
-
-                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        Log.e(TAG, "[UPSTOX_DISCONNECTED] Upstox WebSocket failure: ${t.message}")
+                    
+                    override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
                         isConnected = false
                         _connectionState.value = "ERROR"
-                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
-                        healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, t.message ?: "WebSocket failure")
+                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "ERROR")
                         scheduleReconnect()
                     }
                 })
             } catch (e: Exception) {
-                Log.e(TAG, "[UPSTOX_AUTH_FAILED] Error initiating Upstox WebSocket: ${e.message}")
                 _connectionState.value = "ERROR"
-                healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, e.message ?: "Connection error")
-                scheduleReconnect()
             }
         }
     }
-
-    private fun handleBinaryFeed(bytes: ByteArray) {
-        try {
-            val response = UpstoxProtobufDecoder.decode(bytes)
-            if (response.feeds.isEmpty()) return
-
-            Log.d(TAG, "[UPSTOX_PROTOBUF_DECODE_SUCCESS] Decoded ${response.feeds.size} feeds")
-            val now = System.currentTimeMillis()
-            var hasValidTick = false
-
-            response.feeds.forEach { (instrumentKey, feed) ->
-                Log.d(TAG, "[UPSTOX_FEED_FOUND] Feed found for $instrumentKey")
-                val (sym, exch) = UpstoxSymbolMapper.fromUpstoxInstrumentKey(instrumentKey)
-
-                if (feed.ltp > 0.0) {
-                    hasValidTick = true
-                    Log.i(TAG, "[UPSTOX_LTP_RECEIVED] Instrument: $instrumentKey ($sym), LTP: ${feed.ltp}")
-                    val tick = MarketTick(
-                        symbol = sym,
-                        token = instrumentKey,
-                        exchange = exch,
-                        ltp = feed.ltp,
-                        open = feed.open.takeIf { it > 0.0 } ?: feed.ltp,
-                        high = feed.high.takeIf { it > 0.0 } ?: feed.ltp,
-                        low = feed.low.takeIf { it > 0.0 } ?: feed.ltp,
-                        close = feed.close.takeIf { it > 0.0 } ?: feed.ltp,
-                        volume = feed.volume,
-                        timestamp = if (feed.timestamp > 0L) feed.timestamp else now
-                    )
-                    scope.launch {
-                        marketDataEngine.updateUpstoxTick(tick)
-                    }
-                }
-            }
-
-            if (hasValidTick) {
-                if (!hasFirstTick) {
-                    val firstKey = response.feeds.keys.firstOrNull() ?: ""
-                    val firstLtp = response.feeds[firstKey]?.ltp ?: 0.0
-                    Log.i(TAG, "[UPSTOX_FIRST_REAL_TICK] First valid Upstox real tick received: $firstKey = $firstLtp")
-                }
-                hasFirstTick = true
-                lastTickReceivedTime = now
-                _connectionState.value = "LIVE"
-                healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, now)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error handling Upstox binary feed: ${e.message}")
-        }
-    }
-
-    private fun sendSubscription(instrumentKeys: List<String>, mode: String = "ltpc") {
-        if (!isConnected || webSocket == null || instrumentKeys.isEmpty()) return
-        try {
-            val payload = JSONObject().apply {
-                put("guid", UUID.randomUUID().toString())
-                put("method", "sub")
-                put("data", JSONObject().apply {
-                    put("mode", mode)
-                    put("instrumentKeys", JSONArray(instrumentKeys))
-                })
-            }.toString()
-
-            webSocket?.send(payload)
-            Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Subscribed to Upstox instruments: $instrumentKeys with mode=$mode")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to send Upstox subscription: ${e.message}")
-        }
-    }
-
-    fun subscribeMarketData(symbols: List<String>, mode: String = "ltpc") {
-        val keys = symbols.map { UpstoxSymbolMapper.toUpstoxInstrumentKey(it) }
-        subscribedInstrumentKeys.addAll(keys)
-        if (isConnected) {
-            sendSubscription(keys, mode = mode)
-        }
-    }
-
-    fun unsubscribeMarketData(symbols: List<String>) {
-        val keys = symbols.map { UpstoxSymbolMapper.toUpstoxInstrumentKey(it) }
-        subscribedInstrumentKeys.removeAll(keys.toSet())
-        if (!isConnected || webSocket == null || keys.isEmpty()) return
-        try {
-            val payload = JSONObject().apply {
-                put("guid", UUID.randomUUID().toString())
-                put("method", "unsub")
-                put("data", JSONObject().apply {
-                    put("instrumentKeys", JSONArray(keys))
-                })
-            }.toString()
-            webSocket?.send(payload)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to send Upstox unsubscription: ${e.message}")
-        }
-    }
-
-    private fun scheduleReconnect() {
-        if (reconnectJob?.isActive == true) return
-        reconnectJob = scope.launch {
-            delay(backoffDelayMs)
-            backoffDelayMs = minOf(backoffDelayMs * 2, 30000L) // Exponential backoff up to 30s
-            if (!isConnected && isConfigured()) {
-                Log.d(TAG, "Attempting Upstox WebSocket reconnect...")
-                connectWebSocket()
-            }
-        }
-    }
-
     fun disconnect() {
         reconnectJob?.cancel()
+        restPollingJob?.cancel()
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         isConnected = false
@@ -493,4 +526,16 @@ class UpstoxMarketDataService(
             }.reversed() // Upstox returns newest first; reverse for chronological order
         }
     }
+
+    private fun scheduleReconnect() {
+        if (reconnectJob?.isActive == true) return
+        reconnectJob = scope.launch {
+            kotlinx.coroutines.delay(5000L)
+            if (!isConnected && isConfigured()) {
+                android.util.Log.d(TAG, "Attempting Upstox WebSocket reconnect...")
+                connectWebSocket()
+            }
+        }
+    }
+
 }

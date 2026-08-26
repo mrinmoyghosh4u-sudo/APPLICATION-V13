@@ -291,3 +291,6 @@ gradle.projectsEvaluated {
         logger.warn("DHAN_CLIENT_SECRET or DHAN_API_KEY secret is not configured. Real Dhan API calls will require credentials.")
     }
 }
+dependencies {
+    implementation("com.google.protobuf:protobuf-java:3.24.4")
+}

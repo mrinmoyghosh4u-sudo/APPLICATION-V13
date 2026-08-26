@@ -40,7 +40,7 @@ class MStockMarketDataService(
 ) {
     companion object {
         private const val TAG = "mStockMarketData"
-        private const val WS_URL = "wss://api.mstock.trade/openapi/typea/ws"
+        private const val WS_URL = "wss://ws.mstock.trade"
         private const val PING_INTERVAL_MS = 20000L
         private const val STALE_THRESHOLD_MS = 15000L
         private const val MAX_RECONNECT_ATTEMPTS = 5
@@ -135,7 +135,7 @@ class MStockMarketDataService(
 
         val token = sessionManager?.mstockAccessToken ?: ""
         val apiKey = sessionManager?.mstockApiKey ?: ""
-        val fullUrl = if (token.isNotBlank()) "$WS_URL?jwtToken=$token&key=$apiKey" else WS_URL
+        val fullUrl = if (token.isNotBlank() && apiKey.isNotBlank()) "$WS_URL?API_KEY=$apiKey&ACCESS_TOKEN=$token" else WS_URL
 
         val request = Request.Builder()
             .url(fullUrl)

@@ -71,12 +71,7 @@ class FyersMarketDataService(
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
-    private val WS_URL_CANDIDATES = listOf(
-        "wss://socket.fyers.in/socket/v2/data/",
-        "wss://api-t1.fyers.in/socket/v2/data/",
-        "wss://socket.fyers.in/hsm/v1-5/prod",
-        "wss://api.fyers.in/socket/v2/data/"
-    )
+    private val WS_URL_CANDIDATES = listOf("wss://socket.fyers.in/hsm/v1-5/prod")
     private var currentUrlIndex = 0
     private var restPollingJob: Job? = null
 
@@ -112,7 +107,7 @@ class FyersMarketDataService(
                         val symbolsToFetch = if (subscribedSymbols.isNotEmpty()) {
                             subscribedSymbols.map { getFyersSymbol(it) }.distinct()
                         } else {
-                            listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX")
+                            listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
                         }
                         val csv = symbolsToFetch.joinToString(",")
                         val res = fyersApi.getQuotes(authHeader, csv)
@@ -150,90 +145,168 @@ class FyersMarketDataService(
         }
     }
 
-    private fun connectWebSocket() {
+        private fun connectWebSocket() {
         if (isConnected) return
         Log.d(TAG, "[FYERS_AUTH_START] Initiating FYERS WebSocket connection...")
         _connectionState.value = "CONNECTING"
         healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_FYERS)
-        
+
         val appId = sessionManager.fyersAppId
         val token = sessionManager.fyersAccessToken
+
         if (appId.isNullOrBlank() || token.isNullOrBlank()) {
             _connectionState.value = "AUTH_FAILED"
-            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, "Credentials missing")
-            Log.e(TAG, "[FYERS_AUTH_FAILED] Fyers appId or token missing")
+            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, "Missing credentials")
             return
         }
-        
-        val fyersToken = "$appId:$token"
-        val url = WS_URL_CANDIDATES[currentUrlIndex % WS_URL_CANDIDATES.size]
+
+        val url = "wss://socket.fyers.in/hsm/v1-5/prod"
         Log.i(TAG, "[FYERS_WS_CONNECTING] Connecting to $url...")
-        
-        val request = Request.Builder()
+
+        val request = okhttp3.Request.Builder()
             .url(url)
-            .header("Authorization", fyersToken)
             .build()
-            
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "[FYERS_WS_OPEN] FYERS WebSocket connected to $url")
+
+        webSocket = client.newWebSocket(request, object : okhttp3.WebSocketListener() {
+            override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                super.onOpen(webSocket, response)
                 isConnected = true
-                backoffDelayMs = 2000L
-                _connectionState.value = "CONNECTED"
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "CONNECTED")
+                hasFirstTick = false
+                
+                _connectionState.value = "AUTHENTICATING"
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
-                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
 
-                _connectionState.value = "SUBSCRIBING"
-                healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
-                
-                // Subscribe using official JSON format with type 'lite'
-                val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
-                    subscribedSymbols.toList()
-                } else {
-                    listOf("NSE:NIFTY50-INDEX")
+                try {
+                    var actualToken = token
+                if (actualToken.contains(":")) {
+                    actualToken = actualToken.split(":")[1]
                 }
-                subscribedSymbols.addAll(symbolsToSub)
-
-                val payload = JSONObject().apply {
-                    put("symbol", JSONArray(symbolsToSub))
-                    put("type", "lite")
-                }.toString()
                 
-                webSocket.send(payload)
-                Log.i(TAG, "[FYERS_SUBSCRIBE_SENT] Sent subscription for $symbolsToSub")
+                val tokenParts = actualToken.split(".")
+                val hsmToken = if (tokenParts.size >= 2) {
+                    val payloadBytes = android.util.Base64.decode(tokenParts[1], android.util.Base64.URL_SAFE)
+                    org.json.JSONObject(String(payloadBytes)).optString("hsm_key", actualToken)
+                } else actualToken
 
-                _connectionState.value = "WAITING_FOR_FIRST_TICK"
-                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, symbolsToSub.size)
+                    val source = "PythonSDK-1.0.0"
+                    
+                    // 1. Send Auth message
+                    val authBufferSize = 18 + hsmToken.length + source.length
+                    val buffer = java.nio.ByteBuffer.allocate(authBufferSize)
+                    buffer.order(java.nio.ByteOrder.BIG_ENDIAN)
+                    
+                    buffer.putShort((authBufferSize - 2).toShort())
+                    buffer.put(1.toByte()) // ReqType
+                    buffer.put(4.toByte()) // FieldCount
+                    
+                    buffer.put(1.toByte()) // Field 1: AuthToken
+                    buffer.putShort(hsmToken.length.toShort())
+                    buffer.put(hsmToken.toByteArray(Charsets.UTF_8))
+                    
+                    buffer.put(2.toByte()) // Field 2
+                    buffer.putShort(1.toShort())
+                    buffer.put(78.toByte())
+                    
+                    buffer.put(3.toByte()) // Field 3
+                    buffer.putShort(1.toShort())
+                    buffer.put(1.toByte())
+                    
+                    buffer.put(4.toByte()) // Field 4: Source
+                    buffer.putShort(source.length.toShort())
+                    buffer.put(source.toByteArray(Charsets.UTF_8))
+                    
+                    webSocket.send(okio.ByteString.of(*buffer.array()))
+                    Log.i(TAG, "[FYERS_AUTH_SENT] Sent binary authentication message")
+
+                    // 2. Send Lite mode message
+                    val liteData = java.nio.ByteBuffer.allocate(11)
+                    liteData.order(java.nio.ByteOrder.BIG_ENDIAN)
+                    liteData.putShort(0.toShort()) // place holder
+                    liteData.put(12.toByte()) // Msg type
+                    liteData.put(2.toByte()) // count
+                    // Field 1
+                    liteData.put(1.toByte())
+                    liteData.putShort(8.toShort())
+                    liteData.putLong(2L) // channel_bits for channel_num=1
+                    // Field 2
+                    liteData.put(2.toByte())
+                    liteData.putShort(1.toShort())
+                    liteData.put(76.toByte())
+                    
+                    // fix length
+                    val liteLen = liteData.position()
+                    liteData.putShort(0, (liteLen - 2).toShort())
+                    webSocket.send(okio.ByteString.of(*liteData.array()))
+                    Log.i(TAG, "[FYERS_MODE_SENT] Sent lite mode message")
+
+                    // 3. Send Subscribe message
+                    val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
+                        subscribedSymbols.toList()
+                    } else {
+                        listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
+                    }
+                    subscribedSymbols.addAll(symbolsToSub)
+                    
+                    // Scrips data length
+                    var scripsLen = 2
+                    for (scrip in symbolsToSub) {
+                        scripsLen += 1 + scrip.length
+                    }
+                    
+                    val subDataLen = 18 + scripsLen + hsmToken.length + source.length
+                    val subMsg = java.nio.ByteBuffer.allocate(subDataLen)
+                    subMsg.order(java.nio.ByteOrder.BIG_ENDIAN)
+                    subMsg.putShort((subDataLen - 2).toShort())
+                    subMsg.put(4.toByte()) // reqtype
+                    subMsg.put(2.toByte()) // field count
+                    
+                    // Field 1: Scrips
+                    subMsg.put(1.toByte())
+                    subMsg.putShort(scripsLen.toShort())
+                    
+                    subMsg.put((symbolsToSub.size shr 8).toByte())
+                    subMsg.put((symbolsToSub.size and 0xFF).toByte())
+                    for (scrip in symbolsToSub) {
+                        subMsg.put(scrip.length.toByte())
+                        subMsg.put(scrip.toByteArray(Charsets.US_ASCII))
+                    }
+                    
+                    // Field 2: Channel
+                    subMsg.put(2.toByte())
+                    subMsg.putShort(1.toShort())
+                    subMsg.put(1.toByte()) // channel_num = 1
+                    
+                    webSocket.send(okio.ByteString.of(*subMsg.array()))
+                    Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send Fyers auth/subscribe: ${e.message}")
+                }
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "[FYERS_MESSAGE_RECEIVED] Text message received")
+            override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                Log.d(TAG, "Fyers text message: $text")
+                if (text == "Ping") return
                 handleTextMessage(text)
             }
 
-            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
-                Log.d(TAG, "[FYERS_MESSAGE_RECEIVED] Binary message received (${bytes.size} bytes)")
+            override fun onMessage(webSocket: okhttp3.WebSocket, bytes: okio.ByteString) {
                 handleBinaryMessage(bytes.toByteArray())
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "[FYERS_DISCONNECTED] WebSocket closed: $code / $reason")
+            override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
                 isConnected = false
-                currentUrlIndex++
-                _connectionState.value = if (hasFirstTick) "LIVE" else "DISCONNECTED"
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, if (hasFirstTick) "CONNECTED" else "OFFLINE")
-                healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
+                _connectionState.value = "DISCONNECTED"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
+                Log.d(TAG, "FYERS WS closed: $code $reason")
                 scheduleReconnect()
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "[FYERS_DISCONNECTED] WebSocket failure on $url: ${t.message}")
+            override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
                 isConnected = false
-                currentUrlIndex++
-                _connectionState.value = if (hasFirstTick) "LIVE" else "ERROR"
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, if (hasFirstTick) "CONNECTED" else "OFFLINE")
-                healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS, t.message ?: "WebSocket failure")
+                _connectionState.value = "ERROR"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "ERROR")
+                Log.e(TAG, "FYERS WS error: ${t.message}")
                 scheduleReconnect()
             }
         })

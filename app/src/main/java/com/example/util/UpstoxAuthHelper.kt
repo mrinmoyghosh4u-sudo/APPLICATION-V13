@@ -5,7 +5,7 @@ import java.net.URLEncoder
 object UpstoxAuthHelper {
 
     const val DEFAULT_REDIRECT_URI = "https://application-beige-psi.vercel.app/oauth"
-    private const val AUTH_DIALOG_BASE = "https://api.upstox.com/v2/login/authorization/dialog"
+    private const val AUTH_DIALOG_BASE = "https://api-v2.upstox.com/v2/login/authorization/dialog"
 
     fun getAuthorizationUrl(
         apiKey: String,

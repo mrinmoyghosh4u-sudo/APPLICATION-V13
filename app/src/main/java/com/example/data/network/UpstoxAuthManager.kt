@@ -68,7 +68,7 @@ class UpstoxAuthManager(
                 var directExchangeError: String? = null
 
                 if (!secret.isNullOrBlank()) {
-                    // Direct official Upstox OAuth token exchange (POST https://api.upstox.com/v2/login/authorization/token)
+                    // Direct official Upstox OAuth token exchange (POST https://api-v2.upstox.com/v2/login/authorization/token)
                     Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Exchanging code directly via official Upstox API endpoint...")
                     val directRes = try {
                         upstoxApi.getAccessToken(
