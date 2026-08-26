@@ -24,6 +24,15 @@ class UpstoxAuthManager(
         exchangeMutex.lock()
         try {
             runCatching {
+                var cleanCode = authCode.trim()
+
+                // Check if user passed an access token directly (e.g. JWT starts with "ey" or token without code structure)
+                if (cleanCode.startsWith("ey", ignoreCase = true) || (cleanCode.length > 50 && !cleanCode.contains("&") && !cleanCode.contains("?") && !cleanCode.contains("="))) {
+                    Log.i(TAG, "[UPSTOX_DIRECT_TOKEN] Input recognized as direct Access Token, validating...")
+                    val tokenResult = authenticateWithToken(cleanCode)
+                    return@runCatching tokenResult.getOrThrow()
+                }
+
                 // If already authenticated and token valid, return existing token
                 val existingToken = sessionManager.upstoxAccessToken
                 if (!existingToken.isNullOrBlank() && sessionManager.isUpstoxConnected) {
@@ -46,7 +55,15 @@ class UpstoxAuthManager(
                 Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating Upstox authorization code exchange...")
                 Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
 
-                var cleanCode = authCode.trim()
+                if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {
+                    try {
+                        val parsedUri = android.net.Uri.parse(cleanCode)
+                        val extracted = parsedUri.getQueryParameter("code") ?: parsedUri.getQueryParameter("auth_code")
+                        if (!extracted.isNullOrBlank()) {
+                            cleanCode = extracted
+                        }
+                    } catch (_: Exception) {}
+                }
                 if (cleanCode.contains("code=")) {
                     cleanCode = cleanCode.substringAfter("code=").substringBefore("&")
                 }
@@ -72,7 +89,7 @@ class UpstoxAuthManager(
                         null
                     }
 
-                    if (directRes != null && directRes.isSuccessful && directRes.body()?.accessToken?.isNotBlank() == true) {
+                    if (directRes != null && directRes.isSuccessful && directRes.body()?.effectiveAccessToken?.isNotBlank() == true) {
                         tokenBody = directRes.body()
                     } else if (directRes != null) {
                         val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
@@ -91,13 +108,14 @@ class UpstoxAuthManager(
                             url = tokenExchangeUrl,
                             code = cleanCode,
                             redirectUri = redirectUri,
-                            clientId = apiKey
+                            clientId = apiKey,
+                            clientSecret = secret
                         )
                     } catch (e: Exception) {
                         null
                     }
 
-                    if (response != null && response.isSuccessful && response.body()?.accessToken?.isNotBlank() == true) {
+                    if (response != null && response.isSuccessful && response.body()?.effectiveAccessToken?.isNotBlank() == true) {
                         tokenBody = response.body()
                     } else {
                         val rawErr = response?.errorBody()?.string() ?: directExchangeError ?: "Token exchange failed"
@@ -109,7 +127,7 @@ class UpstoxAuthManager(
                 }
 
             val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
-            val accessToken = body.accessToken
+            val accessToken = body.effectiveAccessToken
             if (accessToken.isNullOrBlank()) {
                 _authStatus.value = BrokerAuthStatus.ERROR
                 Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Access Token is empty in response")
@@ -133,8 +151,8 @@ class UpstoxAuthManager(
 
             // Securely store credentials and tokens in encrypted storage
             sessionManager.upstoxAccessToken = accessToken
-            if (!body.refreshToken.isNullOrBlank()) {
-                sessionManager.upstoxRefreshToken = body.refreshToken
+            if (!body.effectiveRefreshToken.isNullOrBlank()) {
+                sessionManager.upstoxRefreshToken = body.effectiveRefreshToken
             }
             sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
             sessionManager.isUpstoxConnected = true
@@ -149,16 +167,38 @@ class UpstoxAuthManager(
         }
     }
 
+    suspend fun authenticateWithToken(token: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val cleanToken = token.trim().removePrefix("Bearer ").removePrefix("bearer ").trim()
+            if (cleanToken.isBlank()) {
+                throw Exception("Upstox Access Token cannot be blank")
+            }
+
+            Log.i(TAG, "[UPSTOX_DIRECT_AUTH] Authenticating directly with Upstox Access Token...")
+            validateUserProfile(cleanToken)
+
+            sessionManager.upstoxAccessToken = cleanToken
+            sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
+            sessionManager.isUpstoxConnected = true
+
+            Log.i(TAG, "[BROKER_CONNECTED] Upstox session successfully connected and authenticated via token")
+            Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox direct token authenticated")
+            _authStatus.value = BrokerAuthStatus.CONNECTED
+            cleanToken
+        }
+    }
+
     private suspend fun validateUserProfile(accessToken: String) {
         val authHeader = if (accessToken.startsWith("Bearer ", ignoreCase = true)) accessToken else "Bearer $accessToken"
         val profileRes = upstoxApi.getUserProfile(authHeader)
         if (profileRes.isSuccessful) {
             val body = profileRes.body()
-            if (body == null || !body.status.equals("success", ignoreCase = true)) {
-                val statusMsg = body?.status ?: "null"
+            if (body != null && (body.status.equals("success", ignoreCase = true) || body.data != null)) {
+                Log.d(TAG, "Upstox profile validated: user=${body.data?.userName ?: body.data?.userId ?: "User"}")
+            } else {
+                val statusMsg = body?.status ?: "HTTP ${profileRes.code()}"
                 throw Exception("Upstox Profile Validation Failed: response status is '$statusMsg'")
             }
-            Log.d(TAG, "Upstox profile validated: user=${body.data?.userName ?: ""}")
         } else {
             val errBody = profileRes.errorBody()?.string() ?: "HTTP ${profileRes.code()}"
             throw Exception("Upstox Profile Validation Failed (${profileRes.code()}): $errBody")

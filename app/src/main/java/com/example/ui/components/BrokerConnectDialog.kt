@@ -321,10 +321,77 @@ fun BrokerConnectDialog(
                                         Text("U", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("LOGIN WITH UPSTOX", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("LOGIN WITH UPSTOX (BROWSER)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
+                            Text(
+                                "  OR MANUAL CODE / TOKEN  ",
+                                color = TextGray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = upstoxAuthCode,
+                            onValueChange = { upstoxAuthCode = it },
+                            label = { Text("Auth Code / Callback URL / Access Token") },
+                            placeholder = { Text("Paste code, redirect URL or token", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = Color(0xFF673AB7),
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = Color(0xFF673AB7),
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                val codeOrToken = upstoxAuthCode.trim()
+                                val keyToUse = upstoxApiKey.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiKey
+                                val secretToUse = upstoxApiSecret.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.upstoxApiSecret
+                                val redirectUriToUse = upstoxRedirectUri.trim().takeIf { it.isNotBlank() } ?: "https://application-beige-psi.vercel.app/oauth"
+                                
+                                if (codeOrToken.isBlank()) {
+                                    localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
+                                } else {
+                                    localErrorMsg = null
+                                    sessionManager.saveUpstoxCredentials(keyToUse, secretToUse, redirectUriToUse)
+                                    onUpstoxLogin?.invoke(keyToUse, secretToUse, codeOrToken)
+                                }
+                            },
+                            enabled = !isAuthInProgress && upstoxAuthCode.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFB39DDB)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF673AB7))
+                        ) {
+                            Text("CONNECT WITH CODE / TOKEN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "Registered Redirect URI: https://application-beige-psi.vercel.app/oauth",
+                            color = TextGray,
+                            fontSize = 10.sp
+                        )
                     }
                     "m.Stock" -> {
                         Row(
@@ -574,6 +641,74 @@ fun BrokerConnectDialog(
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
+                            Text(
+                                "  OR MANUAL CODE / TOKEN  ",
+                                color = TextGray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = DarkCardBorder)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = fyersAuthCode,
+                            onValueChange = { fyersAuthCode = it },
+                            label = { Text("Auth Code / Callback URL / Access Token") },
+                            placeholder = { Text("Paste code, redirect URL or token", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = ProfitGreen,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedLabelColor = ProfitGreen,
+                                unfocusedLabelColor = TextGray,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                val codeOrToken = fyersAuthCode.trim()
+                                val appToUse = fyersAppId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersAppId
+                                val secretToUse = fyersSecretId.trim().takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.fyersSecretId
+                                val redirectUriToUse = fyersRedirectUri.trim().takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+                                
+                                if (codeOrToken.isBlank()) {
+                                    localErrorMsg = "Please enter an Auth Code, Callback URL, or Access Token."
+                                } else {
+                                    localErrorMsg = null
+                                    sessionManager.saveFyersCredentials(appToUse, secretToUse, redirectUriToUse)
+                                    onFyersLogin?.invoke(appToUse, secretToUse, codeOrToken)
+                                }
+                            },
+                            enabled = !isAuthInProgress && fyersAuthCode.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = ProfitGreen
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ProfitGreen)
+                        ) {
+                            Text("CONNECT WITH CODE / TOKEN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "Registered Redirect URI: https://application-beige-psi.vercel.app/oauth",
+                            color = TextGray,
+                            fontSize = 10.sp
+                        )
                     }
                     "Angel One" -> {
                         Row(

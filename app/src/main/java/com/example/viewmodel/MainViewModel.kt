@@ -584,10 +584,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = null
 
             val cleanedCode = parseAuthCodeInput(authCode)
-            val cleanKey = apiKey.trim()
-            val cleanSecret = apiSecret.trim()
+            var cleanKey = apiKey.trim().takeIf { it.isNotBlank() }
+                ?: sessionManager.upstoxApiKey.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.upstoxApiKey.takeIf { it.isNotBlank() }
+                ?: ""
+            var cleanSecret = apiSecret.trim().takeIf { it.isNotBlank() }
+                ?: sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.upstoxApiSecret.takeIf { it.isNotBlank() }
+                ?: ""
 
-            if (cleanKey.isBlank()) {
+            val isDirectToken = cleanedCode.startsWith("ey", ignoreCase = true) || 
+                (cleanedCode.length > 50 && !cleanedCode.contains("&") && !cleanedCode.contains("?") && !cleanedCode.contains("="))
+
+            if (cleanKey.isBlank() && !isDirectToken) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Upstox API Key is required"
                 brokerManager.healthManager.reportAuthFailure(
@@ -600,7 +609,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
-                _authErrorMessage.value = "Upstox Auth Code is required"
+                _authErrorMessage.value = "Upstox Auth Code or Access Token is required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX,
                     com.example.data.network.ProviderHealthManager.STATE_AUTH_CODE_MISSING,
@@ -609,12 +618,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            sessionManager.upstoxApiKey = cleanKey
-            sessionManager.upstoxApiSecret = cleanSecret
+            if (cleanKey.isNotBlank()) sessionManager.upstoxApiKey = cleanKey
+            if (cleanSecret.isNotBlank()) sessionManager.upstoxApiSecret = cleanSecret
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, true)
             brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
 
-            val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
+            val res = if (isDirectToken) {
+                brokerManager.upstoxAuthManager.authenticateWithToken(cleanedCode)
+            } else {
+                brokerManager.upstoxAuthManager.exchangeAuthCode(cleanedCode)
+            }
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
@@ -626,7 +639,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.upstoxMarketDataService.connect()
-                alertService.notifyBrokerConnected("Upstox", account = cleanKey)
+                alertService.notifyBrokerConnected("Upstox", account = cleanKey.ifBlank { "Upstox User" })
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
                 brokerAuthManager.updateStatus("Upstox", "Primary Market Data", com.example.data.network.BrokerAuthStatus.ERROR, "Authentication failed: $err")
@@ -651,10 +664,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = null
 
             val cleanedCode = parseAuthCodeInput(authCode)
-            val cleanAppId = appId.trim()
-            val cleanSecretId = secretId.trim()
+            var cleanAppId = appId.trim().takeIf { it.isNotBlank() }
+                ?: sessionManager.fyersAppId.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.fyersAppId.takeIf { it.isNotBlank() }
+                ?: ""
+            var cleanSecretId = secretId.trim().takeIf { it.isNotBlank() }
+                ?: sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
+                ?: ""
 
-            if (cleanAppId.isBlank()) {
+            val isDirectToken = cleanedCode.startsWith("ey", ignoreCase = true) ||
+                (cleanedCode.length > 50 && !cleanedCode.contains("&") && !cleanedCode.contains("?") && !cleanedCode.contains("="))
+
+            if (cleanAppId.isBlank() && !isDirectToken) {
                 _isAuthInProgress.value = false
                 _authErrorMessage.value = "Fyers App ID is required"
                 brokerManager.healthManager.reportAuthFailure(
@@ -667,7 +689,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             if (cleanedCode.isBlank()) {
                 _isAuthInProgress.value = false
-                _authErrorMessage.value = "Fyers Auth Code is required"
+                _authErrorMessage.value = "Fyers Auth Code or Access Token is required"
                 brokerManager.healthManager.reportAuthFailure(
                     com.example.data.network.ProviderHealthManager.PROVIDER_FYERS,
                     com.example.data.network.ProviderHealthManager.STATE_AUTH_CODE_MISSING,
@@ -676,14 +698,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            sessionManager.fyersAppId = cleanAppId
-            if (cleanSecretId.isNotBlank()) {
-                sessionManager.fyersSecretId = cleanSecretId
-            }
+            if (cleanAppId.isNotBlank()) sessionManager.fyersAppId = cleanAppId
+            if (cleanSecretId.isNotBlank()) sessionManager.fyersSecretId = cleanSecretId
             brokerManager.healthManager.reportConfigured(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, true)
             brokerManager.healthManager.reportTokenExchange(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
 
-            val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
+            val res = if (isDirectToken) {
+                brokerManager.fyersAuthManager.authenticateWithToken(cleanedCode)
+            } else {
+                brokerManager.fyersAuthManager.exchangeAuthCode(cleanedCode)
+            }
             _isAuthInProgress.value = false
 
             if (res.isSuccess) {
@@ -695,7 +719,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authSuccessEvent.value = true
                 _showConnectDialog.value = false
                 brokerManager.fyersMarketDataService.connect()
-                alertService.notifyBrokerConnected("Fyers", account = cleanAppId)
+                alertService.notifyBrokerConnected("Fyers", account = cleanAppId.ifBlank { "Fyers User" })
             } else {
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
                 brokerAuthManager.updateStatus("Fyers", "Fallback #1 Market Data", com.example.data.network.BrokerAuthStatus.ERROR, "Authentication failed: $err")

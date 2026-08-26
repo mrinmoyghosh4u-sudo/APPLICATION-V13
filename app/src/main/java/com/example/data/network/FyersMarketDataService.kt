@@ -71,6 +71,15 @@ class FyersMarketDataService(
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
+    private val WS_URL_CANDIDATES = listOf(
+        "wss://socket.fyers.in/socket/v2/data/",
+        "wss://api-t1.fyers.in/socket/v2/data/",
+        "wss://socket.fyers.in/hsm/v1-5/prod",
+        "wss://api.fyers.in/socket/v2/data/"
+    )
+    private var currentUrlIndex = 0
+    private var restPollingJob: Job? = null
+
     fun isConfigured(): Boolean {
         return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
     }
@@ -87,7 +96,58 @@ class FyersMarketDataService(
         _connectionState.value = "AUTHENTICATED"
         reconnectJob?.cancel()
         backoffDelayMs = 2000L
+        startRestPolling()
         connectWebSocket()
+    }
+
+    private fun startRestPolling() {
+        if (restPollingJob?.isActive == true) return
+        restPollingJob = scope.launch {
+            while (isConfigured()) {
+                try {
+                    val appId = sessionManager.fyersAppId
+                    val token = sessionManager.fyersAccessToken
+                    if (!appId.isNullOrBlank() && !token.isNullOrBlank()) {
+                        val authHeader = "$appId:$token"
+                        val symbolsToFetch = if (subscribedSymbols.isNotEmpty()) {
+                            subscribedSymbols.map { getFyersSymbol(it) }.distinct()
+                        } else {
+                            listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX")
+                        }
+                        val csv = symbolsToFetch.joinToString(",")
+                        val res = fyersApi.getQuotes(authHeader, csv)
+                        if (res.isSuccessful && res.body()?.s == "ok" && res.body()?.d != null) {
+                            val quotes = res.body()?.d.orEmpty()
+                            for (q in quotes) {
+                                val sym = q.v?.original_name ?: q.n ?: q.v?.symbol ?: ""
+                                val ltp = q.v?.lp ?: Double.NaN
+                                if (sym.isNotBlank() && !ltp.isNaN() && ltp > 0.0) {
+                                    val op = q.v?.open_price ?: ltp
+                                    val hi = q.v?.high_price ?: ltp
+                                    val lo = q.v?.low_price ?: ltp
+                                    val cl = q.v?.prev_close_price ?: ltp
+                                    val vol = q.v?.volume ?: 0L
+                                    val tt = q.v?.tt ?: System.currentTimeMillis()
+                                    processValidTick(
+                                        rawSymbol = sym,
+                                        ltp = ltp,
+                                        open = op,
+                                        high = hi,
+                                        low = lo,
+                                        close = cl,
+                                        volume = vol,
+                                        ts = tt
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "FYERS REST quote poll error: ${e.message}")
+                }
+                delay(2000L)
+            }
+        }
     }
 
     private fun connectWebSocket() {
@@ -106,7 +166,8 @@ class FyersMarketDataService(
         }
         
         val fyersToken = "$appId:$token"
-        val url = "wss://api.fyers.in/socket/v2/data/"
+        val url = WS_URL_CANDIDATES[currentUrlIndex % WS_URL_CANDIDATES.size]
+        Log.i(TAG, "[FYERS_WS_CONNECTING] Connecting to $url...")
         
         val request = Request.Builder()
             .url(url)
@@ -115,7 +176,7 @@ class FyersMarketDataService(
             
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "[FYERS_WS_OPEN] FYERS WebSocket connected")
+                Log.i(TAG, "[FYERS_WS_OPEN] FYERS WebSocket connected to $url")
                 isConnected = true
                 backoffDelayMs = 2000L
                 _connectionState.value = "CONNECTED"
@@ -159,17 +220,19 @@ class FyersMarketDataService(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.w(TAG, "[FYERS_DISCONNECTED] WebSocket closed: $code / $reason")
                 isConnected = false
-                _connectionState.value = "DISCONNECTED"
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
+                currentUrlIndex++
+                _connectionState.value = if (hasFirstTick) "LIVE" else "DISCONNECTED"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, if (hasFirstTick) "CONNECTED" else "OFFLINE")
                 healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "[FYERS_DISCONNECTED] WebSocket failure: ${t.message}")
+                Log.e(TAG, "[FYERS_DISCONNECTED] WebSocket failure on $url: ${t.message}")
                 isConnected = false
-                _connectionState.value = "ERROR"
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
+                currentUrlIndex++
+                _connectionState.value = if (hasFirstTick) "LIVE" else "ERROR"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, if (hasFirstTick) "CONNECTED" else "OFFLINE")
                 healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS, t.message ?: "WebSocket failure")
                 scheduleReconnect()
             }
@@ -190,6 +253,8 @@ class FyersMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
+        restPollingJob?.cancel()
+        restPollingJob = null
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         isConnected = false

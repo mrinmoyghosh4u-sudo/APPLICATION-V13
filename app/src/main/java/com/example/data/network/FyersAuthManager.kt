@@ -21,6 +21,15 @@ class FyersAuthManager(
         exchangeMutex.lock()
         try {
             runCatching {
+                var cleanCode = authCode.trim()
+
+                // Check if user passed an access token directly (e.g. JWT starts with "ey" or raw token)
+                if (cleanCode.startsWith("ey", ignoreCase = true) || (cleanCode.length > 50 && !cleanCode.contains("&") && !cleanCode.contains("?") && !cleanCode.contains("="))) {
+                    Log.i(TAG, "[FYERS_DIRECT_TOKEN] Input recognized as direct Access Token, validating...")
+                    val tokenResult = authenticateWithToken(cleanCode)
+                    return@runCatching tokenResult.getOrThrow()
+                }
+
                 // If already authenticated and token valid, return existing token
                 val existingToken = sessionManager.fyersAccessToken
                 if (!existingToken.isNullOrBlank() && sessionManager.isFyersConnected) {
@@ -41,7 +50,15 @@ class FyersAuthManager(
                     ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
                 val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
-                var cleanCode = authCode.trim()
+                if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {
+                    try {
+                        val parsedUri = android.net.Uri.parse(cleanCode)
+                        val extracted = parsedUri.getQueryParameter("auth_code") ?: parsedUri.getQueryParameter("code")
+                        if (!extracted.isNullOrBlank()) {
+                            cleanCode = extracted
+                        }
+                    } catch (_: Exception) {}
+                }
                 if (cleanCode.contains("auth_code=")) {
                     cleanCode = cleanCode.substringAfter("auth_code=").substringBefore("&")
                 }
@@ -82,7 +99,11 @@ class FyersAuthManager(
 
                 // Fallback to secure backend endpoint if direct failed or secret missing
                 if (tokenBody == null) {
-                    val backendBase = redirectUri.substringBefore("/oauth")
+                    val backendBase = if (redirectUri.startsWith("http://") || redirectUri.startsWith("https://")) {
+                        redirectUri.substringBefore("/oauth").substringBefore("/api").trimEnd('/')
+                    } else {
+                        "https://application-beige-psi.vercel.app"
+                    }
                     val tokenExchangeUrl = "$backendBase/api/fyers-token-exchange"
                     Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Exchanging code via secure backend endpoint: $tokenExchangeUrl...")
                     val response = try {
@@ -108,7 +129,7 @@ class FyersAuthManager(
 
             val body = tokenBody ?: throw Exception("TOKEN_EXCHANGE_FAILED: Empty response body")
 
-            if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
+            if ((body.s == "ok" || body.code == 200 || body.code == null) && !body.access_token.isNullOrBlank()) {
                 val accessToken = body.access_token
                 Log.i(TAG, "[TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
                 Log.i(TAG, "[FYERS_TOKEN_EXCHANGE_SUCCESS] FYERS Access Token obtained successfully")
@@ -151,6 +172,39 @@ class FyersAuthManager(
         }
         } finally {
             exchangeMutex.unlock()
+        }
+    }
+
+    suspend fun authenticateWithToken(token: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val cleanToken = token.trim().removePrefix("Bearer ").removePrefix("bearer ").trim()
+            if (cleanToken.isBlank()) {
+                throw Exception("FYERS Access Token cannot be blank")
+            }
+
+            val rawAppId = sessionManager.fyersAppId.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.fyersAppId.takeIf { it.isNotBlank() }
+                ?: throw Exception("FYERS App ID is missing")
+            val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
+            val authHeader = if (cleanToken.contains(":")) cleanToken else "$fullAppId:$cleanToken"
+
+            Log.i(TAG, "[FYERS_DIRECT_AUTH] Authenticating directly with FYERS Access Token...")
+            val profileRes = fyersApi.getProfile(authHeader)
+            if (!profileRes.isSuccessful || profileRes.body()?.s != "ok") {
+                val pErr = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                Log.e(TAG, "[FYERS_TOKEN_INVALID] Profile validation failed: $pErr")
+                throw Exception("PROFILE_VALIDATION_FAILED: $pErr")
+            }
+
+            val finalToken = if (cleanToken.contains(":")) cleanToken.substringAfter(":") else cleanToken
+            sessionManager.fyersAccessToken = finalToken
+            sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
+            sessionManager.isFyersConnected = true
+
+            Log.i(TAG, "[BROKER_CONNECTED] FYERS direct token successfully authenticated")
+            Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS direct token authenticated")
+            _authStatus.value = BrokerAuthStatus.CONNECTED
+            finalToken
         }
     }
 

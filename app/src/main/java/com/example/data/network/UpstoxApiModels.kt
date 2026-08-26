@@ -20,8 +20,21 @@ data class UpstoxTokenResponse(
     @Json(name = "products") val products: List<String>? = null,
     @Json(name = "order_types") val orderTypes: List<String>? = null,
     @Json(name = "status") val status: String? = null,
-    @Json(name = "errors") val errors: List<UpstoxApiError>? = null
-)
+    @Json(name = "errors") val errors: List<UpstoxApiError>? = null,
+    @Json(name = "data") val data: UpstoxTokenData? = null
+) {
+    val effectiveAccessToken: String?
+        get() = accessToken?.takeIf { it.isNotBlank() } ?: data?.accessToken?.takeIf { it.isNotBlank() }
+
+    val effectiveRefreshToken: String?
+        get() = refreshToken?.takeIf { it.isNotBlank() } ?: data?.refreshToken?.takeIf { it.isNotBlank() }
+
+    val effectiveUserId: String?
+        get() = userId?.takeIf { it.isNotBlank() } ?: data?.userId?.takeIf { it.isNotBlank() }
+
+    val effectiveUserName: String?
+        get() = userName?.takeIf { it.isNotBlank() } ?: data?.userName?.takeIf { it.isNotBlank() }
+}
 
 @JsonClass(generateAdapter = true)
 data class UpstoxTokenData(

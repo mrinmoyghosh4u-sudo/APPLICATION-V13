@@ -1,25 +1,25 @@
 const https = require('https');
 
-// In-memory set of consumed auth codes to guarantee idempotency and prevent duplicate upstream exchange
-const consumedCodes = new Map();
+// In-memory cache of successful token exchanges (code -> token response) to handle retries seamlessly
+const tokenCache = new Map();
 
-function isCodeConsumed(code) {
+function getCachedToken(code) {
   const clean = (code || '').trim();
-  if (!clean) return true;
-  const entry = consumedCodes.get(clean);
-  if (!entry) return false;
+  if (!clean) return null;
+  const entry = tokenCache.get(clean);
+  if (!entry) return null;
   // Expire after 10 minutes
-  if (Date.now() - entry > 10 * 60 * 1000) {
-    consumedCodes.delete(clean);
-    return false;
+  if (Date.now() - entry.timestamp > 10 * 60 * 1000) {
+    tokenCache.delete(clean);
+    return null;
   }
-  return true;
+  return entry.response;
 }
 
-function markCodeConsumed(code) {
+function cacheToken(code, response) {
   const clean = (code || '').trim();
-  if (clean) {
-    consumedCodes.set(clean, Date.now());
+  if (clean && response) {
+    tokenCache.set(clean, { timestamp: Date.now(), response });
   }
 }
 
@@ -84,15 +84,11 @@ module.exports = async (req, res) => {
     return res.status(400).json({ status: "error", error: "Missing authorization code" });
   }
 
-  if (isCodeConsumed(code)) {
-    return res.status(400).json({
-      status: "error",
-      error: "AUTH_CODE_ALREADY_USED: This authorization code has already been exchanged or expired. A new login is required."
-    });
+  // Return cached token if already exchanged successfully
+  const cachedResponse = getCachedToken(code);
+  if (cachedResponse) {
+    return res.status(200).json(cachedResponse);
   }
-
-  // Mark consumed before making the upstream request to prevent concurrent race-condition replays
-  markCodeConsumed(code);
 
   if (!clientId || !clientSecret) {
     return res.status(500).json({
@@ -133,6 +129,9 @@ module.exports = async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         try {
           const jsonResponse = JSON.parse(body);
+          if (postRes.statusCode >= 200 && postRes.statusCode < 300 && (jsonResponse.access_token || jsonResponse.data?.access_token)) {
+            cacheToken(code, jsonResponse);
+          }
           res.status(postRes.statusCode).json(jsonResponse);
         } catch (e) {
           res.status(postRes.statusCode).send(body);

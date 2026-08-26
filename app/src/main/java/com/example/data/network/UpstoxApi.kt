@@ -27,7 +27,8 @@ interface UpstoxApi {
         @retrofit2.http.Url url: String,
         @Query("code") code: String,
         @Query("redirect_uri") redirectUri: String,
-        @Query("client_id") clientId: String? = null
+        @Query("client_id") clientId: String? = null,
+        @Query("client_secret") clientSecret: String? = null
     ): Response<UpstoxTokenResponse>
 
     @GET("v2/user/profile")
