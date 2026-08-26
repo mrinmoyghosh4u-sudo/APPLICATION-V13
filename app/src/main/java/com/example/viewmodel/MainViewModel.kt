@@ -760,7 +760,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         android.util.Log.i("UpstoxAuth", "[OAUTH_STARTED] Upstox OAuth started, state=$randomState")
         android.util.Log.i("UpstoxAuth", "[UPSTOX_AUTHORIZATION_STARTED] Initialized Upstox OAuth with state=$randomState")
         brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
-        brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
         
         android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX)
@@ -801,7 +800,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         android.util.Log.i("FyersAuth", "[OAUTH_STARTED] Fyers OAuth started, state=$randomState")
         android.util.Log.i("FyersAuth", "[FYERS_AUTHORIZATION_STARTED] Initialized Fyers OAuth with state=$randomState")
         brokerManager.healthManager.reportAuthenticating(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
-        brokerManager.healthManager.reportAuthFailure(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, com.example.data.network.ProviderHealthManager.STATE_AUTHORIZATION_STARTED, "Authorization started")
         
         android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS)
