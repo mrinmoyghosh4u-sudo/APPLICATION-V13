@@ -118,6 +118,6 @@ class Phase1ProviderHealthTest {
 
         val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK)
         assertTrue("Valid binary tick MUST report tick received and set LIVE", state.firstTickReceived)
-        assertEquals("LIVE", state.status)
+        assertEquals("LIVE", healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK).status)
     }
 }
