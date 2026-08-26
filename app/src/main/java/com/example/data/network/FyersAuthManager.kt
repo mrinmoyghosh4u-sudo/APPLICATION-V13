@@ -53,14 +53,14 @@ class FyersAuthManager(
 
                 if (!storedState.isNullOrBlank()) {
                     if (!extractedState.isNullOrBlank() && extractedState != storedState) {
-                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISMATCH] Returned state '$extractedState' != stored state '$storedState'")
+                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISMATCH] Returned OAuth state does not match stored state")
                         throw Exception("OAUTH_STATE_MISMATCH: Invalid state token in OAuth callback")
                     }
                 }
 
                 // 2. Prevent reuse of authorization code (Single-use enforcement)
                 if (consumedAuthCodes.contains(cleanCode) || sessionManager.lastProcessedOAuthCode == cleanCode) {
-                    Log.e(TAG, "[FYERS_CODE_REUSED] Authorization code '$cleanCode' has already been consumed")
+                    Log.e(TAG, "[FYERS_CODE_REUSED] Authorization code has already been consumed")
                     throw Exception("AUTHORIZATION_CODE_REUSED: This code was already used. Please login again.")
                 }
 
