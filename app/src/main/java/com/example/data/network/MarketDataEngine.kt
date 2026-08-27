@@ -199,6 +199,8 @@ class MarketDataEngine(
         return Result.failure(Exception("REAL EXPIRIES UNAVAILABLE"))
     }
 
+    
+    
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val cal = java.util.Calendar.getInstance()
@@ -256,7 +258,7 @@ class MarketDataEngine(
         return Result.failure(Exception("REAL HISTORICAL DATA UNAVAILABLE"))
     }
 
-    suspend fun getMarketBreadth(): Result<MarketBreadth> {
+suspend fun getMarketBreadth(): Result<MarketBreadth> {
         // Exchange-wide market breadth requires real upstream breadth feed from provider.
         // Never calculate exchange breadth from a small hardcoded sample list.
         return Result.failure(Exception("ADVANCE/DECLINE DATA UNAVAILABLE"))

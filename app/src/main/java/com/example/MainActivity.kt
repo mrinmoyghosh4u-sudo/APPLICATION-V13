@@ -467,6 +467,9 @@ class MainActivity : FragmentActivity() {
                                                 val encodedIndexName = android.net.Uri.encode(indexName)
                                                 navController.navigate("index_details/$exchange/$encodedIndexName")
                                             },
+                                            onGetHistoricalCandles = { symbol, interval, callback ->
+                                                viewModel.getHistoricalCandlesForIndex(symbol, interval, callback)
+                                            },
                                             isRefreshing = isRefreshing,
                                             onRefresh = {
                                                 viewModel.refreshMarketData()

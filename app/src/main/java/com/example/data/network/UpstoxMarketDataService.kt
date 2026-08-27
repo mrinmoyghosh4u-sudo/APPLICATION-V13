@@ -556,7 +556,8 @@ class UpstoxMarketDataService(
             val auth = getAuthHeader()
             val instKey = UpstoxSymbolMapper.toUpstoxInstrumentKey(symbol)
 
-            val targetExpiry = if (expiry.isNotBlank()) expiry else {
+            val apiExpiry = com.example.util.OptionExpiryUtil.formatForApi(expiry)
+            val targetExpiry = if (apiExpiry.isNotBlank()) apiExpiry else {
                 val expiries = getOptionExpiries(symbol).getOrNull()
                 expiries?.firstOrNull() ?: throw Exception("No option expiries available for $symbol")
             }

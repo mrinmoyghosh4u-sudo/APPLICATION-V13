@@ -130,3 +130,41 @@ data class InstrumentInfo(
     val tickSize: Double = 0.05,
     val instrumentType: String = "EQUITY" // EQUITY, INDEX, FUTIDX, OPTIDX, FUTSTK, OPTSTK, COMMODITY
 )
+
+data class InstrumentIdentity(
+    val exchange: String, // "NSE", "BSE", "MCX", "NFO", "BFO"
+    val segment: String = "INDEX", // "INDEX", "EQ", "FO", "COMM"
+    val instrumentKey: String, // Canonical key e.g. "NSE_INDEX|Nifty 50", "MCX_FO|CRUDEOIL"
+    val symbol: String, // "NIFTY", "SENSEX", "CRUDEOIL", "NIFTY 24500 CE"
+    val displayName: String = symbol,
+    val instrumentType: String = "INDEX", // "INDEX", "EQUITY", "FUTURES", "OPTIONS", "COMMODITY"
+    val underlying: String = symbol,
+    val expiry: String = "",
+    val strike: Double = 0.0,
+    val optionType: String = "", // "CE", "PE", or ""
+    val lotSize: Int = 1,
+    val tickSize: Double = 0.05
+) {
+    val isIndex: Boolean
+        get() = instrumentType.equals("INDEX", ignoreCase = true) || segment.equals("INDEX", ignoreCase = true)
+
+    val isCommodity: Boolean
+        get() = exchange.equals("MCX", ignoreCase = true) || instrumentType.equals("COMMODITY", ignoreCase = true)
+
+    val isDerivative: Boolean
+        get() = instrumentType.equals("OPTIONS", ignoreCase = true) || instrumentType.equals("FUTURES", ignoreCase = true) || segment.contains("FO", ignoreCase = true)
+
+    val isOption: Boolean
+        get() = instrumentType.equals("OPTIONS", ignoreCase = true) || optionType.isNotBlank()
+
+    val supportsOptions: Boolean
+        get() {
+            val upper = (if (underlying.isNotBlank()) underlying else symbol).uppercase().trim()
+            return when {
+                upper in listOf("NIFTY", "NIFTY 50", "BANKNIFTY", "NIFTY BANK", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX") -> true
+                exchange.equals("MCX", ignoreCase = true) && (upper.contains("CRUDE") || upper.contains("NATURALGAS") || upper.contains("GOLD") || upper.contains("SILVER") || upper.contains("COPPER")) -> true
+                upper in listOf("RELIANCE", "TATASTEEL", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "TCS", "ITC", "AXISBANK", "LT", "BHARTIARTL", "KOTAKBANK", "BAJFINANCE", "MARUTI", "TATAMOTORS", "WIPRO", "HCLTECH", "ASIANPAINT", "TITAN", "SUNPHARMA") -> true
+                else -> isDerivative
+            }
+        }
+}

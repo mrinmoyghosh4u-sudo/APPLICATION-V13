@@ -77,6 +77,27 @@ object MarketDataStore {
     val marketData: StateFlow<Map<String, MarketDataState>> = _marketData.asStateFlow()
 
     // Authoritative Unified Provider State
+    // Source-specific symbol maps (source -> (symbol -> tick))
+    private val sourceSymbolMaps = ConcurrentHashMap<String, ConcurrentHashMap<String, MarketDataState>>().apply {
+        put(MarketDataSourceNames.UPSTOX, ConcurrentHashMap())
+        put(MarketDataSourceNames.FYERS, ConcurrentHashMap())
+        put(MarketDataSourceNames.ANGEL_ONE, ConcurrentHashMap())
+        put(MarketDataSourceNames.MSTOCK, ConcurrentHashMap())
+        put("REFERENCE", ConcurrentHashMap())
+    }
+
+    // Source-specific composite key maps (source -> (compositeKey -> tick))
+    private val sourceCompositeMaps = ConcurrentHashMap<String, ConcurrentHashMap<String, MarketDataState>>().apply {
+        put(MarketDataSourceNames.UPSTOX, ConcurrentHashMap())
+        put(MarketDataSourceNames.FYERS, ConcurrentHashMap())
+        put(MarketDataSourceNames.ANGEL_ONE, ConcurrentHashMap())
+        put(MarketDataSourceNames.MSTOCK, ConcurrentHashMap())
+        put("REFERENCE", ConcurrentHashMap())
+    }
+
+    @Volatile
+    private var lastActiveSource = "NONE"
+
     private val _providerState = MutableStateFlow(MarketDataProviderState())
     val providerState: StateFlow<MarketDataProviderState> = _providerState.asStateFlow()
 
@@ -152,10 +173,108 @@ object MarketDataStore {
                     _mStockHealth.value = "STALE"
                 }
 
+                // Run check and switch check in case of stale failover
+                checkAndSwitchActiveSource(now, staleThreshold)
+
                 // Update Authoritative Provider State
                 recalculateAuthoritativeProviderState(now, staleThreshold)
             }
         }
+    }
+
+    fun getActiveLiveSource(now: Long, staleThreshold: Long): String {
+        val lastUpstox = sourceLastUpdate[MarketDataSourceNames.UPSTOX] ?: 0L
+        val lastFyers = sourceLastUpdate[MarketDataSourceNames.FYERS] ?: 0L
+        val lastAngel = sourceLastUpdate[MarketDataSourceNames.ANGEL_ONE] ?: 0L
+        val lastMStock = sourceLastUpdate[MarketDataSourceNames.MSTOCK] ?: 0L
+
+        return when {
+            lastUpstox > 0 && (now - lastUpstox <= staleThreshold) && _upstoxHealth.value == "LIVE" -> MarketDataSourceNames.UPSTOX
+            lastFyers > 0 && (now - lastFyers <= staleThreshold) && _fyersHealth.value == "LIVE" -> MarketDataSourceNames.FYERS
+            lastAngel > 0 && (now - lastAngel <= staleThreshold) && _angelOneHealth.value == "LIVE" -> MarketDataSourceNames.ANGEL_ONE
+            lastMStock > 0 && (now - lastMStock <= staleThreshold) && _mStockHealth.value == "LIVE" -> MarketDataSourceNames.MSTOCK
+            else -> "NONE"
+        }
+    }
+
+    private fun getSourcePriority(source: String): Int {
+        return when (source) {
+            MarketDataSourceNames.UPSTOX -> 4
+            MarketDataSourceNames.FYERS -> 3
+            MarketDataSourceNames.ANGEL_ONE -> 2
+            MarketDataSourceNames.MSTOCK -> 1
+            else -> 0
+        }
+    }
+
+    @Synchronized
+    private fun checkAndSwitchActiveSource(now: Long, staleThreshold: Long) {
+        val activeSource = getActiveLiveSource(now, staleThreshold)
+        if (activeSource != "NONE" && activeSource != lastActiveSource) {
+            val oldSource = lastActiveSource
+            lastActiveSource = activeSource
+            Log.i("MarketDataStore", "[SOURCE_FAILOVER] Switching authoritative source from $oldSource to $activeSource")
+
+            // Clear current active maps
+            symbolIndex.clear()
+            compositeMap.clear()
+
+            // Copy new active source's ticks into main maps
+            val sourceSymMap = sourceSymbolMaps[activeSource]
+            if (sourceSymMap != null) {
+                symbolIndex.putAll(sourceSymMap)
+            }
+            val sourceCompMap = sourceCompositeMaps[activeSource]
+            if (sourceCompMap != null) {
+                compositeMap.putAll(sourceCompMap)
+            }
+
+            // Also copy REFERENCE data for symbols that the new source doesn't have yet
+            val refSymMap = sourceSymbolMaps["REFERENCE"]
+            if (refSymMap != null) {
+                for ((k, v) in refSymMap) {
+                    if (!symbolIndex.containsKey(k)) {
+                        symbolIndex[k] = v
+                    }
+                }
+            }
+            val refCompMap = sourceCompositeMaps["REFERENCE"]
+            if (refCompMap != null) {
+                for ((k, v) in refCompMap) {
+                    if (!compositeMap.containsKey(k)) {
+                        compositeMap[k] = v
+                    }
+                }
+            }
+
+            _marketData.value = HashMap(symbolIndex)
+        } else if (activeSource == "NONE" && lastActiveSource == "NONE") {
+            val bestFallback = getBestAvailableSource()
+            if (bestFallback != "NONE") {
+                lastActiveSource = bestFallback
+                val sourceSymMap = sourceSymbolMaps[bestFallback]
+                if (sourceSymMap != null) symbolIndex.putAll(sourceSymMap)
+                val sourceCompMap = sourceCompositeMaps[bestFallback]
+                if (sourceCompMap != null) compositeMap.putAll(sourceCompMap)
+                _marketData.value = HashMap(symbolIndex)
+            }
+        }
+    }
+
+    private fun getBestAvailableSource(): String {
+        val sources = listOf(
+            MarketDataSourceNames.UPSTOX,
+            MarketDataSourceNames.FYERS,
+            MarketDataSourceNames.ANGEL_ONE,
+            MarketDataSourceNames.MSTOCK
+        )
+        for (src in sources) {
+            val count = _brokerTickCount[src] ?: 0L
+            if (count > 0L) {
+                return src
+            }
+        }
+        return "NONE"
     }
 
     private fun recalculateAuthoritativeProviderState(now: Long, staleThreshold: Long) {
@@ -341,25 +460,28 @@ object MarketDataStore {
         }
 
         val normSymCheck = symbol.trim().uppercase()
-        if (normSymCheck == "SENSEX" && (ltp < 50000.0 || ltp > 120000.0)) {
-            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR SENSEX: $ltp") } catch (_: Throwable) {}
-            return
-        }
-        if ((normSymCheck == "NIFTY 50" || normSymCheck == "NIFTY") && (ltp < 15000.0 || ltp > 35000.0)) {
-            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR NIFTY: $ltp") } catch (_: Throwable) {}
-            return
-        }
-        if (normSymCheck == "BANKNIFTY" && (ltp < 30000.0 || ltp > 70000.0)) {
-            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKNIFTY: $ltp") } catch (_: Throwable) {}
-            return
-        }
-        if (normSymCheck == "BANKEX" && (ltp < 40000.0 || ltp > 85000.0)) {
-            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKEX: $ltp") } catch (_: Throwable) {}
-            return
-        }
-        if (normSymCheck == "FINNIFTY" && (ltp < 15000.0 || ltp > 35000.0)) {
-            try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR FINNIFTY: $ltp") } catch (_: Throwable) {}
-            return
+        val isDerivativeOrOption = normSymCheck.contains(" ") || normSymCheck.contains("CE") || normSymCheck.contains("PE") || normSymCheck.contains("FUT")
+        if (!isDerivativeOrOption) {
+            if (normSymCheck == "SENSEX" && (ltp < 50000.0 || ltp > 120000.0)) {
+                try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR SENSEX: $ltp") } catch (_: Throwable) {}
+                return
+            }
+            if ((normSymCheck == "NIFTY 50" || normSymCheck == "NIFTY") && (ltp < 15000.0 || ltp > 35000.0)) {
+                try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR NIFTY: $ltp") } catch (_: Throwable) {}
+                return
+            }
+            if (normSymCheck == "BANKNIFTY" && (ltp < 30000.0 || ltp > 70000.0)) {
+                try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKNIFTY: $ltp") } catch (_: Throwable) {}
+                return
+            }
+            if (normSymCheck == "BANKEX" && (ltp < 40000.0 || ltp > 85000.0)) {
+                try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR BANKEX: $ltp") } catch (_: Throwable) {}
+                return
+            }
+            if (normSymCheck == "FINNIFTY" && (ltp < 15000.0 || ltp > 35000.0)) {
+                try { Log.w("MarketDataStore", "[$source] REJECTED OUT-OF-BOUNDS INDEX PRICE FOR FINNIFTY: $ltp") } catch (_: Throwable) {}
+                return
+            }
         }
 
         // 2. Normalize Symbol & Exchange
@@ -372,7 +494,11 @@ object MarketDataStore {
         }
 
         val compositeKey = if (normToken.isNotBlank()) "$normExch:$normToken" else "$normExch:$normSym"
-        val existing = compositeMap[compositeKey] ?: symbolIndex[normSym]
+        
+        // Find existing in source-specific map first, fallback to active maps
+        val sourceSymMap = sourceSymbolMaps.getOrPut(source) { ConcurrentHashMap() }
+        val sourceCompMap = sourceCompositeMaps.getOrPut(source) { ConcurrentHashMap() }
+        val existing = sourceCompMap[compositeKey] ?: sourceSymMap[normSym] ?: compositeMap[compositeKey] ?: symbolIndex[normSym]
 
         // 3. Duplicate Tick Detection (Exact duplicate filtering)
         if (existing != null && existing.source == source && existing.ltp == ltp && 
@@ -393,9 +519,14 @@ object MarketDataStore {
                         change = existing.ltp - close,
                         changePercent = ((existing.ltp - close) / close) * 100.0
                     )
-                    compositeMap[compositeKey] = updated
-                    symbolIndex[normSym] = updated
-                    _marketData.value = HashMap(symbolIndex)
+                    sourceCompMap[compositeKey] = updated
+                    sourceSymMap[normSym] = updated
+                    
+                    if (lastActiveSource == source || lastActiveSource == "NONE") {
+                        compositeMap[compositeKey] = updated
+                        symbolIndex[normSym] = updated
+                        _marketData.value = HashMap(symbolIndex)
+                    }
                 }
                 return
             }
@@ -452,15 +583,31 @@ object MarketDataStore {
             sequenceNumber = sequenceNumber
         )
 
-        compositeMap[compositeKey] = newState
+        // Save to source-specific maps
+        sourceSymMap[normSym] = newState
+        sourceSymMap[symbol] = newState
+        sourceCompMap[compositeKey] = newState
         if (normToken.isNotBlank()) {
-            compositeMap["$normExch:$normToken"] = newState
+            sourceCompMap["$normExch:$normToken"] = newState
         }
-        symbolIndex[symbol] = newState
-        symbolIndex[normSym] = newState
 
-        // Construct unified state map for UI collection
-        _marketData.value = HashMap(symbolIndex)
+        // Run failover evaluation before publishing
+        val staleThreshold = 15000L
+        checkAndSwitchActiveSource(receivedTimestamp, staleThreshold)
+
+        // Write to active authoritative maps only if this source is the current authoritative one
+        val isAuthoritative = (source == lastActiveSource) || (lastActiveSource == "NONE")
+        if (isAuthoritative) {
+            compositeMap[compositeKey] = newState
+            if (normToken.isNotBlank()) {
+                compositeMap["$normExch:$normToken"] = newState
+            }
+            symbolIndex[symbol] = newState
+            symbolIndex[normSym] = newState
+
+            // Construct unified state map for UI collection
+            _marketData.value = HashMap(symbolIndex)
+        }
 
         // Feed real ticks into CandleStore across standard timeframes
         if (source != "REFERENCE" && ltp > 0.0) {
@@ -471,7 +618,7 @@ object MarketDataStore {
         }
 
         // Immediately update authoritative provider status
-        recalculateAuthoritativeProviderState(receivedTimestamp, 15000L)
+        recalculateAuthoritativeProviderState(receivedTimestamp, staleThreshold)
     }
 
     fun getTick(symbol: String): MarketDataState? {
@@ -506,7 +653,10 @@ object MarketDataStore {
         val normExch = exchange.trim().uppercase()
         val normSym = symbol.trim().uppercase()
         val compositeKey = "$normExch:$normSym"
-        val existing = compositeMap[compositeKey] ?: symbolIndex[symbol]
+        
+        val sourceSymMap = sourceSymbolMaps.getOrPut(source) { ConcurrentHashMap() }
+        val sourceCompMap = sourceCompositeMaps.getOrPut(source) { ConcurrentHashMap() }
+        val existing = sourceCompMap[compositeKey] ?: sourceSymMap[normSym] ?: compositeMap[compositeKey] ?: symbolIndex[symbol]
 
         val newState = if (existing != null) {
             val change = existing.ltp - prevClose
@@ -528,9 +678,16 @@ object MarketDataStore {
             )
         }
 
-        compositeMap[compositeKey] = newState
-        symbolIndex[symbol] = newState
-        symbolIndex[normSym] = newState
-        _marketData.value = HashMap(symbolIndex)
+        sourceSymMap[normSym] = newState
+        sourceSymMap[symbol] = newState
+        sourceCompMap[compositeKey] = newState
+
+        val isAuthoritative = (source == lastActiveSource) || (lastActiveSource == "NONE")
+        if (isAuthoritative) {
+            compositeMap[compositeKey] = newState
+            symbolIndex[symbol] = newState
+            symbolIndex[normSym] = newState
+            _marketData.value = HashMap(symbolIndex)
+        }
     }
 }

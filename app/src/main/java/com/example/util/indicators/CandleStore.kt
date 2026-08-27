@@ -1,6 +1,7 @@
 package com.example.util.indicators
 
 import android.util.Log
+import com.example.data.model.InstrumentIdentity
 import com.example.ui.components.CandleData
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
@@ -8,44 +9,64 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Thread-safe In-Memory Store for Real OHLC Candle Series
- * Feeds the real Technical Indicator Engine for AlgoEngine.
+ * Feeds the real Technical Indicator Engine and UI Charts.
+ * Strictly maintains contract provenance using exact InstrumentIdentity / InstrumentKey.
  */
 object CandleStore {
     private const val TAG = "CandleStore"
     private const val MAX_CANDLES = 500
 
-    // Key: "$normalizedSymbol:$timeframe"
+    // Key: "$normalizedKey:$timeframe"
     private val candleMap = ConcurrentHashMap<String, CopyOnWriteArrayList<RealCandle>>()
 
-    fun makeKey(symbol: String, timeframe: String): String {
-        val cleanSym = normalizeSymbol(symbol)
+    fun makeKey(symbolOrKey: String, timeframe: String): String {
+        val cleanKey = normalizeKey(symbolOrKey)
         val cleanTf = normalizeTimeframe(timeframe)
-        return "$cleanSym:$cleanTf"
+        return "$cleanKey:$cleanTf"
     }
 
-    fun normalizeSymbol(symbol: String): String {
-        val upper = symbol.trim().uppercase()
-        return when {
-            upper == "NIFTY" || upper == "NIFTY 50" || upper == "NIFTY50" -> "NIFTY 50"
-            upper == "BANKNIFTY" || upper == "NIFTY BANK" || upper == "BANK NIFTY" -> "BANKNIFTY"
-            upper == "FINNIFTY" || upper == "NIFTY FIN SERVICE" || upper == "FIN NIFTY" -> "FINNIFTY"
-            upper.contains("MID SELECT") || upper == "MIDCPNIFTY" || upper == "MIDCAP NIFTY" -> "MIDCPNIFTY"
-            upper == "SENSEX" || upper == "BSESN" || upper == "BSE SENSEX" -> "SENSEX"
-            upper == "BANKEX" || upper == "BSE BANKEX" -> "BANKEX"
-            upper.startsWith("CRUDEOILM") || upper == "CRUDEOIL M" -> "CRUDEOIL M"
-            upper.startsWith("CRUDEOIL") -> "CRUDEOIL"
-            else -> upper
+    fun makeKey(identity: InstrumentIdentity, timeframe: String): String {
+        val key = if (identity.instrumentKey.isNotBlank()) identity.instrumentKey else "${identity.exchange}:${identity.symbol}"
+        return "${key.trim().uppercase()}:${normalizeTimeframe(timeframe)}"
+    }
+
+    
+    fun normalizeKey(symbolOrKey: String): String {
+        val raw = symbolOrKey.trim().uppercase()
+        try {
+            val master = com.example.data.network.InstrumentMasterService.instance
+            val token = master?.resolveAngelToken(raw) ?: master?.resolveAngelToken(raw.removePrefix("NSE:").removePrefix("BSE:").removePrefix("MCX:"))
+            if (!token.isNullOrBlank()) {
+                return token
+            }
+        } catch (e: Exception) {}
+        
+        if (raw.contains("|")) {
+            return raw
         }
+        val upper = raw
+        if (!upper.contains(" CE") && !upper.contains(" PE") && !upper.contains(" FUT") && !upper.contains(" ")) {
+            return when (upper) {
+                "NIFTY", "NIFTY 50", "NIFTY50" -> "NIFTY 50"
+                "BANKNIFTY", "NIFTY BANK", "BANK NIFTY" -> "BANKNIFTY"
+                "FINNIFTY", "NIFTY FIN SERVICE", "FIN NIFTY" -> "FINNIFTY"
+                "MIDCPNIFTY", "MIDCAP NIFTY" -> "MIDCPNIFTY"
+                "SENSEX", "BSESN", "BSE SENSEX" -> "SENSEX"
+                "BANKEX", "BSE BANKEX" -> "BANKEX"
+                else -> upper
+            }
+        }
+        return upper
     }
-
-    fun normalizeTimeframe(timeframe: String): String {
+fun normalizeTimeframe(timeframe: String): String {
         val upper = timeframe.trim().uppercase()
         return when {
-            upper.contains("1") && (upper.contains("M") || upper.contains("MIN")) -> "1 MIN"
-            upper.contains("5") && (upper.contains("M") || upper.contains("MIN")) -> "5 MIN"
-            upper.contains("15") && (upper.contains("M") || upper.contains("MIN")) -> "15 MIN"
-            upper.contains("30") && (upper.contains("M") || upper.contains("MIN")) -> "30 MIN"
-            upper.contains("DAY") || upper.contains("1D") || upper.contains("DAILY") -> "1 DAY"
+            upper == "1M" || (upper.contains("1") && (upper.contains("M") || upper.contains("MIN")) && !upper.contains("15") && !upper.contains("1H") && !upper.contains("1D")) -> "1 MIN"
+            upper == "5M" || (upper.contains("5") && (upper.contains("M") || upper.contains("MIN"))) -> "5 MIN"
+            upper == "15M" || (upper.contains("15") && (upper.contains("M") || upper.contains("MIN"))) -> "15 MIN"
+            upper == "30M" || (upper.contains("30") && (upper.contains("M") || upper.contains("MIN"))) -> "30 MIN"
+            upper == "1H" || upper == "60M" || upper.contains("HOUR") -> "1 HOUR"
+            upper == "1D" || upper.contains("DAY") || upper.contains("DAILY") -> "1 DAY"
             else -> "5 MIN"
         }
     }
@@ -56,6 +77,7 @@ object CandleStore {
             "5 MIN" -> 300_000L
             "15 MIN" -> 900_000L
             "30 MIN" -> 1_800_000L
+            "1 HOUR" -> 3_600_000L
             "1 DAY" -> 86_400_000L
             else -> 300_000L
         }
@@ -64,9 +86,9 @@ object CandleStore {
     /**
      * Replaces or initializes candle history with real candles from historical API.
      */
-    fun setHistoricalCandles(symbol: String, timeframe: String, candles: List<RealCandle>) {
+    fun setHistoricalCandles(symbolOrKey: String, timeframe: String, candles: List<RealCandle>) {
         if (candles.isEmpty()) return
-        val key = makeKey(symbol, timeframe)
+        val key = makeKey(symbolOrKey, timeframe)
         val sorted = candles.sortedBy { it.timestamp }.takeLast(MAX_CANDLES)
         candleMap[key] = CopyOnWriteArrayList(sorted)
         Log.d(TAG, "[CANDLE_STORE_SET] Stored ${sorted.size} real historical candles for key $key")
@@ -75,7 +97,7 @@ object CandleStore {
     /**
      * Converts UI CandleData list to RealCandle list and stores it.
      */
-    fun setHistoricalCandleData(symbol: String, timeframe: String, candles: List<CandleData>) {
+    fun setHistoricalCandleData(symbolOrKey: String, timeframe: String, candles: List<CandleData>) {
         if (candles.isEmpty()) return
         val intervalMs = getTimeframeIntervalMs(timeframe)
         val now = System.currentTimeMillis()
@@ -92,16 +114,16 @@ object CandleStore {
                 volume = c.volume.toDouble()
             )
         }
-        setHistoricalCandles(symbol, timeframe, realCandles)
+        setHistoricalCandles(symbolOrKey, timeframe, realCandles)
     }
 
     /**
      * Ingests a live tick (LTP + Volume) and updates the current active candle or creates a new one.
      */
     @Synchronized
-    fun onLiveTick(symbol: String, ltp: Double, volume: Long, timestamp: Long = System.currentTimeMillis(), timeframe: String = "5 MIN") {
+    fun onLiveTick(symbolOrKey: String, ltp: Double, volume: Long, timestamp: Long = System.currentTimeMillis(), timeframe: String = "5 MIN") {
         if (ltp <= 0.0) return
-        val key = makeKey(symbol, timeframe)
+        val key = makeKey(symbolOrKey, timeframe)
         val list = candleMap.getOrPut(key) { CopyOnWriteArrayList() }
         val intervalMs = getTimeframeIntervalMs(timeframe)
         val bucketStart = (timestamp / intervalMs) * intervalMs
@@ -150,27 +172,32 @@ object CandleStore {
     }
 
     /**
-     * Returns defensive copy of real candles for symbol and timeframe.
+     * Returns defensive copy of real candles for symbol/key and timeframe.
      */
-    fun getCandles(symbol: String, timeframe: String = "5 MIN"): List<RealCandle> {
-        val key = makeKey(symbol, timeframe)
-        return candleMap[key]?.toList() ?: emptyList()
+    fun getCandles(symbolOrKey: String, timeframe: String = "5 MIN"): List<RealCandle> {
+        val key = makeKey(symbolOrKey, timeframe)
+        val direct = candleMap[key]?.toList()
+        if (!direct.isNullOrEmpty()) return direct
+
+        // Fallback check by raw key if key normalization differed
+        val rawKey = "${symbolOrKey.trim().uppercase()}:${normalizeTimeframe(timeframe)}"
+        return candleMap[rawKey]?.toList() ?: emptyList()
     }
 
     /**
      * Checks whether we have sufficient real candles for indicator computation.
      */
-    fun hasSufficientCandles(symbol: String, timeframe: String = "5 MIN", minCount: Int = 14): Boolean {
-        val candles = getCandles(symbol, timeframe)
+    fun hasSufficientCandles(symbolOrKey: String, timeframe: String = "5 MIN", minCount: Int = 14): Boolean {
+        val candles = getCandles(symbolOrKey, timeframe)
         return candles.size >= minCount
     }
 
-    fun clear(symbol: String? = null) {
-        if (symbol == null) {
+    fun clear(symbolOrKey: String? = null) {
+        if (symbolOrKey == null) {
             candleMap.clear()
         } else {
-            val cleanSym = normalizeSymbol(symbol)
-            val keysToRemove = candleMap.keys.filter { it.startsWith("$cleanSym:") }
+            val cleanKey = normalizeKey(symbolOrKey)
+            val keysToRemove = candleMap.keys.filter { it.startsWith("$cleanKey:") || it.startsWith("${symbolOrKey.trim().uppercase()}:") }
             keysToRemove.forEach { candleMap.remove(it) }
         }
     }

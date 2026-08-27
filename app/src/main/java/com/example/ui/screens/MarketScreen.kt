@@ -57,6 +57,7 @@ fun MarketScreen(
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit = { _, _, _, _ -> },
     onAddSymbolToWatchlist: (symbol: String, exchange: String) -> Unit = { _, _ -> },
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit = { _, _ -> },
+    onGetHistoricalCandles: (symbol: String, interval: String, onResult: (List<com.example.ui.components.CandleData>) -> Unit) -> Unit = { _, _, _ -> },
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
@@ -73,13 +74,32 @@ fun MarketScreen(
     val isMarketOpen = exchangeStatus.isOpen
 
     // Search Database containing Comprehensive NSE, BSE, MCX Indices & Option Contracts
-    val searchInstrumentPool = remember {
-        generateSearchInstrumentPool()
+    
+
+    
+    val searchResults = remember(searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) {
+            emptyList<SearchInstrumentItem>()
+        } else {
+            val master = com.example.data.network.InstrumentMasterService.instance
+            if (master != null) {
+                master.searchInstruments(q).map { inst ->
+                    SearchInstrumentItem(
+                        symbol = inst.symbol,
+                        exchange = com.example.data.network.InstrumentMasterService.normalizeExchange(inst.exch_seg),
+                        category = inst.instrumenttype,
+                        expiry = inst.expiry,
+                        lotSize = inst.lotsize.toIntOrNull() ?: 1,
+                        token = inst.token
+                    )
+                }
+            } else {
+                emptyList<SearchInstrumentItem>()
+            }
+        }
     }
 
-    val searchResults = remember(searchQuery, searchInstrumentPool) {
-        searchInstruments(searchQuery, searchInstrumentPool)
-    }
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
@@ -204,6 +224,7 @@ fun MarketScreen(
     chartDialogInstrument?.let { chartData ->
         MarketChartDialog(
             data = chartData,
+            onGetHistoricalCandles = onGetHistoricalCandles,
             onDismiss = { chartDialogInstrument = null },
             onTrade = { side ->
                 onOpenOrderDialog(chartData.symbol, side, if (chartData.ltp > 0) chartData.ltp else null, chartData.lotSize)
@@ -769,7 +790,8 @@ private data class IndexCardData(
     val price: Double,
     val change: Double,
     val changePct: Double,
-    val lotSize: Int
+    val lotSize: Int,
+    val token: String = ""
 )
 
 @Composable
@@ -1143,12 +1165,14 @@ data class ChartDialogData(
     val ltp: Double,
     val change: Double,
     val changePct: Double,
-    val lotSize: Int
+    val lotSize: Int,
+    val token: String = ""
 )
 
 @Composable
 private fun MarketChartDialog(
     data: ChartDialogData,
+    onGetHistoricalCandles: (symbol: String, interval: String, onResult: (List<com.example.ui.components.CandleData>) -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onTrade: (side: String) -> Unit
 ) {
@@ -1157,8 +1181,21 @@ private fun MarketChartDialog(
     val isPositive = data.changePct >= 0
 
     val basePrice = if (data.ltp > 0.0) data.ltp.toFloat() else 100f
-    val candles = remember(data.symbol, selectedTimeframe, basePrice) {
-        emptyList<com.example.ui.components.CandleData>() // Replaced fake candles with empty list
+    
+    var candles by remember { mutableStateOf<List<com.example.ui.components.CandleData>>(emptyList()) }
+    
+    LaunchedEffect(data.symbol, selectedTimeframe) {
+        val intervalStr = when (selectedTimeframe) {
+            "1M" -> "1m"
+            "5M" -> "5m"
+            "15M" -> "15m"
+            "1H" -> "1h"
+            "1D" -> "1d"
+            else -> "5m"
+        }
+        onGetHistoricalCandles(data.symbol, intervalStr) { fetched ->
+            candles = fetched
+        }
     }
 
     Dialog(
@@ -1365,6 +1402,7 @@ private data class MarketMoverCardData(
     val price: Double,
     val changePct: Double,
     val lotSize: Int,
+    val token: String = "",
     val expiry: String = "",
     val volume: Long = 50000L,
     val oiChangePct: Double = 0.0
@@ -1381,212 +1419,13 @@ data class SearchInstrumentItem(
     val exchange: String,
     val category: String,
     val expiry: String,
-    val lotSize: Int
+    val lotSize: Int,
+    val token: String = ""
 )
 
-private fun searchInstruments(query: String, pool: List<SearchInstrumentItem>): List<SearchInstrumentItem> {
-    val q = query.trim().uppercase()
-    if (q.isBlank()) return emptyList()
-    val tokens = q.split(" ").filter { it.isNotBlank() }
-    val results = mutableListOf<SearchInstrumentItem>()
 
-    // 1. DYNAMIC ON-THE-FLY STRIKE PARSER (For any typed index + strike + CE/PE)
-    val numberMatch = Regex("""\b(\d{2,6})\b""").find(q)?.groupValues?.get(1)?.toIntOrNull()
-    val isCeExplicit = tokens.any { it == "CE" || it == "CALL" }
-    val isPeExplicit = tokens.any { it == "PE" || it == "PUT" }
 
-    val baseCandidate = when {
-        tokens.any { it.contains("BANKNIFTY") || it == "BN" } -> "BANKNIFTY"
-        tokens.any { it.contains("FINNIFTY") || it == "FN" } -> "FINNIFTY"
-        tokens.any { it.contains("MIDCP") || it.contains("MIDCAP") } -> "MIDCPNIFTY"
-        tokens.any { it.contains("NIFTY") } -> "NIFTY"
-        tokens.any { it.contains("SENSEX") } -> "SENSEX"
-        tokens.any { it.contains("BANKEX") } -> "BANKEX"
-        tokens.any { it.contains("CRUDEOIL") || it.contains("CRUDE") } -> "CRUDEOIL"
-        tokens.any { it.contains("NATURALGAS") || it.contains("NATGAS") || it == "NG" } -> "NATURALGAS"
-        tokens.any { it.contains("GOLD") } -> "GOLD"
-        tokens.any { it.contains("SILVER") } -> "SILVER"
-        tokens.any { it.contains("COPPER") } -> "COPPER"
-        tokens.any { it.contains("ZINC") } -> "ZINC"
-        tokens.any { it.contains("ALUMINIUM") || it.contains("ALUM") } -> "ALUMINIUM"
-        tokens.any { it.contains("LEAD") } -> "LEAD"
-        else -> null
-    }
 
-    if (numberMatch != null) {
-        val detectedBase = baseCandidate ?: when {
-            numberMatch in 20000..26500 -> "NIFTY"
-            numberMatch in 46000..56000 -> "BANKNIFTY"
-            numberMatch in 74000..88000 -> "SENSEX"
-            numberMatch in 11000..15000 -> "MIDCPNIFTY"
-            numberMatch in 5000..9000 -> "CRUDEOIL"
-            numberMatch in 100..400 -> "NATURALGAS"
-            numberMatch in 600..1200 -> "COPPER"
-            else -> "NIFTY"
-        }
-
-        val (exch, lot, exp) = when (detectedBase) {
-            "BANKNIFTY" -> Triple("NSE", 30, "25 AUG")
-            "FINNIFTY" -> Triple("NSE", 60, "25 AUG")
-            "MIDCPNIFTY" -> Triple("NSE", 120, "25 AUG")
-            "NIFTY" -> Triple("NSE", 65, "25 AUG")
-            "SENSEX" -> Triple("BSE", 20, "29 AUG")
-            "BANKEX" -> Triple("BSE", 30, "29 AUG")
-            "CRUDEOIL" -> Triple("MCX", 100, "19 SEP")
-            "NATURALGAS" -> Triple("MCX", 1250, "26 SEP")
-            "GOLD" -> Triple("MCX", 100, "05 OCT")
-            "SILVER" -> Triple("MCX", 30, "28 NOV")
-            "COPPER" -> Triple("MCX", 2500, "30 SEP")
-            "ZINC" -> Triple("MCX", 5000, "30 SEP")
-            else -> Triple("NSE", 65, "25 AUG")
-        }
-
-        if (isCeExplicit && !isPeExplicit) {
-            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch CE", exch, "OPTIONS", exp, lot))
-        } else if (isPeExplicit && !isCeExplicit) {
-            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch PE", exch, "OPTIONS", exp, lot))
-        } else {
-            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch CE", exch, "OPTIONS", exp, lot))
-            results.add(SearchInstrumentItem("$detectedBase $exp $numberMatch PE", exch, "OPTIONS", exp, lot))
-        }
-    }
-
-    // 2. Comprehensive Token Search against Pre-computed Pool
-    val filteredPool = pool.filter { item ->
-        tokens.all { token ->
-            item.symbol.contains(token, ignoreCase = true) ||
-            item.exchange.contains(token, ignoreCase = true) ||
-            item.category.contains(token, ignoreCase = true) ||
-            item.expiry.contains(token, ignoreCase = true)
-        }
-    }
-
-    // 3. Merge & Deduplicate
-    val merged = (results + filteredPool).distinctBy { it.symbol }
-    return merged.take(20)
-}
-
-private fun generateSearchInstrumentPool(): List<SearchInstrumentItem> {
-    val items = mutableListOf<SearchInstrumentItem>()
-
-    // NIFTY STRIKES (23000 to 26000, step 100)
-    for (strike in 23000..26000 step 100) {
-        items.add(SearchInstrumentItem("NIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 65))
-        items.add(SearchInstrumentItem("NIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 65))
-    }
-
-    // BANKNIFTY STRIKES (48000 to 54000, step 200)
-    for (strike in 48000..54000 step 200) {
-        items.add(SearchInstrumentItem("BANKNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 30))
-        items.add(SearchInstrumentItem("BANKNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 30))
-    }
-
-    // FINNIFTY STRIKES (22000 to 25000, step 100)
-    for (strike in 22000..25000 step 100) {
-        items.add(SearchInstrumentItem("FINNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 60))
-        items.add(SearchInstrumentItem("FINNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 60))
-    }
-
-    // MIDCPNIFTY STRIKES (11500 to 14000, step 100)
-    for (strike in 11500..14000 step 100) {
-        items.add(SearchInstrumentItem("MIDCPNIFTY 25AUG $strike CE", "NSE", "OPTIONS", "25 AUG", 120))
-        items.add(SearchInstrumentItem("MIDCPNIFTY 25AUG $strike PE", "NSE", "OPTIONS", "25 AUG", 120))
-    }
-
-    // SENSEX STRIKES (77000 to 85000, step 500)
-    for (strike in 77000..85000 step 500) {
-        items.add(SearchInstrumentItem("SENSEX 29AUG $strike CE", "BSE", "OPTIONS", "29 AUG", 20))
-        items.add(SearchInstrumentItem("SENSEX 29AUG $strike PE", "BSE", "OPTIONS", "29 AUG", 20))
-    }
-
-    // BANKEX STRIKES (53000 to 60000, step 500)
-    for (strike in 53000..60000 step 500) {
-        items.add(SearchInstrumentItem("BANKEX 29AUG $strike CE", "BSE", "OPTIONS", "29 AUG", 30))
-        items.add(SearchInstrumentItem("BANKEX 29AUG $strike PE", "BSE", "OPTIONS", "29 AUG", 30))
-    }
-
-    // CRUDEOIL STRIKES (5800 to 7200, step 100)
-    for (strike in 5800..7200 step 100) {
-        items.add(SearchInstrumentItem("CRUDEOIL 19SEP $strike CE", "MCX", "OPTIONS", "19 SEP", 100))
-        items.add(SearchInstrumentItem("CRUDEOIL 19SEP $strike PE", "MCX", "OPTIONS", "19 SEP", 100))
-    }
-
-    // NATURALGAS STRIKES (160 to 260, step 10)
-    for (strike in 160..260 step 10) {
-        items.add(SearchInstrumentItem("NATURALGAS 26SEP $strike CE", "MCX", "OPTIONS", "26 SEP", 1250))
-        items.add(SearchInstrumentItem("NATURALGAS 26SEP $strike PE", "MCX", "OPTIONS", "26 SEP", 1250))
-    }
-
-    // GOLD STRIKES (72000 to 78000, step 500)
-    for (strike in 72000..78000 step 500) {
-        items.add(SearchInstrumentItem("GOLD 05OCT $strike CE", "MCX", "OPTIONS", "05 OCT", 100))
-        items.add(SearchInstrumentItem("GOLD 05OCT $strike PE", "MCX", "OPTIONS", "05 OCT", 100))
-    }
-
-    // SILVER STRIKES (80000 to 90000, step 1000)
-    for (strike in 80000..90000 step 1000) {
-        items.add(SearchInstrumentItem("SILVER 28NOV $strike CE", "MCX", "OPTIONS", "28 NOV", 30))
-        items.add(SearchInstrumentItem("SILVER 28NOV $strike PE", "MCX", "OPTIONS", "28 NOV", 30))
-    }
-
-    // COPPER STRIKES (780 to 860, step 10)
-    for (strike in 780..860 step 10) {
-        items.add(SearchInstrumentItem("COPPER 30SEP $strike CE", "MCX", "OPTIONS", "30 SEP", 2500))
-        items.add(SearchInstrumentItem("COPPER 30SEP $strike PE", "MCX", "OPTIONS", "30 SEP", 2500))
-    }
-
-    // ALL MCX COMMODITIES & MINIS
-    items.add(SearchInstrumentItem("CRUDEOIL", "MCX", "FUTURES", "19 SEP", 100))
-    items.add(SearchInstrumentItem("CRUDEOIL M", "MCX", "FUTURES", "19 SEP", 10))
-    items.add(SearchInstrumentItem("NATURALGAS", "MCX", "FUTURES", "26 SEP", 1250))
-    items.add(SearchInstrumentItem("NATURALGAS M", "MCX", "FUTURES", "26 SEP", 250))
-    items.add(SearchInstrumentItem("GOLD", "MCX", "FUTURES", "05 OCT", 100))
-    items.add(SearchInstrumentItem("GOLD M", "MCX", "FUTURES", "05 OCT", 10))
-    items.add(SearchInstrumentItem("GOLD GUINEA", "MCX", "FUTURES", "05 OCT", 1))
-    items.add(SearchInstrumentItem("GOLD PETAL", "MCX", "FUTURES", "05 OCT", 1))
-    items.add(SearchInstrumentItem("SILVER", "MCX", "FUTURES", "28 NOV", 30))
-    items.add(SearchInstrumentItem("SILVER M", "MCX", "FUTURES", "28 NOV", 5))
-    items.add(SearchInstrumentItem("SILVER MIC", "MCX", "FUTURES", "28 NOV", 1))
-    items.add(SearchInstrumentItem("COPPER", "MCX", "FUTURES", "30 SEP", 2500))
-    items.add(SearchInstrumentItem("COPPER M", "MCX", "FUTURES", "30 SEP", 250))
-    items.add(SearchInstrumentItem("ZINC", "MCX", "FUTURES", "30 SEP", 5000))
-    items.add(SearchInstrumentItem("ZINC M", "MCX", "FUTURES", "30 SEP", 1000))
-    items.add(SearchInstrumentItem("ALUMINIUM", "MCX", "FUTURES", "30 SEP", 5000))
-    items.add(SearchInstrumentItem("ALUMINIUM M", "MCX", "FUTURES", "30 SEP", 1000))
-    items.add(SearchInstrumentItem("LEAD", "MCX", "FUTURES", "30 SEP", 5000))
-    items.add(SearchInstrumentItem("LEAD M", "MCX", "FUTURES", "30 SEP", 1000))
-    items.add(SearchInstrumentItem("NICKEL", "MCX", "FUTURES", "30 SEP", 1500))
-    items.add(SearchInstrumentItem("MCXBULLDEX", "MCX", "INDEX", "30 SEP", 50))
-    items.add(SearchInstrumentItem("MCXMETLDEX", "MCX", "INDEX", "30 SEP", 50))
-    items.add(SearchInstrumentItem("MCXENRGDEX", "MCX", "INDEX", "30 SEP", 125))
-
-    // ALL MAJOR NSE & BSE EQUITIES & INDICES
-    items.add(SearchInstrumentItem("NIFTY 50", "NSE", "INDEX", "SPOT", 65))
-    items.add(SearchInstrumentItem("BANKNIFTY", "NSE", "INDEX", "SPOT", 30))
-    items.add(SearchInstrumentItem("FINNIFTY", "NSE", "INDEX", "SPOT", 60))
-    items.add(SearchInstrumentItem("MIDCPNIFTY", "NSE", "INDEX", "SPOT", 120))
-    items.add(SearchInstrumentItem("SENSEX", "BSE", "INDEX", "SPOT", 20))
-    items.add(SearchInstrumentItem("BANKEX", "BSE", "INDEX", "SPOT", 30))
-    items.add(SearchInstrumentItem("RELIANCE", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("HDFCBANK", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("ICICIBANK", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("INFY", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("TCS", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("SBIN", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("TATASTEEL", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("TATAMOTORS", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("BHARTIARTL", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("ITC", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("LT", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("AXISBANK", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("KOTAKBANK", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("BAJFINANCE", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("MARUTI", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("SUNPHARMA", "NSE", "EQUITY", "CASH", 1))
-    items.add(SearchInstrumentItem("TITAN", "NSE", "EQUITY", "CASH", 1))
-
-    return items
-}
 
 // ==========================================
 // ADD SYMBOL DIALOG

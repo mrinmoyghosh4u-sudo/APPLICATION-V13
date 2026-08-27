@@ -1475,14 +1475,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val res = brokerManager.getOptionChain(indexName, expiry)
             val strikes = res.getOrNull()
             
-            // Validate if returned strikes match the index LTP range
-            val isValidForIndex = !strikes.isNullOrEmpty() && strikes.any { strike ->
-                if (indexLtp > 0) {
-                    kotlin.math.abs(strike.strikePrice - indexLtp) < (indexLtp * 0.25)
-                } else true
-            }
+            // Validate if returned strikes match the underlying LTP or if strikes are present
+            val isValidForIndex = !strikes.isNullOrEmpty() && (indexLtp <= 0.0 || strikes.any { strike ->
+                kotlin.math.abs(strike.strikePrice - indexLtp) < (indexLtp * 0.50)
+            })
 
-            if (isValidForIndex) {
+            if (isValidForIndex && strikes != null) {
+                _optionStrikes.value = strikes
+            } else if (!strikes.isNullOrEmpty()) {
                 _optionStrikes.value = strikes
             } else {
                 // Strict Real Data Rule: Set empty list if no real option chain feed
@@ -1495,7 +1495,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val res = brokerManager.getHistoricalCandles(indexName, interval)
             if (res.isSuccess) {
-                onResult(res.getOrDefault(emptyList()))
+                val candles = res.getOrDefault(emptyList())
+                if (candles.isNotEmpty()) {
+                    com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
+                }
+                onResult(candles)
             } else {
                 onResult(emptyList())
             }

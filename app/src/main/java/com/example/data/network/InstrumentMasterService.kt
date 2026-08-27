@@ -352,6 +352,19 @@ class InstrumentMasterService(
         }
     }
 
+    
+    fun searchInstruments(query: String): List<Instrument> {
+        val q = query.trim().uppercase()
+        if (q.isBlank()) return emptyList()
+        val tokens = q.split(" ").filter { it.isNotBlank() }
+        
+        return instrumentMap.values.filter { inst ->
+            val sym = inst.symbol.uppercase()
+            val name = inst.name.uppercase()
+            tokens.all { t -> sym.contains(t) || name.contains(t) }
+        }.take(30)
+    }
+
     fun getInstrumentByToken(token: String, exchangeType: Int): Instrument? {
         val compKey = "$exchangeType:${token.trim()}"
         return instrumentMap[compKey]
