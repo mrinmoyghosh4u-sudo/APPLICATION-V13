@@ -335,7 +335,7 @@ fun InstrumentResolutionSection(viewModel: MainViewModel) {
                 DiagnosticItem("BANKEX (BSE)", "UNRESOLVED")
             }
             
-            Divider(color = Color(0xFF2C313C), modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = Color(0xFF2C313C), modifier = Modifier.padding(vertical = 8.dp))
             
             if (crudeToken != null) {
                 DiagnosticItem("CRUDEOIL (MCX)", "RESOLVED")
@@ -498,7 +498,8 @@ fun BrokerCard(
             }
             DiagnosticItem("Status", statusText)
             
-            val activeInstruments = MarketDataStore.marketData.value.values.count { it.source == sourceName }
+            val marketData by MarketDataStore.marketData.collectAsStateWithLifecycle()
+            val activeInstruments = marketData.values.count { it.source == sourceName }
             DiagnosticItem("Subscribed Instruments", activeInstruments.toString())
             
             val feedHealth = if (hasRealTick && health == "LIVE") "LIVE" else "NONE"

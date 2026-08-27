@@ -71,7 +71,7 @@ fun TermsAndPolicyDialog(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                Divider(color = DarkCardBorder)
+                HorizontalDivider(color = DarkCardBorder)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Section 1
@@ -237,7 +237,7 @@ private fun DialogPolicySectionCard(
 
             if (isExpanded) {
                 Spacer(modifier = Modifier.height(6.dp))
-                Divider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = content,

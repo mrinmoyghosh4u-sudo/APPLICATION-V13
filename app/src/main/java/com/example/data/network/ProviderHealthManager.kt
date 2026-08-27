@@ -87,6 +87,7 @@ class ProviderHealthManager {
         const val STATE_WAITING_FOR_FIRST_TICK = "WAITING_FOR_FIRST_TICK"
         const val STATE_LIVE = "LIVE"
         const val STATE_STALE = "STALE"
+        const val STATE_MARKET_CLOSED = "MARKET_CLOSED"
         const val STATE_DISCONNECTED = "DISCONNECTED"
         const val STATE_ERROR = "ERROR"
     }
@@ -342,10 +343,31 @@ class ProviderHealthManager {
         Log.w(TAG, "DATA PROVIDER ERROR: $provider (error count=$newErrors, msg=$errorMessage)")
     }
 
+    fun isMarketOpen(now: Long = System.currentTimeMillis()): Boolean {
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+        cal.timeInMillis = now
+        val dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK)
+        if (dayOfWeek == java.util.Calendar.SATURDAY || dayOfWeek == java.util.Calendar.SUNDAY) {
+            return false
+        }
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = cal.get(java.util.Calendar.MINUTE)
+        val timeInMinutes = hour * 60 + minute
+        // Regular NSE/BSE Market Hours: 09:15 to 15:30 IST
+        return timeInMinutes in (9 * 60 + 15)..(15 * 60 + 30)
+    }
+
     fun checkAndEvaluateStaleness(now: Long = System.currentTimeMillis()) {
+        val marketOpen = isMarketOpen(now)
         healthMap.forEach { (provider, state) ->
             if (state.lastTickTimestamp > 0 && (now - state.lastTickTimestamp > STALE_TIMEOUT_MS)) {
-                if (!state.stale) {
+                if (!marketOpen && state.connected && state.authenticated) {
+                    if (state.status != STATE_MARKET_CLOSED) {
+                        val updated = state.copy(stale = false, status = STATE_MARKET_CLOSED, healthy = false)
+                        healthMap[provider] = updated
+                        try { Log.i(TAG, "DATA PROVIDER: $provider → MARKET_CLOSED (Connection healthy, market closed)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → MARKET_CLOSED") }
+                    }
+                } else if (!state.stale) {
                     val updated = state.copy(stale = true, status = STATE_STALE, healthy = false)
                     healthMap[provider] = updated
                     try { Log.w(TAG, "DATA PROVIDER: $provider → STALE (no ticks for >15s)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → STALE") }

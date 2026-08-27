@@ -127,7 +127,7 @@ fun DisclaimerScreen(
                         )
                     }
 
-                    Divider(color = DarkCardBorder, thickness = 1.dp)
+                    HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
                     // Scrollable Sections Area
                     Column(
@@ -364,7 +364,7 @@ private fun DisclaimerSectionCard(
 
             if (isExpanded) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Divider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = content,

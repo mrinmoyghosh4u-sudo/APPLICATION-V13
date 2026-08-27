@@ -928,10 +928,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
             // Determine provider
-            val inferredProvider = pendingSession?.provider?.uppercase()?.trim()
-                ?: if (callbackState.startsWith("upstox_")) "UPSTOX"
+            val inferredProvider = pendingSession.provider.uppercase().trim().ifBlank {
+                if (callbackState.startsWith("upstox_")) "UPSTOX"
                 else if (callbackState.startsWith("fyers_") || fyersAuthCode != null) "FYERS"
                 else ""
+            }
 
             // Extract correct authorization code based on provider
             var code: String? = null
@@ -974,22 +975,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 // Check session expiry (15 minutes)
-                if (pendingSession != null) {
-                    val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-                    if (isExpired) {
-                        val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
-                        android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                        _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
-                        _isAuthInProgress.value = false
-                        brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
-                        return@launch
-                    }
+                val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
+                if (isExpired) {
+                    val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
+                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
+                    return@launch
                 }
 
                 // Mark session as consumed to prevent replay attacks
-                if (pendingSession != null) {
-                    sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
-                }
+                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
 
                 brokerManager.healthManager.reportCallbackReceived(providerName)
                 android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
@@ -1276,7 +1273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else true
             }
 
-            if (isValidForIndex && strikes != null) {
+            if (isValidForIndex) {
                 _optionStrikes.value = strikes
             } else {
                 // Strict Real Data Rule: Set empty list if no real option chain feed
@@ -1550,7 +1547,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addRecentSearch(query: String) {
-        if (query.isBlank()) return
+        if (query.isBlank()) {
+            return
+        }
         val current = _recentSearches.value.toMutableList()
         current.remove(query)
         current.add(0, query)

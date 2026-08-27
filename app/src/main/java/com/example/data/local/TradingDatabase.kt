@@ -37,7 +37,7 @@ abstract class TradingDatabase : RoomDatabase() {
                     context.applicationContext,
                     TradingDatabase::class.java,
                     "king_khan_trade_db"
-                ).fallbackToDestructiveMigration().build()
+                ).fallbackToDestructiveMigration(true).build()
                 INSTANCE = instance
                 instance
             }

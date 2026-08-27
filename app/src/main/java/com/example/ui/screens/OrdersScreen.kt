@@ -413,7 +413,7 @@ fun OrdersScreen(
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            Divider(color = DarkCardBorder, thickness = 0.5.dp)
+                            HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Row(
@@ -929,7 +929,7 @@ private fun PositionCardItem(
         // Action Buttons Bar for OPEN POSITIONS (Square Off & Partial Exit)
         if (isOpen) {
             Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = DarkCardBorder, thickness = 0.5.dp)
+            HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
@@ -1131,7 +1131,7 @@ private fun DetailedOrderCardItem(
         // Action Buttons Bar for Pending / Open Orders
         if (isPendingOrOpen) {
             Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = DarkCardBorder, thickness = 0.5.dp)
+            HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(

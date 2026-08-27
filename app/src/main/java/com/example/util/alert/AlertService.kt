@@ -156,9 +156,20 @@ class AlertService(
             .build()
 
         try {
-            NotificationManagerCompat.from(context).notify(notificationIdCounter.incrementAndGet(), notification)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                NotificationManagerCompat.from(context).notify(notificationIdCounter.incrementAndGet(), notification)
+            } else {
+                Log.d(TAG, "POST_NOTIFICATIONS permission not granted; skipping system notification")
+            }
         } catch (e: SecurityException) {
             Log.w(TAG, "Push notification permission not granted: ${e.message}")
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to send notification: ${e.message}")
         }
     }
 
