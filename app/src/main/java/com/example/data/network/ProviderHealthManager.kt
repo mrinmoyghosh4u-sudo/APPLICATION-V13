@@ -375,15 +375,20 @@ class ProviderHealthManager {
         val marketOpen = isMarketOpen(now)
         healthMap.forEach { (provider, state) ->
             if (state.lastTickTimestamp > 0 && (now - state.lastTickTimestamp > STALE_TIMEOUT_MS)) {
-                if (!marketOpen && state.connected && state.authenticated) {
-                    if (state.status != STATE_MARKET_CLOSED) {
-                        val updated = state.copy(stale = false, status = STATE_MARKET_CLOSED, healthy = false)
-                        healthMap[provider] = updated
-                        try { Log.i(TAG, "DATA PROVIDER: $provider → MARKET_CLOSED (Connection healthy, market closed)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → MARKET_CLOSED") }
-                    }
-                } else if (!state.stale) {
-                    val updated = state.copy(stale = true, status = STATE_STALE, healthy = false)
-                    healthMap[provider] = updated
+                val newStatus = if (!marketOpen && state.connected && state.authenticated) {
+                    STATE_MARKET_CLOSED
+                } else {
+                    STATE_STALE
+                }
+                val updated = state.copy(
+                    stale = true,
+                    status = newStatus,
+                    healthy = false
+                )
+                healthMap[provider] = updated
+                if (newStatus == STATE_MARKET_CLOSED) {
+                    try { Log.i(TAG, "DATA PROVIDER: $provider → MARKET_CLOSED (Connection healthy, market closed)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → MARKET_CLOSED") }
+                } else {
                     try { Log.w(TAG, "DATA PROVIDER: $provider → STALE (no ticks for >15s)") } catch (_: Throwable) { println("DATA PROVIDER: $provider → STALE") }
                 }
             }
