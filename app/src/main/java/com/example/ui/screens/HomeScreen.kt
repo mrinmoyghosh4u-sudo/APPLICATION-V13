@@ -63,8 +63,10 @@ fun HomeScreen(
 
     val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
 
-    val nseStatus = remember { MarketStatusUtil.getDetailedMarketStatus("NSE") }
-    val isMarketOpen = nseStatus.isOpen
+    val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")
+    val bseStatus = MarketStatusUtil.getDetailedMarketStatus("BSE")
+    val mcxStatus = MarketStatusUtil.getDetailedMarketStatus("MCX")
+    val isMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
 
     val isRefreshingState = viewModel?.isRefreshing?.collectAsStateWithLifecycle()
     val isRefreshing = isRefreshingState?.value ?: false
@@ -110,9 +112,14 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // 2. MARKET STATUS BAR
+            val nextOpeningText = when {
+                isMarketOpen && mcxStatus.isOpen && !nseStatus.isOpen -> "MCX Active (09:00 - 23:30 IST)"
+                isMarketOpen -> "Session Active (09:15 - 15:30 IST)"
+                else -> nseStatus.nextOpeningTimeText
+            }
             MarketStatusBarSection(
                 isMarketOpen = isMarketOpen,
-                nextOpeningText = nseStatus.nextOpeningTimeText
+                nextOpeningText = nextOpeningText
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -274,7 +281,7 @@ private fun MarketStatusBarSection(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Next Opening: $nextOpeningText",
+                text = if (isMarketOpen) nextOpeningText else "Next Opening: $nextOpeningText",
                 color = TextGray,
                 fontSize = 10.sp
             )

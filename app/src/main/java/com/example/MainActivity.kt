@@ -562,6 +562,7 @@ class MainActivity : FragmentActivity() {
                                                 notifications = notifications,
                                                 marketDataSource = marketDataSource,
                                                 appPreferences = remember { com.example.util.AppPreferences(applicationContext) },
+                                                viewModel = viewModel,
                                                 brokerStatuses = brokerStatuses,
                                                 onSwitchBroker = { broker ->
                                                     viewModel.switchActiveBroker(broker)

@@ -5,6 +5,7 @@ data class AlgoStrategy(
     val name: String,
     val index: String,
     val optionMode: String, // "BUY CE ONLY", "BUY PE ONLY", "AUTO CE / PE"
+    val strikeType: String = "ATM", // "ITM", "ATM", "OTM"
     val tradingStyle: String,
     val timeframe: String,
     val riskLevel: String,

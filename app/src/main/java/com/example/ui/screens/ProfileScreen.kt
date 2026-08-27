@@ -32,6 +32,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.OrderEntity
 import com.example.data.model.PortfolioHoldingEntity
@@ -53,6 +54,7 @@ fun ProfileScreen(
     marketDataSource: String = "",
     appPreferences: AppPreferences,
     brokerStatuses: Map<String, com.example.data.network.BrokerConnectionState> = emptyMap(),
+    viewModel: com.example.viewmodel.MainViewModel? = null,
     onSwitchBroker: (String) -> Unit,
     onReconnectBroker: (String) -> Unit = {},
     onDisconnectBroker: (String) -> Unit = {},
@@ -674,7 +676,7 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(14.dp))
             
             // EXPIRY CALENDAR
-            ExpiryCalendarCard()
+            ExpiryCalendarCard(viewModel)
             
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -1666,70 +1668,155 @@ private fun BrokerStatusRow(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ExpiryCalendarCard() {
+fun ExpiryCalendarCard(viewModel: com.example.viewmodel.MainViewModel?) {
+    var showDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
     com.example.ui.components.GoldCard(
         borderColor = com.example.ui.theme.DarkCardBorder,
         borderWidth = 1.dp
     ) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { 
+                    viewModel?.fetchLiveIndexExpiries()
+                    showDialog = true 
+                },
+            color = Color.Transparent
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Expiry Calendar",
+                        tint = com.example.ui.theme.PrimaryGold,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "OPTION EXPIRY CALENDAR",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                            color = com.example.ui.theme.TextWhite
+                        )
+                        Text(
+                            "View Live upcoming expiry dates",
+                            fontSize = 11.sp,
+                            color = com.example.ui.theme.TextGray
+                        )
+                    }
+                }
                 Icon(
-                    imageVector = Icons.Default.DateRange,
-                    contentDescription = "Expiry Calendar",
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = "View",
                     tint = com.example.ui.theme.PrimaryGold,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "OPTION EXPIRY CALENDAR",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Black,
-                    color = com.example.ui.theme.TextWhite
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "Standard weekly expiry days for NSE, BSE, and MCX options.",
-                fontSize = 11.sp,
-                color = com.example.ui.theme.TextGray
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
 
-            val expiries = listOf(
-                Pair("MIDCPNIFTY", "Monday"),
-                Pair("BANKEX", "Monday"),
-                Pair("FINNIFTY", "Tuesday"),
-                Pair("BANKNIFTY", "Wednesday"),
-                Pair("NIFTY", "Thursday"),
-                Pair("SENSEX", "Friday"),
-                Pair("MCX CRUDE", "Mid-Month (Fri/Mon)")
-            )
-
-            expiries.forEachIndexed { index, (indexName, day) ->
+    if (showDialog) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showDialog = false },
+            containerColor = com.example.ui.theme.DarkBackground,
+            dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle(color = com.example.ui.theme.DarkCardBorder) }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (index % 2 == 0) Color.Transparent else com.example.ui.theme.DarkBackground.copy(alpha = 0.5f)
-                        )
-                        .padding(vertical = 8.dp, horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Calendar",
+                        tint = com.example.ui.theme.PrimaryGold,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = indexName,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "LIVE UPCOMING EXPIRIES",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
                         color = com.example.ui.theme.TextWhite
                     )
-                    Text(
-                        text = day,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = com.example.ui.theme.PrimaryGold
-                    )
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val isLoading = viewModel?.isLoadingLiveExpiries?.collectAsStateWithLifecycle()?.value ?: false
+                val liveExpiries = viewModel?.liveIndexExpiries?.collectAsStateWithLifecycle()?.value ?: emptyMap<String, String>()
+
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(color = com.example.ui.theme.PrimaryGold, modifier = Modifier.size(24.dp))
+                    }
+                } else {
+                    val indices = listOf(
+                        "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
+                        "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M"
+                    )
+
+                    indices.forEachIndexed { index, symbol ->
+                        val expiryDate = liveExpiries[symbol] ?: "--"
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (index % 2 == 0) Color.Transparent else com.example.ui.theme.DarkCard.copy(alpha = 0.5f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                )
+                                .padding(vertical = 12.dp, horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = symbol,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = com.example.ui.theme.TextWhite
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(com.example.ui.theme.PrimaryGold.copy(alpha = 0.2f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "LIVE",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = com.example.ui.theme.PrimaryGold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = expiryDate,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.example.ui.theme.SecondaryGold
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }

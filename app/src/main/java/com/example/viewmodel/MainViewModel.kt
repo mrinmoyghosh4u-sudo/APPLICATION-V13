@@ -24,6 +24,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.SimpleDateFormat
@@ -68,7 +71,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _notifications = MutableStateFlow<List<NotificationEntity>>(emptyList())
     val notifications: StateFlow<List<NotificationEntity>> = _notifications.asStateFlow()
 
-    private val _recentSearches = MutableStateFlow<List<String>>(listOf("NIFTY 22000 CE", "BANKNIFTY 48000 PE", "RELIANCE", "TATASTEEL"))
+    private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
     val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
 
     private val _optionStrikes = MutableStateFlow<List<OptionStrikeItem>>(emptyList())
@@ -163,6 +166,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _smsAlertPhone = MutableStateFlow(appPrefs.getSmsAlertPhone())
     val smsAlertPhone: StateFlow<String> = _smsAlertPhone.asStateFlow()
+
+    private val _liveIndexExpiries = MutableStateFlow<Map<String, String>>(emptyMap())
+    val liveIndexExpiries: StateFlow<Map<String, String>> = _liveIndexExpiries.asStateFlow()
+
+    private val _isLoadingLiveExpiries = MutableStateFlow(false)
+    val isLoadingLiveExpiries: StateFlow<Boolean> = _isLoadingLiveExpiries.asStateFlow()
+
+    fun fetchLiveIndexExpiries() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingLiveExpiries.value = true
+            val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
+            val expMap = mutableMapOf<String, String>()
+            
+            // Try to fetch sequentially or concurrently
+            indices.map { index ->
+                async {
+                    val expiries = repository.getOptionExpiries(index)
+                    if (expiries.isNotEmpty()) {
+                        expMap[index] = expiries.first()
+                    } else {
+                        // Fallback purely based on rules if completely empty
+                        expMap[index] = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(index).firstOrNull() ?: "--"
+                    }
+                }
+            }.awaitAll()
+            
+            _liveIndexExpiries.value = expMap
+            _isLoadingLiveExpiries.value = false
+        }
+    }
 
     private val _smsGatewayUrl = MutableStateFlow(appPrefs.getSmsGatewayUrl())
     val smsGatewayUrl: StateFlow<String> = _smsGatewayUrl.asStateFlow()
@@ -1397,7 +1430,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val baseSymbols = listOf(
             "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
             "SENSEX", "BANKEX",
-            "CRUDEOIL", "CRUDEOIL M", "GOLD", "GOLD M", "SILVER", "SILVER M", "COPPER", "COPPER M", "NATURALGAS", "NATURALGAS M",
+            "CRUDEOIL", "CRUDEOIL M",
             "RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "TATAMOTORS", "TATASTEEL"
         )
         val watchSymbols = _watchlist.value.map { it.symbol }

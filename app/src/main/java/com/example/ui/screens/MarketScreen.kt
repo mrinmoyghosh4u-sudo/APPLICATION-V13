@@ -70,8 +70,11 @@ fun MarketScreen(
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
 
-    val exchangeStatus = remember(selectedExchange) { MarketStatusUtil.getDetailedMarketStatus(selectedExchange) }
-    val isMarketOpen = exchangeStatus.isOpen
+    val exchangeStatus = MarketStatusUtil.getDetailedMarketStatus(selectedExchange)
+    val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")
+    val bseStatus = MarketStatusUtil.getDetailedMarketStatus("BSE")
+    val mcxStatus = MarketStatusUtil.getDetailedMarketStatus("MCX")
+    val isMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
 
     // Search Database containing Comprehensive NSE, BSE, MCX Indices & Option Contracts
     
@@ -122,9 +125,14 @@ fun MarketScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // 2. MARKET STATUS BAR
+            val nextOpeningText = when {
+                isMarketOpen && mcxStatus.isOpen && !nseStatus.isOpen -> "MCX Active (09:00 - 23:30 IST)"
+                isMarketOpen -> "Session Active (09:15 - 15:30 IST)"
+                else -> nseStatus.nextOpeningTimeText
+            }
             MarketStatusBarSection(
                 isMarketOpen = isMarketOpen,
-                nextOpeningText = exchangeStatus.nextOpeningTimeText
+                nextOpeningText = nextOpeningText
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -133,7 +141,7 @@ fun MarketScreen(
             SearchBarSection(
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
-                recentSearches = if (recentSearches.isNotEmpty()) recentSearches else listOf("NIFTY 25400 CE", "BANKNIFTY 52000 PE", "CRUDEOIL 6400 CE", "RELIANCE"),
+                recentSearches = recentSearches,
                 onRecentChipClick = { chip ->
                     searchQuery = chip
                     onAddRecentSearch(chip)
@@ -340,7 +348,7 @@ private fun MarketStatusBarSection(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Next Opening: $nextOpeningText",
+                text = if (isMarketOpen) nextOpeningText else "Next Opening: $nextOpeningText",
                 color = TextGray,
                 fontSize = 10.sp
             )

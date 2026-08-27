@@ -390,7 +390,7 @@ fun MarketTabContent(
             border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                if (true) {
+                if (candleList.isNotEmpty()) {
                     com.example.ui.components.CandlestickChart(
                         candles = candleList,
                         currentPrice = ltp.toFloat(),
@@ -652,14 +652,14 @@ fun OptionChainTabContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "REAL OPTION CHAIN UNAVAILABLE",
+                        "CONNECT BROKER TO VIEW",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFF5252) // Red color for unavailable
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "No verified strikes available from real data providers.",
+                        "Please configure Upstox, Fyers or Angel One API Key in Profile Settings to unlock live option chain.",
                         fontSize = 12.sp,
                         color = TextGray,
                         textAlign = TextAlign.Center
@@ -897,7 +897,7 @@ fun HistoricalDataTabContent(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                if (true) {
+                if (candleList.isNotEmpty()) {
                     com.example.ui.components.TradingViewChart(
                         symbol = indexName,
                         modifier = Modifier.fillMaxWidth().height(350.dp)
@@ -908,7 +908,7 @@ fun HistoricalDataTabContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            if (isLoading) "Loading historical candles..." else "CHART DATA UNAVAILABLE",
+                            if (isLoading) "Loading historical candles..." else "CONNECT BROKER TO VIEW CHART",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isLoading) TextGray else Color(0xFFFF5252)

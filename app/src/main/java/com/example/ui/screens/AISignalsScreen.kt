@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,9 +74,9 @@ fun AISignalsScreen(
     var selectedSignalForDetail by remember { mutableStateOf<AISignalEntity?>(null) }
 
     // Market Session Status per Exchange in IST
-    val nseStatus = remember { MarketStatusUtil.getDetailedMarketStatus("NSE") }
-    val bseStatus = remember { MarketStatusUtil.getDetailedMarketStatus("BSE") }
-    val mcxStatus = remember { MarketStatusUtil.getDetailedMarketStatus("MCX") }
+    val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")
+    val bseStatus = MarketStatusUtil.getDetailedMarketStatus("BSE")
+    val mcxStatus = MarketStatusUtil.getDetailedMarketStatus("MCX")
     val isAnyMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
     val isLiveFeedActive = marketDataSource.startsWith("LIVE", ignoreCase = true)
 
@@ -118,13 +119,38 @@ fun AISignalsScreen(
     }
 
     val isBrokerConnected = (userProfile.isAngelConnected || userProfile.isDhanConnected) && userProfile.connectedBroker.isNotBlank()
-    val activeBrokerName = if (isBrokerConnected) userProfile.connectedBroker.uppercase() else "DHAN LIVE"
+    val activeBrokerName = if (isBrokerConnected) "${userProfile.connectedBroker.uppercase()} LIVE" else "OFFLINE"
 
-    // Statistics calculations
+    val ceScore by com.example.util.AlgoEngine.ceBuyScore.collectAsState()
+    val peScore by com.example.util.AlgoEngine.peBuyScore.collectAsState()
+    val marketBias by com.example.util.AlgoEngine.marketBias.collectAsState()
+
+    // Real Statistics Calculations
     val totalSignalsCount = displayedSignalPool.size
     val bullishCount = displayedSignalPool.count { it.actionType.contains("CE", ignoreCase = true) || it.trend.equals("BULLISH", ignoreCase = true) }
     val bearishCount = displayedSignalPool.count { it.actionType.contains("PE", ignoreCase = true) || it.trend.equals("BEARISH", ignoreCase = true) }
-    val avgConfidence = if (displayedSignalPool.isNotEmpty()) displayedSignalPool.map { it.confidence }.average().toInt() else 0
+    
+    val closedSignals = displayedSignalPool.filter { !it.isLive && it.status != "LIVE" && it.status != "OPEN" }
+    val t1Hits = closedSignals.count { it.status.contains("TARGET") || it.status.contains("PROFIT") }
+    val t2Hits = closedSignals.count { it.status.contains("TARGET 2") || it.status.contains("TARGET 3") || it.status.contains("TARGET 4") }
+    
+    val accuracy = if (closedSignals.isNotEmpty()) "${(t1Hits * 100) / closedSignals.size}%" else "0%"
+    val t1Rate = if (closedSignals.isNotEmpty()) "${(t1Hits * 100) / closedSignals.size}%" else "0%"
+    val t2Rate = if (closedSignals.isNotEmpty()) "${(t2Hits * 100) / closedSignals.size}%" else "0%"
+    
+    val avgRr = if (displayedSignalPool.isNotEmpty()) {
+        val validSigs = displayedSignalPool.filter { it.ltp > 0 && it.stopLoss > 0 && it.target1 > 0 }
+        if (validSigs.isNotEmpty()) {
+            val avgRatio = validSigs.map { 
+                val risk = kotlin.math.abs(it.ltp - it.stopLoss)
+                val reward = kotlin.math.abs(it.target1 - it.ltp)
+                if (risk > 0) reward/risk else 2.0
+            }.average()
+            "1 : ${String.format(java.util.Locale.US, "%.1f", avgRatio)}"
+        } else "1 : 2.0"
+    } else {
+        "--"
+    }
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {
         Column(
@@ -220,15 +246,37 @@ fun AISignalsScreen(
                     .padding(horizontal = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Section A: AI Market Sentiment & Macro Radar
+
+
+                // Section A: Real AI Market Sentiment & Macro Radar
                 item {
+                    val nextSessionText = when {
+                        isAnyMarketOpen && mcxStatus.isOpen && !nseStatus.isOpen -> "MCX Active (09:00 - 23:30 IST)"
+                        isAnyMarketOpen -> "Session Active (09:15 - 15:30 IST)"
+                        else -> nseStatus.nextOpeningTimeText
+                    }
                     MarketSentimentOverviewCard(
                         isAnyMarketOpen = isAnyMarketOpen,
                         activeBrokerName = activeBrokerName,
-                        pcr = "1.18 (Bullish)",
-                        vix = "13.40 (Stable)",
-                        overallBias = "MODERATE BULLISH",
-                        nextSession = if (isAnyMarketOpen) "Session Active (09:15 - 15:30 IST)" else nseStatus.nextOpeningTimeText
+                        ceScore = ceScore,
+                        peScore = peScore,
+                        overallBias = marketBias,
+                        nextSession = nextSessionText,
+                        nseStatus = nseStatus,
+                        bseStatus = bseStatus,
+                        mcxStatus = mcxStatus
+                    )
+                }
+
+                item {
+                    SignalStatsRadarCard(
+                        totalSignals = totalSignalsCount,
+                        bullishCount = bullishCount,
+                        bearishCount = bearishCount,
+                        accuracyRate = accuracy,
+                        t1HitRate = t1Rate,
+                        t2HitRate = t2Rate,
+                        avgRiskReward = avgRr
                     )
                 }
 
@@ -302,17 +350,7 @@ fun AISignalsScreen(
                 }
 
                 // Section C: Signal Statistics Radar Card
-                item {
-                    SignalStatsRadarCard(
-                        totalSignals = totalSignalsCount,
-                        bullishCount = bullishCount,
-                        bearishCount = bearishCount,
-                        accuracyRate = if (viewMode == "HISTORY") "87.5%" else "$avgConfidence%",
-                        t1HitRate = "92.0%",
-                        t2HitRate = "68.5%",
-                        avgRiskReward = "1 : 2.5"
-                    )
-                }
+
 
                 // Section D: Multi-Index Quick Selector Chips
                 item {
@@ -413,7 +451,7 @@ fun AISignalsScreen(
                             onDeepAnalysis = { selectedSignalForDetail = signal },
                             onCopySignal = {
                                 val shareText = """
-👑 KING KHAN AI OPTION SIGNAL
+👑 KING KHAN ALGO OPTION SIGNAL
 ═══════════════════════
 🎯 Instrument: ${signal.symbol}
 ⚡ Action: ${signal.actionType}
@@ -484,10 +522,13 @@ King Khan Royal Algo Suite • Auto Trade
 private fun MarketSentimentOverviewCard(
     isAnyMarketOpen: Boolean,
     activeBrokerName: String,
-    pcr: String,
-    vix: String,
+    ceScore: Int,
+    peScore: Int,
     overallBias: String,
-    nextSession: String
+    nextSession: String,
+    nseStatus: com.example.util.DetailedMarketStatus,
+    bseStatus: com.example.util.DetailedMarketStatus,
+    mcxStatus: com.example.util.DetailedMarketStatus
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -507,6 +548,7 @@ private fun MarketSentimentOverviewCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isFeedActive = activeBrokerName != "OFFLINE"
                     Box(
                         modifier = Modifier
                             .size(8.dp)
@@ -514,26 +556,48 @@ private fun MarketSentimentOverviewCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isAnyMarketOpen) "EXCHANGE LIVE • NSE/BSE" else "MARKET OFFLINE",
+                        text = if (isAnyMarketOpen) {
+                            val openMarkets = mutableListOf<String>()
+                            if (nseStatus.isOpen || bseStatus.isOpen) openMarkets.add("NSE/BSE")
+                            if (mcxStatus.isOpen) openMarkets.add("MCX")
+                            "EXCHANGE LIVE • " + openMarkets.joinToString(" & ")
+                        } else "MARKET OFFLINE",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isAnyMarketOpen) ProfitGreen else LossRed
                     )
                 }
 
+                val isFeedActiveBox = activeBrokerName != "OFFLINE"
                 Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = Color(0xFF1E2838),
-                    border = BorderStroke(0.5.dp, Color(0xFF29B6F6))
+                    border = BorderStroke(0.5.dp, if (isFeedActiveBox) Color(0xFF29B6F6) else LossRed)
                 ) {
                     Text(
                         text = "Feed: $activeBrokerName",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF29B6F6),
+                        color = if (isFeedActiveBox) Color(0xFF29B6F6) else LossRed,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (isAnyMarketOpen) nextSession else "Next Opening: $nextSession",
+                    color = TextGray,
+                    fontSize = 10.sp
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Outlined.Schedule,
+                    contentDescription = null,
+                    tint = TextGray,
+                    modifier = Modifier.size(12.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -548,19 +612,19 @@ private fun MarketSentimentOverviewCard(
                 MacroPillar(
                     title = "AI SENTIMENT",
                     value = overallBias,
-                    valueColor = ProfitGreen,
+                    valueColor = if (overallBias == "BULLISH") ProfitGreen else if (overallBias == "BEARISH") LossRed else SecondaryGold,
                     modifier = Modifier.weight(1.3f)
                 )
                 MacroPillar(
-                    title = "PUT/CALL RATIO",
-                    value = pcr,
-                    valueColor = PrimaryGold,
+                    title = "CE CONFIDENCE",
+                    value = "$ceScore%",
+                    valueColor = if (ceScore >= 60) ProfitGreen else TextGray,
                     modifier = Modifier.weight(1.1f)
                 )
                 MacroPillar(
-                    title = "INDIA VIX",
-                    value = vix,
-                    valueColor = Color(0xFF29B6F6),
+                    title = "PE CONFIDENCE",
+                    value = "$peScore%",
+                    valueColor = if (peScore >= 60) LossRed else TextGray,
                     modifier = Modifier.weight(1.1f)
                 )
             }
@@ -1123,7 +1187,7 @@ private fun EmptySignalsCard(
                 } else if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
                     "Try resetting your filter parameters to view all active quantitative setups across Nifty, BankNifty and FinNifty."
                 } else {
-                    "AI Algo engine continuously scans multi-timeframe EMA 9/21, VWAP, Supertrend, Put/Call OI concentration, and Volume surges."
+                    "Multi-Factor Algorithmic Scoring Engine continuously analyzes EMA 9/20, VWAP, Supertrend, Real-time Put/Call OI Concentration, and Premium Liquidity."
                 },
                 fontSize = 11.sp,
                 color = TextGray,
@@ -1182,7 +1246,7 @@ private fun SignalDeepAnalysisDialog(
                         CrownLogo(size = 28.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text("AI TECHNICAL DIAGNOSIS", fontSize = 14.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
+                            Text("ALGO MULTI-FACTOR DIAGNOSIS", fontSize = 14.sp, fontWeight = FontWeight.Black, color = PrimaryGold)
                             Text("${signal.symbol} • ${signal.actionType}", fontSize = 11.sp, color = TextWhite)
                         }
                     }

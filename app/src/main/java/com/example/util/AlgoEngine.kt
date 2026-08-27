@@ -36,11 +36,15 @@ object AlgoEngine {
     private val _selectedOptionMode = MutableStateFlow("AUTO CE / PE") // "BUY CE ONLY", "BUY PE ONLY", "AUTO CE / PE"
     val selectedOptionMode: StateFlow<String> = _selectedOptionMode.asStateFlow()
 
+    private val _selectedStrikeType = MutableStateFlow("ATM") // "ITM", "ATM", "OTM"
+    val selectedStrikeType: StateFlow<String> = _selectedStrikeType.asStateFlow()
+
     private val defaultStrategy = AlgoStrategy(
         id = "kk_buy_only_default",
         name = "KK BUY-ONLY AI",
         index = "NIFTY 50",
         optionMode = "AUTO CE / PE",
+        strikeType = "ATM",
         tradingStyle = "INTRADAY",
         timeframe = "5 MIN",
         riskLevel = "MEDIUM",
@@ -264,6 +268,7 @@ object AlgoEngine {
         _currentStrategy.value = strategy
         _selectedIndex.value = strategy.index
         _selectedOptionMode.value = strategy.optionMode
+        _selectedStrikeType.value = strategy.strikeType
     }
 
     fun saveStrategy(strategy: AlgoStrategy) {
@@ -394,12 +399,27 @@ object AlgoEngine {
             "OI" to oiPass
         )
 
-        // 4. Calculate CE & PE Scores based purely on real indicator confluences
+        // 4. Multi-Factor AI Engine Scoring (Underlying + Options Data)
         var ceScore = 50
-        if (snapshot.ema9 != null) ceScore += if (ltp >= snapshot.ema9) 8 else -8
-        if (snapshot.ema20 != null && snapshot.ema9 != null) ceScore += if (snapshot.ema9 >= snapshot.ema20) 8 else -8
-        if (snapshot.vwap != null) ceScore += if (ltp >= snapshot.vwap) 8 else -8
-        if (snapshot.supertrend != null) ceScore += if (snapshot.supertrend.isBullish) 8 else -8
+        var peScore = 50
+
+        // --- A. Underlying Technical Factors ---
+        if (snapshot.ema9 != null) {
+            ceScore += if (ltp >= snapshot.ema9) 8 else -8
+            peScore += if (ltp < snapshot.ema9) 8 else -8
+        }
+        if (snapshot.ema20 != null && snapshot.ema9 != null) {
+            ceScore += if (snapshot.ema9 >= snapshot.ema20) 8 else -8
+            peScore += if (snapshot.ema9 < snapshot.ema20) 8 else -8
+        }
+        if (snapshot.vwap != null) {
+            ceScore += if (ltp >= snapshot.vwap) 8 else -8
+            peScore += if (ltp < snapshot.vwap) 8 else -8
+        }
+        if (snapshot.supertrend != null) {
+            ceScore += if (snapshot.supertrend.isBullish) 8 else -8
+            peScore += if (!snapshot.supertrend.isBullish) 8 else -8
+        }
         if (snapshot.rsi != null) {
             ceScore += when {
                 snapshot.rsi in 50.0..70.0 -> 8
@@ -407,17 +427,46 @@ object AlgoEngine {
                 snapshot.rsi < 45.0 -> -8
                 else -> 0
             }
+            peScore += when {
+                snapshot.rsi in 30.0..50.0 -> 8
+                snapshot.rsi < 30.0 -> 4
+                snapshot.rsi > 55.0 -> -8
+                else -> 0
+            }
         }
-        if (volumePass) ceScore += 5
-        if (snapshot.oiAnalysis.isAvailable) {
-            ceScore += if (snapshot.oiAnalysis.isBullishSupport) 5 else -5
+        if (volumePass) {
+            ceScore += if (isBullishDirection) 5 else 0
+            peScore += if (!isBullishDirection) 5 else 0
         }
+
+        // --- B. Option Chain Multi-Factor (OI & Premium Momentum) ---
+        if (!optionChain.isNullOrEmpty()) {
+            val atm = optionChain.minByOrNull { kotlin.math.abs(it.strikePrice - ltp) }
+            if (atm != null) {
+                val ceOi = atm.callOi.toDoubleOrNull() ?: 0.0
+                val peOi = atm.putOi.toDoubleOrNull() ?: 0.0
+                
+                // PCR (Put-Call Ratio) around ATM
+                if (peOi > ceOi && ceOi > 0) {
+                    ceScore += 10 // Put writers dominating -> Bullish for Underlying -> CE positive
+                    peScore -= 10
+                } else if (ceOi > peOi && peOi > 0) {
+                    peScore += 10 // Call writers dominating -> Bearish for Underlying -> PE positive
+                    ceScore -= 10
+                }
+                
+                // Penalize if the option contract is illiquid or dead
+                if (atm.callVolume == "0" || atm.callLtp <= 0.0) ceScore -= 20
+                if (atm.putVolume == "0" || atm.putLtp <= 0.0) peScore -= 20
+            }
+        }
+
         ceScore = ceScore.coerceIn(5, 95)
-        val peScore = 100 - ceScore
+        peScore = peScore.coerceIn(5, 95)
 
         val bias = when {
-            ceScore >= 60 -> "BULLISH"
-            peScore >= 60 -> "BEARISH"
+            ceScore >= 60 && ceScore > peScore -> "BULLISH"
+            peScore >= 60 && peScore > ceScore -> "BEARISH"
             else -> "NEUTRAL"
         }
 
@@ -425,42 +474,100 @@ object AlgoEngine {
         _ceBuyScore.value = ceScore
         _peBuyScore.value = peScore
 
-        val isBullishSignal = bias == "BULLISH" || (bias == "NEUTRAL" && isBullishDirection)
-        val shouldGenerateCe = (_selectedOptionMode.value == "BUY CE ONLY" || _selectedOptionMode.value == "AUTO CE / PE") && (isBullishSignal || _selectedOptionMode.value == "BUY CE ONLY")
-        val shouldGeneratePe = (_selectedOptionMode.value == "BUY PE ONLY" || (_selectedOptionMode.value == "AUTO CE / PE" && !isBullishSignal))
+        val shouldGenerateCe = (_selectedOptionMode.value == "BUY CE ONLY" || _selectedOptionMode.value == "AUTO CE / PE") && (ceScore >= 60)
+        val shouldGeneratePe = (_selectedOptionMode.value == "BUY PE ONLY" || _selectedOptionMode.value == "AUTO CE / PE") && (peScore >= 60)
 
-        val signalAction = if (shouldGenerateCe) "BUY CE" else if (shouldGeneratePe) "BUY PE" else "BUY CE"
-        val optionSymbol = com.example.data.network.AISignalGenerator.formatOptionSymbol(targetQuote.symbol, signalAction == "BUY CE", ltp)
-        
-        // Find ATM strike and real option premium from option chain if present
-        var signalEntryLtp = ltp
-        var customStopLoss = if (signalAction == "BUY CE") ltp * 0.99 else ltp * 1.01
-        var customTarget1 = if (signalAction == "BUY CE") ltp * 1.01 else ltp * 0.99
-        var customTarget2 = if (signalAction == "BUY CE") ltp * 1.02 else ltp * 0.98
-
-        if (!optionChain.isNullOrEmpty()) {
-            val atmStrike = optionChain.minByOrNull { abs(it.strikePrice - ltp) }
-            if (atmStrike != null) {
-                val premium = if (signalAction == "BUY CE") atmStrike.callLtp else atmStrike.putLtp
-                if (premium > 0.0) {
-                    signalEntryLtp = premium
-                    customStopLoss = premium * 0.85 // 15% SL on option premium
-                    customTarget1 = premium * 1.20 // 20% T1 on option premium
-                    customTarget2 = premium * 1.40 // 40% T2 on option premium
-                }
-            }
+        val signalAction = when {
+            shouldGenerateCe && shouldGeneratePe -> if (ceScore >= peScore) "BUY CE" else "BUY PE"
+            shouldGenerateCe -> "BUY CE"
+            shouldGeneratePe -> "BUY PE"
+            else -> ""
         }
+
+        if (signalAction.isEmpty()) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — INSUFFICIENT AI CONFIDENCE"
+            _currentSignal.value = null
+            return
+        }
+
+        // 5. ENFORCE REAL OPTION CHAIN REQUIREMENT
+        if (optionChain.isNullOrEmpty()) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — REAL OPTION CHAIN UNAVAILABLE"
+            _currentSignal.value = null
+            return
+        }
+
+        val sortedChain = optionChain.sortedBy { it.strikePrice }
+        val atmStrikeItem = sortedChain.minByOrNull { kotlin.math.abs(it.strikePrice - ltp) }
+        
+        if (atmStrikeItem == null) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — ATM STRIKE NOT FOUND"
+            _currentSignal.value = null
+            return
+        }
+
+        val atmIndex = sortedChain.indexOf(atmStrikeItem)
+        
+        val isCe = signalAction == "BUY CE"
+        val strikeOffset = when (_selectedStrikeType.value) {
+            "ITM" -> if (isCe) -1 else 1
+            "OTM" -> if (isCe) 1 else -1
+            else -> 0 // ATM
+        }
+        
+        val targetIndex = (atmIndex + strikeOffset).coerceIn(0, sortedChain.size - 1)
+        val targetStrikeItem = sortedChain[targetIndex]
+        
+        val optionSymbol = if (isCe) targetStrikeItem.callSymbol else targetStrikeItem.putSymbol
+        val premium = if (isCe) targetStrikeItem.callLtp else targetStrikeItem.putLtp
+        
+        if (optionSymbol.isBlank() || premium <= 0.0) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — INVALID OPTION PREMIUM / SYMBOL"
+            _currentSignal.value = null
+            return
+        }
+
+        val signalEntryLtp = premium
+        // Dynamic Stop Loss and Targets based on Option Premium
+        val customStopLoss = premium * 0.80 // 20% SL
+        val customTarget1 = premium * 1.20 // 20% T1
+        val customTarget2 = premium * 1.40 // 40% T2
+        val customTarget3 = premium * 1.60 // 60% T3
+        val customTarget4 = premium * 1.80 // 80% T4
 
         val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
 
         val reasonsList = mutableListOf<String>()
-        if (snapshot.ema9 != null && ltp >= snapshot.ema9 && isBullishSignal) reasonsList.add("Price Above EMA 9")
-        if (snapshot.ema20 != null && snapshot.ema9 != null && snapshot.ema9 >= snapshot.ema20 && isBullishSignal) reasonsList.add("EMA 9 > EMA 20 Crossover")
-        if (snapshot.vwap != null && ltp >= snapshot.vwap && isBullishSignal) reasonsList.add("Price Above VWAP")
-        if (snapshot.rsi != null) reasonsList.add("RSI Momentum ${snapshot.rsi.roundToInt()}")
-        if (snapshot.supertrend != null && snapshot.supertrend.isBullish && isBullishSignal) reasonsList.add("Supertrend Confirmed Green")
+        val isPe = signalAction == "BUY PE"
+        
+        if (snapshot.ema9 != null) {
+            if (isCe && ltp >= snapshot.ema9) reasonsList.add("Price Above EMA 9")
+            if (isPe && ltp <= snapshot.ema9) reasonsList.add("Price Below EMA 9")
+        }
+        if (snapshot.ema20 != null && snapshot.ema9 != null) {
+            if (isCe && snapshot.ema9 >= snapshot.ema20) reasonsList.add("EMA 9 > EMA 20 Crossover")
+            if (isPe && snapshot.ema9 <= snapshot.ema20) reasonsList.add("EMA 9 < EMA 20 Crossover")
+        }
+        if (snapshot.vwap != null) {
+            if (isCe && ltp >= snapshot.vwap) reasonsList.add("Price Above VWAP")
+            if (isPe && ltp <= snapshot.vwap) reasonsList.add("Price Below VWAP")
+        }
+        if (snapshot.rsi != null) {
+            if (isCe && snapshot.rsi > 50) reasonsList.add("Bullish RSI Momentum ${snapshot.rsi.roundToInt()}")
+            else if (isPe && snapshot.rsi < 50) reasonsList.add("Bearish RSI Momentum ${snapshot.rsi.roundToInt()}")
+            else reasonsList.add("RSI Momentum ${snapshot.rsi.roundToInt()}")
+        }
+        if (snapshot.supertrend != null) {
+            if (isCe && snapshot.supertrend.isBullish) reasonsList.add("Supertrend Confirmed Green")
+            if (isPe && !snapshot.supertrend.isBullish) reasonsList.add("Supertrend Confirmed Red")
+        }
         if (volumePass) reasonsList.add("Volume Surge Confirmed")
-        if (snapshot.oiAnalysis.isAvailable && snapshot.oiAnalysis.isBullishSupport && isBullishSignal) reasonsList.add("Put OI Support PCR ${String.format(Locale.US, "%.2f", snapshot.oiAnalysis.pcr)}")
+        
+        if (snapshot.oiAnalysis.isAvailable) {
+            if (isCe && snapshot.oiAnalysis.isBullishSupport) reasonsList.add("Put OI Support PCR ${String.format(Locale.US, "%.2f", snapshot.oiAnalysis.pcr)}")
+            if (isPe && snapshot.oiAnalysis.isBearishResistance) reasonsList.add("Call OI Resistance PCR ${String.format(Locale.US, "%.2f", snapshot.oiAnalysis.pcr)}")
+        }
+        
         if (reasonsList.isEmpty()) reasonsList.add("Real Market Data Multi-Indicator Alignment")
 
         _currentSignal.value = AISignalEntity(
@@ -475,10 +582,12 @@ object AlgoEngine {
             entryZone = String.format(Locale.US, "%.2f - %.2f", signalEntryLtp * 0.998, signalEntryLtp * 1.002),
             target1 = customTarget1,
             target2 = customTarget2,
+            target3 = customTarget3,
+            target4 = customTarget4,
             stopLoss = customStopLoss,
             confidence = maxOf(ceScore, peScore),
             riskReward = "1:2",
-            lotSize = com.example.util.AppPreferences.getGlobalLotSize(targetQuote.symbol),
+            lotSize = com.example.util.AppPreferences.getGlobalLotSize(optionSymbol).takeIf { it > 0 } ?: com.example.util.AppPreferences.getGlobalLotSize(targetQuote.symbol),
             timeframe = _currentStrategy.value.timeframe,
             timestamp = timeStr,
             status = "ACTIVE",

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -175,14 +176,14 @@ fun AlgoScreen(
                 AlgoScreenState.CURRENT_SIGNAL_DETAIL -> CurrentSignalDetailScreen(
                     onBack = { currentState = AlgoScreenState.DASHBOARD }
                 )
-                AlgoScreenState.AI_CREATE -> AiCreateStrategy(onNavigate = { currentState = it })
-                AlgoScreenState.STRATEGY_BUILDER -> StrategyBuilder(onNavigate = { currentState = it })
-                AlgoScreenState.MY_STRATEGIES -> MyStrategies(onNavigate = { currentState = it })
-                AlgoScreenState.RISK_MANAGEMENT -> RiskManagement()
-                AlgoScreenState.PERFORMANCE -> AlgoPerformance()
-                AlgoScreenState.TRADE_HISTORY -> TradeHistory()
-                AlgoScreenState.BACKTEST -> BacktestScreen()
-                AlgoScreenState.SYSTEM_LOGS -> SystemLogsScreen()
+                AlgoScreenState.AI_CREATE -> AiCreateStrategy(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.STRATEGY_BUILDER -> StrategyBuilder(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.MY_STRATEGIES -> MyStrategies(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.RISK_MANAGEMENT -> RiskManagement(onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.PERFORMANCE -> AlgoPerformance(onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.TRADE_HISTORY -> TradeHistory(onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.BACKTEST -> BacktestScreen(onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.SYSTEM_LOGS -> SystemLogsScreen(onBack = { currentState = AlgoScreenState.DASHBOARD })
             }
         }
     }
@@ -1131,8 +1132,25 @@ fun SignalDetailRow(label: String, value: String, valueColor: Color) {
 // -------------------------------------------------------------
 // MY STRATEGIES SCREEN
 // -------------------------------------------------------------
+
 @Composable
-fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit) {
+fun AlgoSubScreenTopBar(title: String, onBack: () -> Unit, suffix: (@Composable () -> Unit)? = null) {
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PrimaryGold)
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        }
+        if (suffix != null) {
+            suffix()
+        }
+    }
+}
+
+@Composable
+fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
     val strategies by AlgoEngine.strategies.collectAsState()
     val liveTradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
     val currentStrategy by AlgoEngine.currentStrategy.collectAsState()
@@ -1142,18 +1160,11 @@ fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit) {
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("MY STRATEGIES", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        AlgoSubScreenTopBar("MY STRATEGIES", onBack, suffix = {
             IconButton(onClick = { onNavigate(AlgoScreenState.STRATEGY_BUILDER) }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add Strategy", tint = SecondaryGold)
             }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
+        })
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1209,7 +1220,7 @@ fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit) {
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 Text("Win Rate", color = TextGray, fontSize = 10.sp)
-                                val stratWinRateStr = if (stratTotal == 0) "68.5%" else String.format("%.1f%%", (stratWins.toDouble() / stratTotal) * 100)
+                                val stratWinRateStr = if (stratTotal == 0) "N/A" else String.format("%.1f%%", (stratWins.toDouble() / stratTotal) * 100)
                                 Text(stratWinRateStr, color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
@@ -1220,7 +1231,7 @@ fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit) {
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 Text("P&L", color = TextGray, fontSize = 10.sp)
-                                val stratPnlStr = if (stratPnl == 0.0) "+₹3,450.00" else String.format("%+₹.2f", stratPnl)
+                                val stratPnlStr = String.format("%+₹.2f", stratPnl)
                                 Text(stratPnlStr, color = ProfitGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
 
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -1293,7 +1304,7 @@ fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit) {
 // STRATEGY BUILDER SCREEN
 // -------------------------------------------------------------
 @Composable
-fun StrategyBuilder(onNavigate: (AlgoScreenState) -> Unit) {
+fun StrategyBuilder(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
     var strategyName by remember { mutableStateOf("MOMENTUM SCALPER AI") }
     var selectedIndex by remember { mutableStateOf("NIFTY 50") }
     var selectedMode by remember { mutableStateOf("AUTO CE / PE") }
@@ -1573,7 +1584,7 @@ fun ConditionRow(left: String, operator: String, right: String) {
 // PERFORMANCE SCREEN
 // -------------------------------------------------------------
 @Composable
-fun AlgoPerformance() {
+fun AlgoPerformance(onBack: () -> Unit = {}) {
     var selectedTimeframe by remember { mutableStateOf("Today") }
     val liveTradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
 
@@ -1632,16 +1643,16 @@ fun AlgoPerformance() {
 
         val perfTotalProfit = perfHistory.filter { it.pnl > 0 }.sumOf { it.pnl }
         val perfTotalLoss = kotlin.math.abs(perfHistory.filter { it.pnl < 0 }.sumOf { it.pnl })
-        val perfProfitFactor = if (perfTotalLoss == 0.0) "2.85" else String.format("%.2f", perfTotalProfit / perfTotalLoss)
+        val perfProfitFactor = if (perfTotalLoss == 0.0) "N/A" else String.format("%.2f", perfTotalProfit / perfTotalLoss)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PerformanceMetricBox("Total P&L", if (perfPnl == 0.0) "+₹12,450.00" else String.format("%+₹.2f", perfPnl), ProfitGreen, Modifier.weight(1f))
+                PerformanceMetricBox("Total P&L", String.format("%+₹.2f", perfPnl), ProfitGreen, Modifier.weight(1f))
                 PerformanceMetricBox("Win Rate", perfWinRateStr, ProfitGreen, Modifier.weight(1f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PerformanceMetricBox("Winning Trades", if (perfWins == 0) "10" else "$perfWins", ProfitGreen, Modifier.weight(1f))
-                PerformanceMetricBox("Losing Trades", if (perfLosses == 0) "4" else "$perfLosses", LossRed, Modifier.weight(1f))
+                PerformanceMetricBox("Winning Trades", "$perfWins", ProfitGreen, Modifier.weight(1f))
+                PerformanceMetricBox("Losing Trades", "$perfLosses", LossRed, Modifier.weight(1f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PerformanceMetricBox("Profit Factor", perfProfitFactor, PrimaryGold, Modifier.weight(1f))
@@ -1714,7 +1725,7 @@ fun PerformanceMetricBox(title: String, value: String, valueColor: Color, modifi
 // BACKTEST SIMULATOR SCREEN
 // -------------------------------------------------------------
 @Composable
-fun BacktestScreen() {
+fun BacktestScreen(onBack: () -> Unit = {}) {
     val strategies by AlgoEngine.strategies.collectAsState()
     var selectedStrategy by remember { mutableStateOf(strategies.firstOrNull() ?: AlgoEngine.currentStrategy.value) }
     var selectedDays by remember { mutableIntStateOf(30) }
@@ -1902,7 +1913,7 @@ fun BacktestScreen() {
 // SYSTEM LOGS SCREEN
 // -------------------------------------------------------------
 @Composable
-fun SystemLogsScreen() {
+fun SystemLogsScreen(onBack: () -> Unit = {}) {
     val logs by AlgoEngine.systemLogs.collectAsState()
     var filterLevel by remember { mutableStateOf("ALL") }
 
@@ -2027,7 +2038,7 @@ fun SystemLogsScreen() {
 // AI CREATE STRATEGY SCREEN
 // -------------------------------------------------------------
 @Composable
-fun AiCreateStrategy(onNavigate: (AlgoScreenState) -> Unit) {
+fun AiCreateStrategy(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
     var index by remember { mutableStateOf("NIFTY 50") }
     var optionMode by remember { mutableStateOf("AUTO CE / PE") }
     var generatedStrategy by remember { mutableStateOf<AlgoStrategy?>(null) }
@@ -2120,7 +2131,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
 // RISK MANAGEMENT SCREEN
 // -------------------------------------------------------------
 @Composable
-fun RiskManagement() {
+fun RiskManagement(onBack: () -> Unit = {}) {
     val riskPerTrade by AlgoEngine.riskPerTrade.collectAsState()
     val maxDailyLossPercent by AlgoEngine.maxDailyLossPercent.collectAsState()
     val maxTradesPerDay by AlgoEngine.maxTradesPerDay.collectAsState()
@@ -2131,8 +2142,7 @@ fun RiskManagement() {
     var maxTradesInput by remember(maxTradesPerDay) { mutableIntStateOf(maxTradesPerDay) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("RISK CONTROL CENTER", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-        Spacer(modifier = Modifier.height(16.dp))
+        AlgoSubScreenTopBar("RISK CONTROL CENTER", onBack)
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -2193,7 +2203,7 @@ fun RiskManagement() {
 // TRADE HISTORY SCREEN
 // -------------------------------------------------------------
 @Composable
-fun TradeHistory() {
+fun TradeHistory(onBack: () -> Unit = {}) {
     val tradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
     val paperHistory by AlgoEngine.paperTradeHistory.collectAsState()
 
