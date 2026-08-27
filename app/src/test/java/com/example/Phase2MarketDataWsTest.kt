@@ -231,6 +231,76 @@ class Phase2MarketDataWsTest {
         assertFalse(stateAfterDisconnect.healthy)
     }
 
+    @Test
+    fun test7_upstoxSubscriptionConfirmationViaServerJson() {
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
+
+        assertEquals("SUBSCRIBING", healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX).status)
+
+        // Server returns JSON subscription success
+        val successJson = """{"type":"sub","status":"success","data":{"mode":"ltpc","instrumentKeys":["NSE_INDEX|Nifty 50"]}}"""
+        upstoxService.parseTextMessage(successJson)
+
+        val stateAfterAck = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("WAITING_FOR_FIRST_TICK", stateAfterAck.status)
+        assertFalse("Must be WAITING_FOR_FIRST_TICK, not LIVE yet", stateAfterAck.healthy)
+    }
+
+    @Test
+    fun test8_upstoxSubscriptionRejectedViaServerJson() {
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
+
+        // Server returns JSON subscription error
+        val errorJson = """{"status":"error","message":"Invalid instrument key or unauthorized subscription"}"""
+        upstoxService.parseTextMessage(errorJson)
+
+        assertEquals("SUBSCRIPTION_ERROR", upstoxService.connectionState.value)
+    }
+
+    @Test
+    fun test9_malformedBinaryPacketSafelyHandledWithoutLiveState() {
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, 1)
+
+        val malformedBytes = byteArrayOf(0x01, 0x02, 0xFF.toByte(), 0xAA.toByte(), 0x55)
+        val parsedTicks = upstoxService.parseBinaryPacket(malformedBytes)
+
+        assertEquals(0, parsedTicks)
+        assertFalse("Malformed packet must not trigger first tick", upstoxService.hasFirstTickReceived())
+        assertFalse("Malformed packet must not set LIVE", upstoxService.isConnectionLive())
+    }
+
+    @Test
+    fun test10_emptyBinaryPacketSafelyHandled() {
+        val emptyBytes = ByteArray(0)
+        val parsedTicks = upstoxService.parseBinaryPacket(emptyBytes)
+
+        assertEquals(0, parsedTicks)
+        assertFalse(upstoxService.hasFirstTickReceived())
+    }
+
+    @Test
+    fun test11_restQuoteDoesNotSetWebSocketLive() {
+        assertFalse("Initially not live", upstoxService.isConnectionLive())
+        assertFalse("No first tick", upstoxService.hasFirstTickReceived())
+
+        com.example.data.model.MarketDataStore.updateTick(
+            source = com.example.data.model.MarketDataSourceNames.UPSTOX,
+            symbol = "NIFTY",
+            token = "NSE_INDEX|Nifty 50",
+            exchange = "NSE",
+            ltp = 22550.0,
+            receivedTimestamp = System.currentTimeMillis(),
+            state = "REST_QUOTE_AVAILABLE"
+        )
+
+        assertFalse("REST quote MUST NOT make WebSocket state LIVE", upstoxService.isConnectionLive())
+        assertFalse("REST quote MUST NOT mark first real tick received", upstoxService.hasFirstTickReceived())
+        assertEquals("REST_QUOTE_AVAILABLE", com.example.data.model.MarketDataStore.getTick("NIFTY")?.state)
+    }
+
     private fun writeVarint(buffer: ByteBuffer, value: Long) {
         var v = value
         while (v and -0x80L != 0L) {
