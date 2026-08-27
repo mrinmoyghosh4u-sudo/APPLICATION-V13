@@ -46,7 +46,8 @@ fun BrokerConnectDialog(
     onFyersLogin: ((String, String, String) -> Unit)? = null,
     onUpstoxLogin: ((String, String, String) -> Unit)? = null,
     onStartUpstoxOAuth: ((String, String) -> Unit)? = null,
-    onStartFyersOAuth: ((String, String) -> Unit)? = null
+    onStartFyersOAuth: ((String, String) -> Unit)? = null,
+    onStartDhanOAuth: (() -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
     var localErrorMsg by remember { mutableStateOf<String?>(null) }
@@ -864,22 +865,36 @@ fun BrokerConnectDialog(
                                     localErrorMsg = "Missing Dhan Client ID. Please configure it securely."
                                 } else {
                                     localErrorMsg = null
-                                    isDhanConsentLoading = true
-                                    coroutineScope.launch {
-                                        val consentRes = com.example.util.DhanAuthHelper.generateConsent()
-                                        isDhanConsentLoading = false
-                                        consentRes.onSuccess { url ->
-                                            android.util.Log.d("DhanAuth", "Opening browser with Complete Consent URL: $url")
-                                            try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                context.startActivity(intent)
-                                    android.util.Log.d("UpstoxAuth", "[3] Browser opened: PASS")
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("DhanAuth", "Failed to launch browser: ${e.message}", e)
-                                                localErrorMsg = "Unable to open browser: ${e.localizedMessage}"
+                                    val redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
+                                    val dhanState = "kingkhan_oauth_state"
+                                    sessionManager.pendingOAuthBroker = "Dhan"
+                                    sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
+                                        provider = "DHAN",
+                                        state = dhanState,
+                                        createdAt = System.currentTimeMillis(),
+                                        redirectUri = redirectUri,
+                                        consumed = false
+                                    )
+                                    if (onStartDhanOAuth != null) {
+                                        onStartDhanOAuth()
+                                    } else {
+                                        isDhanConsentLoading = true
+                                        coroutineScope.launch {
+                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent()
+                                            isDhanConsentLoading = false
+                                            consentRes.onSuccess { url ->
+                                                android.util.Log.d("DhanAuth", "Opening browser with Complete Consent URL: $url")
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                    android.util.Log.d("DhanAuth", "Browser opened: PASS")
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("DhanAuth", "Failed to launch browser: ${e.message}", e)
+                                                    localErrorMsg = "Unable to open browser: ${e.localizedMessage}"
+                                                }
+                                            }.onFailure { err ->
+                                                localErrorMsg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
                                             }
-                                        }.onFailure { err ->
-                                            localErrorMsg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
                                         }
                                     }
                                 }
