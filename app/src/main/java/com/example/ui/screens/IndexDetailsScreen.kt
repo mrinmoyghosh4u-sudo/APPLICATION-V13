@@ -452,7 +452,7 @@ fun OptionChainTabContent(
         }
     }
 
-    var isScalpMode by remember { mutableStateOf(false) }
+    var isScalpMode by remember { mutableStateOf(true) }
     var scalpLotMultiplier by remember { mutableStateOf(1) }
     val lotSize = com.example.util.AppPreferences.getGlobalLotSize(indexName)
     val closestAtmStrikePrice = remember(strikes, underlyingLtp) {
@@ -667,7 +667,15 @@ fun OptionChainTabContent(
                                 }
                             }
                             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 4.dp)) {
-                                Text(if (strike.callLtp > 0.0) String.format("%,.2f", strike.callLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isScalpMode) {
+                                        Box(modifier = Modifier.background(ProfitGreen, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                            Text("BUY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(if (strike.callLtp > 0.0) String.format("%,.2f", strike.callLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                }
                                 Text(if (strike.callIv != null) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                         }
@@ -715,7 +723,15 @@ fun OptionChainTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                    if (isScalpMode) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Box(modifier = Modifier.background(ProfitGreen, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                            Text("BUY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                    }
+                                }
                                 Text(if (strike.putIv != null) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                             Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {

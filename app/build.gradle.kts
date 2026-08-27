@@ -58,12 +58,12 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 35
+  compileSdk = 34
 
   defaultConfig {
     applicationId = "com.aistudio.kingkhanaitradepro.vtrqpx"
     minSdk = 24
-    targetSdk = 35
+    targetSdk = 34
     val vCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 48
     val vName = (project.findProperty("versionName") as? String) ?: "1.0.48"
     versionCode = vCode
