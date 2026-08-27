@@ -41,6 +41,7 @@ object UpstoxProtobufDecoder {
     private const val TAG = "UpstoxProtoDecoder"
 
     fun decode(bytes: ByteArray): UpstoxDecodedFeedResponse {
+        if (bytes.isEmpty()) return UpstoxDecodedFeedResponse()
         return try {
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             var feedType = 0
