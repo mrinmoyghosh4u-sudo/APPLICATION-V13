@@ -17,9 +17,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Official m.Stock (Mirae Asset Capital Markets) Authentication Helper
  * 
- * Supports Official Type A and Type B API Authentication:
- * - Type A Endpoint: POST https://api.mstock.trade/openapi/typea/session/verifytotp
- * - Type B Endpoint: POST https://api.mstock.trade/openapi/typeb/session/verifytotp
+ * Strict Type A ONLY API Authentication:
+ * - Official Type A Endpoint: POST https://api.mstock.trade/openapi/typea/session/verifytotp
  * 
  * Strict Security Rules:
  * - Local RFC 6238 6-digit TOTP generation from secure Base32 TOTP Secret
@@ -30,8 +29,7 @@ import java.util.concurrent.TimeUnit
 object MStockAuthHelper {
     private const val TAG = "MStockAuth"
 
-    private const val TYPE_A_VERIFY_TOTP_URL = "https://api.mstock.trade/openapi/typea/session/verifytotp"
-    private const val TYPE_B_VERIFY_TOTP_URL = "https://api.mstock.trade/openapi/typeb/session/verifytotp"
+    const val TYPE_A_VERIFY_TOTP_URL = "https://api.mstock.trade/openapi/typea/session/verifytotp"
 
     private val _lastEndpoint = MutableStateFlow(TYPE_A_VERIFY_TOTP_URL)
     val lastEndpoint: StateFlow<String> = _lastEndpoint.asStateFlow()
@@ -58,8 +56,7 @@ object MStockAuthHelper {
     )
 
     /**
-     * Executes official m.Stock TOTP authentication using clientCode, apiKey, and TOTP secret/code.
-     * Uses Type A endpoint by default, or Type B endpoint if a refreshToken is provided.
+     * Executes official m.Stock Type A TOTP authentication using clientCode, apiKey, and TOTP secret/code.
      */
     suspend fun verifyTotp(
         clientCode: String,
@@ -71,7 +68,6 @@ object MStockAuthHelper {
             val sanitizedClientCode = clientCode.trim()
             val sanitizedApiKey = apiKey.trim()
             val sanitizedTotpInput = totpOrSecret.trim()
-            val sanitizedRefreshToken = refreshToken?.trim() ?: ""
 
             _authStage.value = "INITIALIZING"
             _lastAuthMessage.value = "Validating input parameters"
@@ -87,7 +83,7 @@ object MStockAuthHelper {
                 throw Exception("m.Stock TOTP Secret or 6-digit TOTP code is required.")
             }
 
-            Log.d(TAG, "Initiating m.Stock TOTP authentication for client: ${sanitizedClientCode.ifBlank { "N/A" }}")
+            Log.d(TAG, "Initiating m.Stock Type A TOTP authentication")
 
             // 1. Generate standard 6-digit RFC 6238 TOTP locally if TOTP secret key is provided
             _authStage.value = "GENERATING_TOTP"
@@ -95,32 +91,15 @@ object MStockAuthHelper {
                 sanitizedTotpInput
             } else {
                 val generated = TotpUtil.generateTotp(sanitizedTotpInput)
-                if (generated.isBlank()) {
+                if (generated.isBlank() || generated.length != 6 || !generated.all { it.isDigit() }) {
                     _authStage.value = "FAILED"
                     _lastAuthMessage.value = "Failed to generate 6-digit TOTP from secret"
-                    throw Exception("Failed to generate 6-digit TOTP. Please verify your m.Stock Base32 TOTP Secret.")
+                    throw Exception("Failed to generate valid 6-digit TOTP. Please verify your m.Stock Base32 TOTP Secret.")
                 }
                 generated
             }
 
-            // 2. Decide between Type B (if refreshToken present) and Type A
-            if (sanitizedRefreshToken.isNotBlank()) {
-                try {
-                    _lastEndpoint.value = TYPE_B_VERIFY_TOTP_URL
-                    _authStage.value = "VERIFYING_TOTP_TYPE_B"
-                    Log.d(TAG, "Attempting m.Stock Type B authentication...")
-                    val result = executeTypeBAuth(sanitizedApiKey, sanitizedRefreshToken, effectiveTotp)
-                    if (result.isSuccess) {
-                        _authStage.value = "AUTHENTICATED"
-                        _lastAuthMessage.value = "Success (Type B Tokens Stored)"
-                        return@withContext result
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Type B authentication failed: ${e.localizedMessage}. Falling back to Type A...")
-                }
-            }
-
-            // 3. Execute Type A Authentication
+            // 2. Execute Official Type A Authentication ONLY
             _lastEndpoint.value = TYPE_A_VERIFY_TOTP_URL
             _authStage.value = "VERIFYING_TOTP_TYPE_A"
             Log.d(TAG, "Executing m.Stock Type A authentication...")
@@ -130,14 +109,6 @@ object MStockAuthHelper {
             tokens
         }
     }
-
-    private val CANDIDATE_TYPE_A_URLS = listOf(
-        "https://api.mstock.trade/openapi/typea/session/verifytotp",
-        "https://api.mstock.trade/openapi/session/verifytotp",
-        "https://api.mstock.trade/v1/user/verifytotp",
-        "https://api.mstock.trade/openapi/v1/session/verifytotp",
-        "https://openapi.mstock.trade/session/verifytotp"
-    )
 
     private fun executeTypeAAuth(
         apiKey: String,
@@ -152,67 +123,26 @@ object MStockAuthHelper {
         }
 
         val bodyString = formBodyBuilder.toString()
-        var lastError: Exception? = null
-
-        for (endpoint in CANDIDATE_TYPE_A_URLS) {
-            try {
-                _lastEndpoint.value = endpoint
-                val body = bodyString.toRequestBody("application/x-www-form-urlencoded".toMediaType())
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .post(body)
-                    .addHeader("X-Mirae-Version", "1")
-                    .addHeader("Content-Type", "application/x-www-form-urlencoded")
-                    .addHeader("Accept", "application/json")
-                    .build()
-
-                return parseResponseAndExtractTokens(request, "Type A")
-            } catch (e: Exception) {
-                lastError = e
-                // If it's a 404, continue to next candidate endpoint
-                val msg = e.message ?: ""
-                if (msg.contains("404") || msg.contains("Not Found", ignoreCase = true)) {
-                    Log.w(TAG, "Endpoint $endpoint returned 404. Trying next candidate...")
-                    continue
-                } else {
-                    // Non-404 error (e.g. invalid credentials or 401/400) should be raised immediately
-                    throw e
-                }
-            }
-        }
-        throw lastError ?: Exception("m.Stock authentication failed across all endpoints.")
-    }
-
-    private fun executeTypeBAuth(
-        apiKey: String,
-        refreshToken: String,
-        totp: String
-    ): Result<MStockTokens> {
-        val jsonObj = JSONObject().apply {
-            put("refreshToken", refreshToken)
-            put("totp", totp)
-        }
-        val body = jsonObj.toString().toRequestBody("application/json".toMediaType())
-
+        _lastEndpoint.value = TYPE_A_VERIFY_TOTP_URL
+        val body = bodyString.toRequestBody("application/x-www-form-urlencoded".toMediaType())
         val request = Request.Builder()
-            .url(TYPE_B_VERIFY_TOTP_URL)
+            .url(TYPE_A_VERIFY_TOTP_URL)
             .post(body)
             .addHeader("X-Mirae-Version", "1")
-            .addHeader("X-PrivateKey", apiKey)
-            .addHeader("Content-Type", "application/json")
+            .addHeader("Content-Type", "application/x-www-form-urlencoded")
             .addHeader("Accept", "application/json")
             .build()
 
-        return runCatching { parseResponseAndExtractTokens(request, "Type B") }
+        return parseResponseAndExtractTokens(request)
     }
 
-    private fun parseResponseAndExtractTokens(request: Request, typeName: String): MStockTokens {
+    private fun parseResponseAndExtractTokens(request: Request): MStockTokens {
         val response = httpClient.newCall(request).execute()
         val respCode = response.code
         val respString = response.body?.string() ?: ""
 
         _lastHttpStatus.value = "$respCode ${response.message.ifBlank { if (response.isSuccessful) "OK" else "Error" }}"
-        Log.d(TAG, "m.Stock $typeName verifytotp returned HTTP $respCode")
+        Log.d(TAG, "m.Stock Type A verifytotp returned HTTP $respCode")
 
         if (response.isSuccessful || respCode == 200 || respCode == 201) {
             val json = runCatching { JSONObject(respString) }.getOrNull()
@@ -238,7 +168,7 @@ object MStockAuthHelper {
                         .ifBlank { accessToken }
 
                     if (accessToken.isNotBlank()) {
-                        Log.d(TAG, "m.Stock $typeName authentication successful.")
+                        Log.d(TAG, "m.Stock Type A authentication successful.")
                         return MStockTokens(
                             accessToken = accessToken,
                             refreshToken = refreshToken,
@@ -253,11 +183,11 @@ object MStockAuthHelper {
                     .ifBlank { "Authentication failed: invalid credentials or TOTP code" }
                 _authStage.value = "FAILED"
                 _lastAuthMessage.value = errorMsg
-                throw Exception("m.Stock $typeName error: $errorMsg")
+                throw Exception("m.Stock Type A error: $errorMsg")
             } else {
                 _authStage.value = "FAILED"
                 _lastAuthMessage.value = "Empty response payload (HTTP $respCode)"
-                throw Exception("m.Stock $typeName empty response payload (HTTP $respCode)")
+                throw Exception("m.Stock Type A empty response payload (HTTP $respCode)")
             }
         } else {
             val errorJson = runCatching { JSONObject(respString) }.getOrNull()
@@ -273,25 +203,23 @@ object MStockAuthHelper {
     }
 
     /**
-     * Renews the m.Stock session using fresh TOTP generated from stored TOTP secret.
+     * Renews the m.Stock session using fresh TOTP generated from stored TOTP secret via Type A.
      */
     suspend fun renewSession(
         clientCode: String,
         apiKey: String,
-        refreshToken: String,
         totpSecret: String
     ): Result<MStockTokens> = withContext(Dispatchers.IO) {
         runCatching {
-            val effectiveSecret = totpSecret.ifBlank { refreshToken }
             if (apiKey.isBlank()) {
                 throw Exception("m.Stock API Key missing.")
             }
-            if (effectiveSecret.isBlank()) {
+            if (totpSecret.isBlank()) {
                 throw Exception("m.Stock TOTP Secret missing for session renewal.")
             }
 
-            Log.d(TAG, "Renewing m.Stock session with fresh TOTP...")
-            val authRes = verifyTotp(clientCode, apiKey, effectiveSecret, refreshToken)
+            Log.d(TAG, "Renewing m.Stock Type A session with fresh TOTP...")
+            val authRes = verifyTotp(clientCode, apiKey, totpSecret)
             authRes.getOrThrow()
         }
     }

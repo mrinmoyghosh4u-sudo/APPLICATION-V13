@@ -922,7 +922,7 @@ fun BrokerConnectDialog(
                                     sessionManager.dhanClientSecret = clientSecret
                                     
                                     val redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
-                                    val dhanState = "kingkhan_oauth_state"
+                                    val dhanState = com.example.util.DhanAuthHelper.generateSecureState()
                                     sessionManager.pendingOAuthBroker = "Dhan"
                                     sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
                                         provider = "DHAN",
@@ -936,10 +936,10 @@ fun BrokerConnectDialog(
                                     } else {
                                         isDhanConsentLoading = true
                                         coroutineScope.launch {
-                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret)
+                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret, state = dhanState)
                                             isDhanConsentLoading = false
                                             consentRes.onSuccess { url ->
-                                                android.util.Log.d("DhanAuth", "Opening browser with Complete Consent URL: $url")
+                                                android.util.Log.d("DhanAuth", "Opening browser for Dhan authorization")
                                                 try {
                                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                                     context.startActivity(intent)

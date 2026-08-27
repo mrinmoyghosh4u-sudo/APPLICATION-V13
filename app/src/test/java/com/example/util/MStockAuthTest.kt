@@ -44,4 +44,10 @@ class MStockAuthTest {
         assertEquals("test_refresh_jwt", tokens.refreshToken)
         assertEquals("test_feed_jwt", tokens.feedToken)
     }
+
+    @Test
+    fun testOfficialTypeAEndpointConstant() {
+        assertEquals("https://api.mstock.trade/openapi/typea/session/verifytotp", MStockAuthHelper.TYPE_A_VERIFY_TOTP_URL)
+        assertEquals("https://api.mstock.trade/openapi/typea/session/verifytotp", MStockAuthHelper.lastEndpoint.value)
+    }
 }

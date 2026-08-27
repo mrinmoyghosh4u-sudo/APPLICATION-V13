@@ -217,8 +217,17 @@ class BrokerAuthManager(
 
     suspend fun connectDhan(onConsentUrl: (String) -> Unit = {}): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            Log.d(TAG, "Initiating Dhan official OAuth flow...")
-            val consentResult = DhanAuthHelper.generateConsent()
+            Log.d(TAG, "Initiating Dhan official OAuth flow with secure random state...")
+            val randomState = DhanAuthHelper.generateSecureState()
+            sessionManager.pendingOAuthBroker = "Dhan"
+            sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
+                provider = "DHAN",
+                state = randomState,
+                createdAt = System.currentTimeMillis(),
+                redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" },
+                consumed = false
+            )
+            val consentResult = DhanAuthHelper.generateConsent(state = randomState)
             if (consentResult.isSuccess) {
                 val url = consentResult.getOrThrow()
                 onConsentUrl(url)
@@ -599,30 +608,35 @@ class BrokerAuthManager(
         val totpSecret = sessionManager.mstockTotpSecret
 
         if (clientCode.isNotBlank() && apiKey.isNotBlank() && totpSecret.isNotBlank()) {
-            Log.d(TAG, "Auto-authenticating m.Stock using stored TOTP secret...")
+            Log.d(TAG, "Auto-authenticating m.Stock using stored TOTP secret (Type A)...")
             val autoAuthRes = connectMStock(
                 clientCode = clientCode,
                 apiKey = apiKey,
                 totpSecret = totpSecret
             )
             if (autoAuthRes.isSuccess) {
-                Log.d(TAG, "m.Stock auto-login with TOTP secret succeeded.")
+                Log.d(TAG, "m.Stock Type A auto-login succeeded.")
                 return
             } else {
-                Log.w(TAG, "m.Stock auto-login failed: ${autoAuthRes.exceptionOrNull()?.message}")
+                Log.w(TAG, "m.Stock Type A auto-login failed: ${autoAuthRes.exceptionOrNull()?.message}")
                 updateStatus(
                     "m.Stock",
                     "Fallback #3 Market Data",
                     BrokerAuthStatus.ERROR,
                     "Auto-login failed: ${autoAuthRes.exceptionOrNull()?.message ?: "Re-authentication required"}"
                 )
-                mStockMarketDataService.connect()
                 return
             }
         }
 
-        updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.CONNECTED, "Configured • Fallback #3")
-        mStockMarketDataService.connect()
+        val tokenTime = sessionManager.mstockTokenTimestamp
+        val isTokenRecent = tokenTime > 0 && (System.currentTimeMillis() - tokenTime < 24 * 60 * 60 * 1000L)
+        if (!sessionManager.mstockAccessToken.isNullOrBlank() && isTokenRecent) {
+            updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.CONNECTED, "Configured • Fallback #3")
+            mStockMarketDataService.connect()
+        } else {
+            updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.DISCONNECTED, "Session Expired • Re-auth Required")
+        }
     }
 
     suspend fun connectMStock(
@@ -653,12 +667,11 @@ class BrokerAuthManager(
                 else -> throw Exception("m.Stock TOTP Secret or 6-digit TOTP is required.")
             }
 
-            Log.d(TAG, "Authenticating with m.Stock verifytotp for client: $code")
+            Log.d(TAG, "Authenticating with m.Stock Type A verifytotp")
             val authResult = MStockAuthHelper.verifyTotp(
                 clientCode = code,
                 apiKey = key,
-                totpOrSecret = effectiveTotpInput,
-                refreshToken = sessionManager.mstockRefreshToken
+                totpOrSecret = effectiveTotpInput
             )
             val tokens = authResult.getOrThrow()
 
@@ -694,17 +707,15 @@ class BrokerAuthManager(
         runCatching {
             val clientCode = sessionManager.mstockClientId
             val apiKey = sessionManager.mstockApiKey
-            val refreshToken = sessionManager.mstockRefreshToken ?: ""
             val totpSecret = sessionManager.mstockTotpSecret
 
-            if (clientCode.isBlank() || apiKey.isBlank()) {
-                throw Exception("m.Stock is not configured.")
+            if (clientCode.isBlank() || apiKey.isBlank() || totpSecret.isBlank()) {
+                throw Exception("m.Stock credentials missing for session renewal.")
             }
 
             val renewResult = MStockAuthHelper.renewSession(
                 clientCode = clientCode,
                 apiKey = apiKey,
-                refreshToken = refreshToken,
                 totpSecret = totpSecret
             )
             val tokens = renewResult.getOrThrow()
@@ -873,17 +884,8 @@ class BrokerAuthManager(
                 Result.failure(Exception("Angel One reconnect failed. Credentials or session missing."))
             }
             "m.Stock" -> {
-                // 1. Try refresh token first if present
-                if (!sessionManager.mstockRefreshToken.isNullOrBlank()) {
-                    val refreshRes = refreshMStock()
-                    if (refreshRes.isSuccess && refreshRes.getOrThrow()) {
-                        mStockMarketDataService.connect()
-                        return refreshRes
-                    }
-                }
-                // 2. Fallback to saved credentials + auto-generated TOTP
                 if (sessionManager.mstockClientId.isNotBlank() && sessionManager.mstockApiKey.isNotBlank() && sessionManager.mstockTotpSecret.isNotBlank()) {
-                    Log.d(TAG, "Reconnecting m.Stock using saved credentials & auto-generated TOTP...")
+                    Log.d(TAG, "Reconnecting m.Stock Type A using saved credentials & auto-generated TOTP...")
                     val autoRes = connectMStock(
                         clientCode = sessionManager.mstockClientId,
                         apiKey = sessionManager.mstockApiKey,

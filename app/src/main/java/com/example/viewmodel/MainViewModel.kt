@@ -850,12 +850,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startDhanOAuth(clientId: String? = null, apiKey: String? = null, clientSecret: String? = null, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
         val redirectUri = com.example.util.BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
-        val dhanState = "kingkhan_oauth_state"
+        val randomState = com.example.util.DhanAuthHelper.generateSecureState()
 
         sessionManager.pendingOAuthBroker = "Dhan"
         sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
             provider = "DHAN",
-            state = dhanState,
+            state = randomState,
             createdAt = System.currentTimeMillis(),
             redirectUri = redirectUri,
             consumed = false
@@ -864,10 +864,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret)
+            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret, state = randomState)
             _isAuthInProgress.value = false
             consentRes.onSuccess { url ->
-                android.util.Log.d("DhanAuth", "Generated Dhan consent URL: $url")
+                android.util.Log.d("DhanAuth", "Generated Dhan consent URL successfully")
                 onUrlGenerated(url)
             }.onFailure { err ->
                 val msg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
@@ -951,7 +951,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val path = uri.path ?: ""
             val fullUrl = uri.toString()
 
-            android.util.Log.d("DhanAuth", "redirect URI host/path: scheme=$scheme, host=$host, path=$path, fullUrl=$fullUrl")
+            android.util.Log.d("DhanAuth", "Processing OAuth redirect callback: scheme=$scheme, host=$host, path=$path")
 
             var token = uri.getQueryParameter("access_token")
                 ?: uri.getQueryParameter("token")
@@ -979,10 +979,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val pendingSession = sessionManager.pendingOAuthSession
 
-            val isDhanCallback = (!genericTokenId.isNullOrBlank()) ||
-                (pendingSession?.provider?.equals("DHAN", ignoreCase = true) == true) ||
-                (callbackState.contains("dhan", ignoreCase = true)) ||
-                (scheme == "kingkhan" && genericTokenId != null) ||
+            val isDhanCallback = (pendingSession?.provider?.equals("DHAN", ignoreCase = true) == true) ||
+                (callbackState.startsWith("dhan_")) ||
+                (!genericTokenId.isNullOrBlank() && scheme == "kingkhan") ||
                 (host.contains("kingkhan") && genericTokenId != null)
 
             if (isDhanCallback) {
@@ -1155,6 +1154,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callbackState: String,
         pendingSession: SessionManager.PendingOAuthSession?
     ) {
+        // 1. Strict Provider and Session Verification
+        if (pendingSession == null || !pendingSession.provider.equals("DHAN", ignoreCase = true)) {
+            android.util.Log.e("DhanAuth", "[DHAN_CALLBACK_REJECTED] No pending Dhan OAuth session found")
+            _authErrorMessage.value = "Dhan Login Error: No matching pending OAuth session found."
+            _isAuthInProgress.value = false
+            return
+        }
+
+        // 2. Single-use consumed verification
+        if (pendingSession.consumed) {
+            android.util.Log.w("DhanAuth", "[DHAN_CALLBACK_REJECTED] Session state already consumed")
+            _authErrorMessage.value = "Dhan Login Error: This OAuth session has already been processed (duplicate)."
+            _isAuthInProgress.value = false
+            return
+        }
+
+        // 3. Expiry Check (15 minutes maximum lifetime)
+        val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
+        if (isExpired) {
+            android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
+            _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
+            _isAuthInProgress.value = false
+            return
+        }
+
+        // 4. Exact Cryptographic State Match
+        val expectedState = pendingSession.state.trim()
+        if (callbackState.isBlank() || expectedState.isBlank() || callbackState != expectedState) {
+            android.util.Log.e("DhanAuth", "[DHAN_STATE_MISMATCH] Returned OAuth state does not match pending session")
+            _authErrorMessage.value = "Dhan Login Error: State verification failed (Possible CSRF attack or invalid session)."
+            _isAuthInProgress.value = false
+            return
+        }
+
+        // 5. Invalidate / consume state immediately upon successful verification
+        sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
+
+        // 6. Check for cancellation or OAuth error query parameters
+        val oauthError = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description")
+        if (!oauthError.isNullOrBlank()) {
+            val cleanMsg = if (oauthError.contains("cancel", ignoreCase = true) || oauthError.contains("user", ignoreCase = true) || oauthError.contains("access_denied", ignoreCase = true)) {
+                "Dhan authorization was cancelled by user."
+            } else {
+                "Dhan authorization failed: $oauthError"
+            }
+            android.util.Log.e("DhanAuth", "[DHAN_AUTH_CANCELLED] Dhan authorization returned error or was cancelled")
+            _authErrorMessage.value = cleanMsg
+            _isAuthInProgress.value = false
+            return
+        }
+
         var dhanTokenId = genericTokenId
         if (dhanTokenId.isNullOrBlank() && !genericCode.isNullOrBlank() && genericCode != "200" && genericCode != "0") {
             dhanTokenId = genericCode
@@ -1162,73 +1212,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // Build callback fingerprint: provider + tokenId
         val dhanFingerprint = when {
-            !dhanTokenId.isNullOrBlank() -> "DHAN:${dhanTokenId.trim()}"
+            !dhanTokenId.isNullOrBlank() -> "DHAN:${dhanTokenId.trim().hashCode()}"
             !token.isNullOrBlank() -> "DHAN_TOKEN:${token.take(16).hashCode()}"
             else -> "DHAN_URI:${fullUrl.hashCode()}"
         }
 
-        android.util.Log.d("DhanAuth", "[DHAN_CALLBACK] Fingerprint: $dhanFingerprint, tokenId: $dhanTokenId")
-
-        // 1. Idempotent Deduplication Check: Has this exact callback fingerprint already completed successfully?
+        // 7. Idempotent Deduplication Check
         if (dhanFingerprint == sessionManager.lastCompletedDhanFingerprint) {
-            android.util.Log.i("DhanAuth", "[DHAN_DUPLICATE_CALLBACK_IGNORED] Callback with fingerprint $dhanFingerprint already processed successfully. Safely ignoring duplicate intent.")
+            android.util.Log.i("DhanAuth", "[DHAN_DUPLICATE_CALLBACK_IGNORED] Callback already processed successfully. Safely ignoring duplicate intent.")
             _isAuthInProgress.value = false
             return
         }
 
-        // 2. In-flight check: Is this exact callback currently in-progress?
+        // 8. In-flight check
         if (dhanFingerprint == currentlyProcessingDhanFingerprint) {
-            android.util.Log.i("DhanAuth", "[DHAN_IN_FLIGHT_IGNORED] Callback with fingerprint $dhanFingerprint is already in-flight. Ignoring duplicate intent.")
+            android.util.Log.i("DhanAuth", "[DHAN_IN_FLIGHT_IGNORED] Callback is already in-flight. Ignoring duplicate intent.")
             return
         }
 
-        // 2.3 One-time callback token consumption check
+        // 9. One-time callback token consumption check
         if (!dhanTokenId.isNullOrBlank()) {
             if (sessionManager.isDhanTokenIdConsumed(dhanTokenId)) {
-                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback - tokenId $dhanTokenId already consumed previously")
+                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback - tokenId already consumed previously")
                 _isAuthInProgress.value = false
                 return
             }
             sessionManager.markDhanTokenIdConsumed(dhanTokenId)
-        }
-
-        // 2.5 State validation and atomic consumption
-        if (pendingSession != null && pendingSession.provider.equals("DHAN", ignoreCase = true)) {
-            val trimExpected = pendingSession.state.trim()
-            if (trimExpected.isNotBlank() && trimExpected != callbackState) {
-                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback for state = $callbackState - expected state = $trimExpected")
-                _isAuthInProgress.value = false
-                return
-            }
-            if (pendingSession.consumed) {
-                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback for state = $callbackState - already marked as consumed")
-                _isAuthInProgress.value = false
-                return
-            }
-            // Mark as consumed immediately
-            sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
-        }
-
-        // 3. Pending Session Expiry Check
-        if (pendingSession != null && pendingSession.provider.equals("DHAN", ignoreCase = true)) {
-            val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-            if (isExpired) {
-                val errMsg = "Dhan OAuth callback rejected: Pending session has expired"
-                android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] $errMsg")
-                _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout)"
-                _isAuthInProgress.value = false
-                return
-            }
-        }
-
-        // Check for cancellation or OAuth error query parameters
-        val oauthError = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description")
-        if (!oauthError.isNullOrBlank()) {
-            val errMsg = "Dhan Authorization Failed/Cancelled: $oauthError"
-            android.util.Log.e("DhanAuth", "[DHAN_AUTH_CANCELLED] $errMsg")
-            _authErrorMessage.value = errMsg
-            _isAuthInProgress.value = false
-            return
         }
 
         // Mark in-flight
@@ -1252,13 +1261,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val valid = validateAndRestoreSession()
                 if (valid) {
                     android.util.Log.d("DhanAuth", "Dhan profile validation: SUCCESS")
-                    // ONLY MARK CONSUMED AFTER FULL SUCCESS
-                    sessionManager.pendingOAuthSession = (pendingSession ?: SessionManager.PendingOAuthSession(
-                        provider = "DHAN",
-                        state = callbackState.ifBlank { "kingkhan_oauth_state" },
-                        createdAt = System.currentTimeMillis(),
-                        redirectUri = com.example.util.BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
-                    )).copy(consumed = true)
                     sessionManager.lastCompletedDhanFingerprint = dhanFingerprint
                     sessionManager.pendingOAuthBroker = ""
 
@@ -1271,11 +1273,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     alertService.notifyBrokerConnected("Dhan", account = accountId)
                 } else {
                     android.util.Log.e("DhanAuth", "Dhan profile validation: FAILURE")
-                    _authErrorMessage.value = "Failed to validate Dhan session."
+                    _authErrorMessage.value = "Failed to validate Dhan session. Please check your credentials."
                 }
             } else if (!dhanTokenId.isNullOrBlank()) {
                 // Exchange tokenId for accessToken
-                val exchangeRes = com.example.util.DhanAuthHelper.exchangeToken(dhanTokenId, clientIdOverride = sessionManager.dhanClientId, apiKeyOverride = sessionManager.dhanApiKey, clientSecretOverride = sessionManager.dhanClientSecret)
+                val exchangeRes = com.example.util.DhanAuthHelper.exchangeToken(
+                    dhanTokenId,
+                    clientIdOverride = sessionManager.dhanClientId,
+                    apiKeyOverride = sessionManager.dhanApiKey,
+                    clientSecretOverride = sessionManager.dhanClientSecret
+                )
                 if (exchangeRes.isSuccess) {
                     val accessToken = exchangeRes.getOrThrow()
                     android.util.Log.d("DhanAuth", "Dhan token exchange: SUCCESS")
@@ -1288,13 +1295,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val valid = validateAndRestoreSession()
                     if (valid) {
                         android.util.Log.d("DhanAuth", "Dhan profile validation: SUCCESS")
-                        // ONLY MARK CONSUMED AFTER FULL SUCCESS
-                        sessionManager.pendingOAuthSession = (pendingSession ?: SessionManager.PendingOAuthSession(
-                            provider = "DHAN",
-                            state = callbackState.ifBlank { "kingkhan_oauth_state" },
-                            createdAt = System.currentTimeMillis(),
-                            redirectUri = com.example.util.BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
-                        )).copy(consumed = true)
                         sessionManager.lastCompletedDhanFingerprint = dhanFingerprint
                         sessionManager.pendingOAuthBroker = ""
 
@@ -1307,17 +1307,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         alertService.notifyBrokerConnected("Dhan", account = accountId)
                     } else {
                         android.util.Log.e("DhanAuth", "Dhan profile validation: FAILURE")
-                        _authErrorMessage.value = "Failed to validate Dhan session."
+                        _authErrorMessage.value = "Failed to validate Dhan session after token exchange."
                     }
                 } else {
                     val err = exchangeRes.exceptionOrNull()
                     val errMsg = err?.localizedMessage ?: "Unknown token exchange error"
-                    android.util.Log.e("DhanAuth", "Dhan token exchange: FAILURE ($errMsg)")
-                    _authErrorMessage.value = "Failed to exchange token: $errMsg"
+                    android.util.Log.e("DhanAuth", "Dhan token exchange: FAILURE")
+                    _authErrorMessage.value = "Failed to exchange Dhan token: $errMsg"
                 }
             } else {
                 android.util.Log.e("DhanAuth", "Dhan callback missing tokenId and token")
-                _authErrorMessage.value = "Failed to parse token or code from redirect"
+                _authErrorMessage.value = "Failed to parse authorization code or token from Dhan callback redirect"
             }
         } finally {
             currentlyProcessingDhanFingerprint = null

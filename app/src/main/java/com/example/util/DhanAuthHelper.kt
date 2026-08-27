@@ -1,7 +1,7 @@
 package com.example.util
 
+import android.util.Base64
 import android.util.Log
-import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -9,13 +9,35 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.security.SecureRandom
 
 object DhanAuthHelper {
     private const val TAG = "DhanAuth"
 
-    suspend fun generateConsent(clientIdOverride: String? = null, apiKeyOverride: String? = null, clientSecretOverride: String? = null): Result<String> = withContext(Dispatchers.IO) {
+    private val httpClient = OkHttpClient.Builder().build()
+    private val secureRandom = SecureRandom()
+
+    /**
+     * Generates a cryptographically secure, unpredictable random state token for Dhan OAuth.
+     */
+    fun generateSecureState(): String {
+        val randomBytes = ByteArray(24)
+        secureRandom.nextBytes(randomBytes)
+        return "dhan_" + Base64.encodeToString(randomBytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    }
+
+    /**
+     * Generates official Dhan OAuth consent URL.
+     * Uses ONLY the parameters required by the official Dhan OAuth specification.
+     */
+    suspend fun generateConsent(
+        clientIdOverride: String? = null,
+        apiKeyOverride: String? = null,
+        clientSecretOverride: String? = null,
+        state: String = ""
+    ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            Log.d(TAG, "OAuth step started: Generating consent URL")
+            Log.d(TAG, "OAuth step started: Generating Dhan consent URL")
 
             val rawApiKey = apiKeyOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey.trim()
             val rawClientId = clientIdOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId.trim()
@@ -27,12 +49,7 @@ object DhanAuthHelper {
             val appId = if (rawApiKey.isNotBlank()) rawApiKey else rawClientId
             val redirectUri = if (rawRedirectUri.isNotBlank()) rawRedirectUri else "kingkhan://oauth/callback"
             val responseType = "code"
-            val state = "kingkhan_oauth_state"
-
-            Log.d(TAG, "  app_id present: ${appId.isNotBlank()}")
-            Log.d(TAG, "  client_id present: ${clientId.isNotBlank()}")
-            Log.d(TAG, "  client_secret present: ${clientSecret.isNotBlank()}")
-            Log.d(TAG, "  redirect_uri: $redirectUri")
+            val effectiveState = state.trim().ifBlank { generateSecureState() }
 
             if (clientId.isBlank()) {
                 throw Exception("DHAN_CLIENT_ID missing in configuration.")
@@ -48,17 +65,15 @@ object DhanAuthHelper {
 
             val url = urlBuilder.build().toString()
 
+            // Strict Official Dhan OAuth parameters only - no duplicates
             val jsonBody = JSONObject().apply {
                 put("client_id", clientId)
                 put("client_secret", clientSecret)
                 put("app_id", appId)
                 put("app_secret", clientSecret)
                 put("redirect_uri", redirectUri)
-                put("redirectUri", redirectUri)
-                put("redirect_url", redirectUri)
-                put("redirectUrl", redirectUri)
                 put("response_type", responseType)
-                put("state", state)
+                put("state", effectiveState)
             }.toString()
 
             val reqBody = jsonBody.toRequestBody("application/json".toMediaType())
@@ -73,14 +88,17 @@ object DhanAuthHelper {
                 .addHeader("Content-Type", "application/json")
 
             val request = requestBuilder.build()
-            val client = OkHttpClient()
-            val response = client.newCall(request).execute()
+            val response = httpClient.newCall(request).execute()
             val respBody = response.body?.string() ?: ""
 
-            Log.d(TAG, "Dhan HTTP Response Code: ${response.code}")
+            Log.d(TAG, "Dhan generate-consent HTTP Response Code: ${response.code}")
 
             if (!response.isSuccessful) {
-                throw Exception("Dhan generate-consent failed with HTTP ${response.code}")
+                val errorJson = runCatching { JSONObject(respBody) }.getOrNull()
+                val errorMsg = errorJson?.optString("errorMessage")?.takeIf { it.isNotBlank() }
+                    ?: errorJson?.optString("message")?.takeIf { it.isNotBlank() }
+                    ?: "HTTP ${response.code}"
+                throw Exception("Dhan generate-consent failed ($errorMsg)")
             }
 
             val json = runCatching { JSONObject(respBody) }.getOrNull()
@@ -92,33 +110,45 @@ object DhanAuthHelper {
             }
 
             val finalConsentUrl = "https://auth.dhan.co/login/consentApp-login?consentAppId=$consentAppId"
-            Log.d(TAG, "Consent URL generated successfully")
+            Log.d(TAG, "Dhan consent URL generated successfully")
 
             finalConsentUrl
         }
     }
 
-    suspend fun exchangeToken(code: String, clientIdOverride: String? = null, apiKeyOverride: String? = null, clientSecretOverride: String? = null): Result<String> = withContext(Dispatchers.IO) {
+    /**
+     * Exchanges Dhan tokenId for accessToken using official Dhan consumeApp-consent endpoint.
+     */
+    suspend fun exchangeToken(
+        code: String,
+        clientIdOverride: String? = null,
+        apiKeyOverride: String? = null,
+        clientSecretOverride: String? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val appId = apiKeyOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey.trim()
             val appSecret = clientSecretOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientSecret.trim()
             val clientId = clientIdOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId.trim()
-            
-            Log.d(TAG, "Token exchange started")
-            
+
+            if (code.isBlank()) {
+                throw Exception("Dhan tokenId missing for token exchange.")
+            }
+
+            Log.d(TAG, "Executing Dhan token exchange")
+
             val url = okhttp3.HttpUrl.Builder()
                 .scheme("https")
                 .host("auth.dhan.co")
                 .addPathSegment("app")
                 .addPathSegment("consumeApp-consent")
-                .addQueryParameter("tokenId", code)
+                .addQueryParameter("tokenId", code.trim())
                 .build()
                 .toString()
 
             val jsonBody = JSONObject().apply {
-                put("tokenId", code)
+                put("tokenId", code.trim())
             }.toString()
-            
+
             val reqBody = jsonBody.toRequestBody("application/json".toMediaType())
             val requestBuilder = Request.Builder()
                 .url(url)
@@ -135,29 +165,30 @@ object DhanAuthHelper {
             if (appSecret.isNotBlank()) {
                 requestBuilder.addHeader("app_secret", appSecret)
             }
-                
-            val client = OkHttpClient()
-            val response = client.newCall(requestBuilder.build()).execute()
-            
+
+            val response = httpClient.newCall(requestBuilder.build()).execute()
             val respBody = response.body?.string() ?: ""
-            Log.d(TAG, "exchangeToken Response Code: ${response.code}")
-            
+            Log.d(TAG, "Dhan consumeApp-consent HTTP Response Code: ${response.code}")
+
             if (response.isSuccessful && respBody.isNotBlank()) {
                 val json = JSONObject(respBody)
-                val token = json.optString("accessToken").ifBlank {
-                    json.optString("access_token")
-                }.ifBlank {
+                val accessToken = json.optString("accessToken").ifBlank {
                     json.optString("token")
+                }.trim()
+
+                if (accessToken.isBlank()) {
+                    Log.e(TAG, "Dhan token exchange failed: Access token missing in response payload")
+                    throw Exception("Access Token missing in Dhan response payload")
                 }
-                if (token.isBlank()) {
-                    Log.e(TAG, "token exchange success/failure: FAILURE (Access Token missing in response)")
-                    throw Exception("Access Token missing in response")
-                }
-                Log.d(TAG, "token exchange success/failure: SUCCESS")
-                token
+                Log.d(TAG, "Dhan token exchange completed successfully")
+                accessToken
             } else {
-                Log.e(TAG, "token exchange success/failure: FAILURE (HTTP ${response.code})")
-                throw Exception("Failed to exchange token. Code: ${response.code}")
+                val errorJson = runCatching { JSONObject(respBody) }.getOrNull()
+                val errorMsg = errorJson?.optString("errorMessage")?.takeIf { it.isNotBlank() }
+                    ?: errorJson?.optString("message")?.takeIf { it.isNotBlank() }
+                    ?: "HTTP ${response.code}"
+                Log.e(TAG, "Dhan token exchange failed (HTTP ${response.code})")
+                throw Exception("Failed to exchange Dhan token: $errorMsg")
             }
         }
     }
