@@ -672,6 +672,11 @@ fun ProfileScreen(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+            
+            // EXPIRY CALENDAR
+            ExpiryCalendarCard()
+            
+            Spacer(modifier = Modifier.height(14.dp))
 
             // 5. TELEGRAM ALERTS & BOT INTEGRATION (Self-Contained Option)
             GoldCard(
@@ -1654,6 +1659,75 @@ private fun BrokerStatusRow(
                         contentDescription = "Remove Account",
                         tint = TextGray,
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ExpiryCalendarCard() {
+    com.example.ui.components.GoldCard(
+        borderColor = com.example.ui.theme.DarkCardBorder,
+        borderWidth = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = "Expiry Calendar",
+                    tint = com.example.ui.theme.PrimaryGold,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "OPTION EXPIRY CALENDAR",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = com.example.ui.theme.TextWhite
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Standard weekly expiry days for NSE, BSE, and MCX options.",
+                fontSize = 11.sp,
+                color = com.example.ui.theme.TextGray
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val expiries = listOf(
+                Pair("MIDCPNIFTY", "Monday"),
+                Pair("BANKEX", "Monday"),
+                Pair("FINNIFTY", "Tuesday"),
+                Pair("BANKNIFTY", "Wednesday"),
+                Pair("NIFTY", "Thursday"),
+                Pair("SENSEX", "Friday"),
+                Pair("MCX CRUDE", "Mid-Month (Fri/Mon)")
+            )
+
+            expiries.forEachIndexed { index, (indexName, day) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (index % 2 == 0) Color.Transparent else com.example.ui.theme.DarkBackground.copy(alpha = 0.5f)
+                        )
+                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = indexName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = com.example.ui.theme.TextWhite
+                    )
+                    Text(
+                        text = day,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = com.example.ui.theme.PrimaryGold
                     )
                 }
             }

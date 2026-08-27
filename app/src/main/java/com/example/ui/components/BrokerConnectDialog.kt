@@ -47,7 +47,7 @@ fun BrokerConnectDialog(
     onUpstoxLogin: ((String, String, String) -> Unit)? = null,
     onStartUpstoxOAuth: ((String, String) -> Unit)? = null,
     onStartFyersOAuth: ((String, String) -> Unit)? = null,
-    onStartDhanOAuth: (() -> Unit)? = null
+    onStartDhanOAuth: ((String, String, String) -> Unit)? = null
 ) {
     var selectedBroker by remember { mutableStateOf(if (initialBroker.isBlank()) "Dhan" else initialBroker) }
     var localErrorMsg by remember { mutableStateOf<String?>(null) }
@@ -63,6 +63,11 @@ fun BrokerConnectDialog(
     var angelApiKey by remember { mutableStateOf(sessionManager.angelApiKey) }
     var angelTotpSecret by remember { mutableStateOf(sessionManager.angelTotpSecret) }
     var isDhanConsentLoading by remember { mutableStateOf(false) }
+    
+    var dhanClientIdInput by remember { mutableStateOf(sessionManager.dhanClientId.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId) }
+    var dhanApiKeyInput by remember { mutableStateOf(sessionManager.dhanApiKey.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey) }
+    var dhanClientSecretInput by remember { mutableStateOf(sessionManager.dhanClientSecret.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientSecret) }
+    var showDhanCreds by remember { mutableStateOf(dhanClientIdInput.isBlank() || dhanClientSecretInput.isBlank()) }
 
     var mstockClientId by remember { mutableStateOf(sessionManager.mstockClientId) }
     var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
@@ -857,14 +862,65 @@ fun BrokerConnectDialog(
                         )
 
                         Spacer(modifier = Modifier.height(24.dp))
+                        
+                        TextButton(
+                            onClick = { showDhanCreds = !showDhanCreds },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (showDhanCreds) "Hide API Credentials ▲" else "Configure API Credentials ▼",
+                                color = TextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                        
+                        if (showDhanCreds) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = dhanClientIdInput,
+                                onValueChange = { dhanClientIdInput = it },
+                                label = { Text("Client ID") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = dhanApiKeyInput,
+                                onValueChange = { dhanApiKeyInput = it },
+                                label = { Text("App Key / API Key") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = dhanClientSecretInput,
+                                onValueChange = { dhanClientSecretInput = it },
+                                label = { Text("Client Secret") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
 
                         Button(
                             onClick = {
-                                val clientId = BrokerConfig.dhanClientId
-                                if (clientId.isBlank()) {
-                                    localErrorMsg = "Missing Dhan Client ID. Please configure it securely."
+                                val clientId = dhanClientIdInput.trim()
+                                val apiKey = dhanApiKeyInput.trim()
+                                val clientSecret = dhanClientSecretInput.trim()
+                                
+                                if (clientId.isBlank() || clientSecret.isBlank()) {
+                                    localErrorMsg = "Client ID and Secret are required for Dhan API."
                                 } else {
                                     localErrorMsg = null
+                                    
+                                    // Save to session manager so it persists
+                                    sessionManager.dhanClientId = clientId
+                                    sessionManager.dhanApiKey = apiKey
+                                    sessionManager.dhanClientSecret = clientSecret
+                                    
                                     val redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
                                     val dhanState = "kingkhan_oauth_state"
                                     sessionManager.pendingOAuthBroker = "Dhan"
@@ -876,11 +932,11 @@ fun BrokerConnectDialog(
                                         consumed = false
                                     )
                                     if (onStartDhanOAuth != null) {
-                                        onStartDhanOAuth()
+                                        onStartDhanOAuth(clientId, apiKey, clientSecret)
                                     } else {
                                         isDhanConsentLoading = true
                                         coroutineScope.launch {
-                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent()
+                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret)
                                             isDhanConsentLoading = false
                                             consentRes.onSuccess { url ->
                                                 android.util.Log.d("DhanAuth", "Opening browser with Complete Consent URL: $url")

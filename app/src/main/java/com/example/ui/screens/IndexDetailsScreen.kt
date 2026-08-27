@@ -564,6 +564,45 @@ fun OptionChainTabContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        var selectedStrikeType by remember { mutableStateOf("ALL") }
+        
+        // Strike Type Selection
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("STRIKE TYPE:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextGray)
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                modifier = Modifier.background(DarkCardSecondary, RoundedCornerShape(8.dp)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("ALL", "ATM", "ITM", "OTM").forEach { type ->
+                    val isSelected = selectedStrikeType == type
+                    Box(
+                        modifier = Modifier
+                            .clickable { selectedStrikeType = type }
+                            .background(
+                                if (isSelected) PrimaryGold else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = type,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.Black else TextWhite
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         // Table Header
         Row(
             modifier = Modifier
@@ -596,7 +635,14 @@ fun OptionChainTabContent(
         }
 
         // Table Content
-        if (strikes.isEmpty()) {
+        val displayStrikes = remember(strikes, selectedStrikeType, closestAtmStrikePrice) {
+            when (selectedStrikeType) {
+                "ATM" -> strikes.sortedBy { kotlin.math.abs(it.strikePrice - closestAtmStrikePrice) }.take(10).sortedBy { it.strikePrice }
+                else -> strikes
+            }
+        }
+        
+        if (displayStrikes.isEmpty()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -622,11 +668,22 @@ fun OptionChainTabContent(
             }
         } else {
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(strikes) { strike ->
+                items(displayStrikes) { strike ->
                     val isAtm = strike.isAtm || (closestAtmStrikePrice > 0.0 && strike.strikePrice == closestAtmStrikePrice)
                     val callItm = strike.strikePrice < closestAtmStrikePrice
                     val putItm = strike.strikePrice > closestAtmStrikePrice
                     val itmBgColor = Color(0xFF2B2A26) // Faint yellow-tinted dark gray for ITM
+                    
+                    val showCall = when (selectedStrikeType) {
+                        "ITM" -> callItm
+                        "OTM" -> !callItm && !isAtm
+                        else -> true
+                    }
+                    val showPut = when (selectedStrikeType) {
+                        "ITM" -> putItm
+                        "OTM" -> !putItm && !isAtm
+                        else -> true
+                    }
                     
                     Row(
                         modifier = Modifier
@@ -635,16 +692,22 @@ fun OptionChainTabContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // CALLS
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
+                        if (showCall) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
                                 .background(if (callItm && !isAtm) itmBgColor else Color.Transparent)
                                 .clickable {
                                     val symbol = strike.callSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} CE" }
+                                    val optExchange = when {
+                                        indexName.contains("SENSEX", ignoreCase = true) || indexName.contains("BANKEX", ignoreCase = true) -> "BFO"
+                                        indexName.contains("CRUDE", ignoreCase = true) -> "MCX"
+                                        else -> "NFO"
+                                    }
                                     if (isScalpMode) {
                                         viewModel.placeNewOrder(
                                             symbol = symbol,
-                                            exchange = exchange,
+                                            exchange = optExchange,
                                             side = "BUY",
                                             orderType = "MARKET",
                                             qty = lotSize * scalpLotMultiplier,
@@ -679,6 +742,9 @@ fun OptionChainTabContent(
                                 Text(if (strike.callIv != null) "IV: ${String.format("%.1f", strike.callIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                             }
                         }
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
 
                         // STRIKE
                         Column(
@@ -700,49 +766,58 @@ fun OptionChainTabContent(
                         }
 
                         // PUTS
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(if (putItm && !isAtm) itmBgColor else Color.Transparent)
-                                .clickable {
-                                    val symbol = strike.putSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} PE" }
-                                    if (isScalpMode) {
-                                        viewModel.placeNewOrder(
-                                            symbol = symbol,
-                                            exchange = exchange,
-                                            side = "BUY",
-                                            orderType = "MARKET",
-                                            qty = lotSize * scalpLotMultiplier,
-                                            price = strike.putLtp
-                                        )
-                                    } else {
-                                        onOpenOrderDialog(symbol, "BUY", strike.putLtp, lotSize)
-                                    }
-                                }
-                                .padding(horizontal = 8.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                                    if (isScalpMode) {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Box(modifier = Modifier.background(ProfitGreen, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
-                                            Text("BUY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        if (showPut) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (putItm && !isAtm) itmBgColor else Color.Transparent)
+                                    .clickable {
+                                        val symbol = strike.putSymbol.ifBlank { "$indexName ${strike.strikePrice.toInt()} PE" }
+                                        val optExchange = when {
+                                            indexName.contains("SENSEX", ignoreCase = true) || indexName.contains("BANKEX", ignoreCase = true) -> "BFO"
+                                            indexName.contains("CRUDE", ignoreCase = true) -> "MCX"
+                                            else -> "NFO"
+                                        }
+                                        if (isScalpMode) {
+                                            viewModel.placeNewOrder(
+                                                symbol = symbol,
+                                                exchange = optExchange,
+                                                side = "BUY",
+                                                orderType = "MARKET",
+                                                qty = lotSize * scalpLotMultiplier,
+                                                price = strike.putLtp
+                                            )
+                                        } else {
+                                            onOpenOrderDialog(symbol, "BUY", strike.putLtp, lotSize)
                                         }
                                     }
+                                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(if (strike.putLtp > 0.0) String.format("%,.2f", strike.putLtp) else "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                        if (isScalpMode) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(modifier = Modifier.background(ProfitGreen, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                                Text("BUY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+                                    }
+                                    Text(if (strike.putIv != null) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
                                 }
-                                Text(if (strike.putIv != null) "IV: ${String.format("%.1f", strike.putIv)}" else "IV: --", fontSize = 9.sp, color = TextGray)
-                            }
-                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                                Text(strike.putOi, fontSize = 11.sp, color = TextWhite)
-                                Text(strike.putChgOi, fontSize = 9.sp, color = ProfitGreen)
-                                // Minimal OI Bar
-                                val oiVal = strike.putOi.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
-                                if (oiVal > 0) {
-                                    Box(modifier = Modifier.padding(top = 2.dp).height(2.dp).fillMaxWidth((oiVal / 1000000f).coerceIn(0f, 1f)).background(LossRed.copy(alpha = 0.5f)).align(Alignment.End))
+                                Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                                    Text(strike.putOi, fontSize = 11.sp, color = TextWhite)
+                                    Text(strike.putChgOi, fontSize = 9.sp, color = ProfitGreen)
+                                    // Minimal OI Bar
+                                    val oiVal = strike.putOi.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+                                    if (oiVal > 0) {
+                                        Box(modifier = Modifier.padding(top = 2.dp).height(2.dp).fillMaxWidth((oiVal / 1000000f).coerceIn(0f, 1f)).background(LossRed.copy(alpha = 0.5f)).align(Alignment.End))
+                                    }
                                 }
                             }
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                     HorizontalDivider(color = DarkCardBorder, thickness = 0.5.dp)

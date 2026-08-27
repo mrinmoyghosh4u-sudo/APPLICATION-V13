@@ -488,18 +488,6 @@ class SessionManager(context: Context) {
             safeSetToken("mstock_password_pin_enc", value)
         }
 
-    var mstockAccessToken: String?
-        get() = safeGetToken("mstock_access_token_enc")
-        set(value) {
-            safeSetToken("mstock_access_token_enc", value)
-        }
-
-    var mstockRefreshToken: String?
-        get() = safeGetToken("mstock_refresh_token_enc")
-        set(value) {
-            safeSetToken("mstock_refresh_token_enc", value)
-        }
-
     var mstockFeedToken: String?
         get() = safeGetToken("mstock_feed_token_enc")
         set(value) {
@@ -512,6 +500,13 @@ class SessionManager(context: Context) {
             prefs.edit().putLong("mstock_token_time", value).commit()
         }
 
+    var mstockAccessToken: String?
+        get() = safeGetToken("mstock_access_token_enc")
+        set(value) = safeSetToken("mstock_access_token_enc", value)
+
+    var mstockRefreshToken: String?
+        get() = safeGetToken("mstock_refresh_token_enc")
+        set(value) = safeSetToken("mstock_refresh_token_enc", value)
     fun isMStockConfigured(): Boolean {
         return (!mstockClientId.isBlank() && (!mstockApiKey.isBlank() || !mstockTotpSecret.isBlank())) || !mstockAccessToken.isNullOrBlank()
     }
@@ -651,4 +646,12 @@ class SessionManager(context: Context) {
         safeSetToken("upstox_access_token_enc", null)
         safeSetToken("upstox_refresh_token_enc", null)
     }
+
+    var dhanApiKey: String
+        get() = prefs.getString("dhan_api_key", "") ?: ""
+        set(value) { prefs.edit().putString("dhan_api_key", value).commit() }
+
+    var dhanClientSecret: String
+        get() = prefs.getString("dhan_client_secret", "") ?: ""
+        set(value) { prefs.edit().putString("dhan_client_secret", value).commit() }
 }

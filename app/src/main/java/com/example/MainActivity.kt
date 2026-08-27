@@ -814,8 +814,8 @@ class MainActivity : FragmentActivity() {
                                         onError = { /* error reported via live data/diagnostics */ }
                                     )
                                 },
-                                onStartDhanOAuth = {
-                                    viewModel.startDhanOAuth(
+                                onStartDhanOAuth = { clientId, apiKey, clientSecret ->
+                                    viewModel.startDhanOAuth(clientId = clientId, apiKey = apiKey, clientSecret = clientSecret, 
                                         onUrlGenerated = { loginUrl ->
                                             android.util.Log.i("DhanAuth", "[BROWSER_OPENED] Browser opened for Dhan authorization: $loginUrl")
                                             openAuthBrowser(loginUrl)

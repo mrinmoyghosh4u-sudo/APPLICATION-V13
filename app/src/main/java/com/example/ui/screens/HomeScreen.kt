@@ -707,7 +707,7 @@ private fun AiMarketInsightsSection(
     viewModel: MainViewModel? = null,
     onNavigateToAISignals: () -> Unit
 ) {
-    val insightSymbols = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL", "GOLD", "SILVER")
+    val insightSymbols = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
     var selectedSymbol by remember { mutableStateOf("NIFTY 50") }
 
     val tick = marketDataMap[selectedSymbol]

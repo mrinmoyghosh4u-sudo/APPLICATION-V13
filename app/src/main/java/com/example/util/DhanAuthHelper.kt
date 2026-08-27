@@ -13,13 +13,13 @@ import org.json.JSONObject
 object DhanAuthHelper {
     private const val TAG = "DhanAuth"
 
-    suspend fun generateConsent(): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun generateConsent(clientIdOverride: String? = null, apiKeyOverride: String? = null, clientSecretOverride: String? = null): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             Log.d(TAG, "OAuth step started: Generating consent URL")
 
-            val rawApiKey = BrokerConfig.dhanApiKey.trim()
-            val rawClientId = BrokerConfig.dhanClientId.trim()
-            val rawClientSecret = BrokerConfig.dhanClientSecret.trim()
+            val rawApiKey = apiKeyOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey.trim()
+            val rawClientId = clientIdOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId.trim()
+            val rawClientSecret = clientSecretOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientSecret.trim()
             val rawRedirectUri = BrokerConfig.dhanRedirectUri.trim()
 
             val clientId = rawClientId
@@ -98,11 +98,11 @@ object DhanAuthHelper {
         }
     }
 
-    suspend fun exchangeToken(code: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun exchangeToken(code: String, clientIdOverride: String? = null, apiKeyOverride: String? = null, clientSecretOverride: String? = null): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val appId = BrokerConfig.dhanApiKey.trim()
-            val appSecret = BrokerConfig.dhanClientSecret.trim()
-            val clientId = BrokerConfig.dhanClientId.trim()
+            val appId = apiKeyOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey.trim()
+            val appSecret = clientSecretOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientSecret.trim()
+            val clientId = clientIdOverride?.trim()?.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId.trim()
             
             Log.d(TAG, "Token exchange started")
             

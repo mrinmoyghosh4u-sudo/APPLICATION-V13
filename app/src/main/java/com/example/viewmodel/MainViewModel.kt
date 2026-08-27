@@ -815,7 +815,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var currentlyProcessingDhanFingerprint: String? = null
 
-    fun startDhanOAuth(onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
+    fun startDhanOAuth(clientId: String? = null, apiKey: String? = null, clientSecret: String? = null, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
         val redirectUri = com.example.util.BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
         val dhanState = "kingkhan_oauth_state"
 
@@ -831,7 +831,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            val consentRes = com.example.util.DhanAuthHelper.generateConsent()
+            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret)
             _isAuthInProgress.value = false
             consentRes.onSuccess { url ->
                 android.util.Log.d("DhanAuth", "Generated Dhan consent URL: $url")
@@ -1242,7 +1242,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else if (!dhanTokenId.isNullOrBlank()) {
                 // Exchange tokenId for accessToken
-                val exchangeRes = com.example.util.DhanAuthHelper.exchangeToken(dhanTokenId)
+                val exchangeRes = com.example.util.DhanAuthHelper.exchangeToken(dhanTokenId, clientIdOverride = sessionManager.dhanClientId, apiKeyOverride = sessionManager.dhanApiKey, clientSecretOverride = sessionManager.dhanClientSecret)
                 if (exchangeRes.isSuccess) {
                     val accessToken = exchangeRes.getOrThrow()
                     android.util.Log.d("DhanAuth", "Dhan token exchange: SUCCESS")
