@@ -392,8 +392,10 @@ class MStockMarketDataService(
             while (buffer.remaining() >= 12) {
                 val startPos = buffer.position()
                 val packetLen = buffer.short.toInt() and 0xFFFF
+                println("TEST_DEBUG: loop startPos=$startPos packetLen=$packetLen remaining=${buffer.remaining() + 2}")
 
                 if (packetLen < 12 || packetLen > buffer.remaining() + 2) {
+                    println("TEST_DEBUG: invalid packetLen=$packetLen (remaining=${buffer.remaining() + 2})")
                     safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Invalid packet length: $packetLen (remaining=${buffer.remaining() + 2})")
                     break
                 }
@@ -403,6 +405,7 @@ class MStockMarketDataService(
                 val token = buffer.int
 
                 val exchange = mapExchangeCode(exchangeCode)
+                println("TEST_DEBUG: mode=$mode exchangeCode=$exchangeCode exchange=$exchange token=$token")
                 if (exchange == "UNKNOWN_EXCHANGE") {
                     safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Unknown exchange code $exchangeCode for token $token")
                     val bytesRead = buffer.position() - startPos
@@ -425,8 +428,10 @@ class MStockMarketDataService(
                 if (buffer.remaining() >= 4) {
                     ltp = buffer.int / 100.0
                 }
+                println("TEST_DEBUG: parsed ltp=$ltp")
 
                 if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
+                    println("TEST_DEBUG: invalid ltp skip")
                     safeLogW(TAG, "[MSTOCK_INVALID_PACKET] Non-positive or invalid LTP for token $token: $ltp")
                     val bytesRead = buffer.position() - startPos
                     val bytesToSkip = packetLen - bytesRead
@@ -458,8 +463,10 @@ class MStockMarketDataService(
 
                 safeLogD(TAG, "[MSTOCK_PACKET_PARSED] Successfully parsed packet: exch=$exchange token=$token ltp=$ltp")
                 processRealTick(exchange, token.toString(), ltp, open, high, low, close, volume)
+                println("TEST_DEBUG: loop iteration finished. position=${buffer.position()} remaining=${buffer.remaining()}")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            println("TEST_DEBUG: Exception inside parseBinaryPacket e=" + e + " stack=" + e.stackTraceToString())
             safeLogE(TAG, "[MSTOCK_INVALID_PACKET] Failed to parse m.Stock binary frame: ${e.localizedMessage}", e)
         }
     }

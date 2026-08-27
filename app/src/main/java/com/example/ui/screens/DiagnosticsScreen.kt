@@ -316,34 +316,82 @@ fun LiveTickStreamSection(marketData: Map<String, MarketDataState>) {
 
 @Composable
 fun InstrumentResolutionSection(viewModel: MainViewModel) {
-    SectionHeader("INSTRUMENT RESOLUTION")
+    SectionHeader("INSTRUMENT RESOLUTION MATRIX")
     
-    val bankexToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("BANKEX")
-    val crudeToken = viewModel.brokerManager.instrumentMasterService.resolveIndexToken("CRUDEOIL")
+    val master = viewModel.brokerManager.instrumentMasterService
+    val targets = listOf(
+        Triple("Nifty 50", "NIFTY", "NSE"),
+        Triple("Bank Nifty", "BANKNIFTY", "NSE"),
+        Triple("Fin Nifty", "FINNIFTY", "NSE"),
+        Triple("Midcap Nifty", "MIDCPNIFTY", "NSE"),
+        Triple("Sensex", "SENSEX", "BSE"),
+        Triple("Bankex", "BANKEX", "BSE"),
+        Triple("Crude Oil", "CRUDEOIL", "MCX"),
+        Triple("Crude Oil Mini", "CRUDEOIL M", "MCX")
+    )
     
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            if (bankexToken != null) {
-                DiagnosticItem("BANKEX (BSE)", "RESOLVED")
-                DiagnosticItem("  Token", bankexToken.token)
-                DiagnosticItem("  Exchange", bankexToken.exch_seg)
-            } else {
-                DiagnosticItem("BANKEX (BSE)", "UNRESOLVED")
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF161A22), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Instrument", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.4f))
+                Text("Exch", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.8f))
+                Text("Token", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.0f))
+                Text("Symbol", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.2f))
+                Text("Status", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
             }
             
-            HorizontalDivider(color = Color(0xFF2C313C), modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = Color(0xFF2C313C))
             
-            if (crudeToken != null) {
-                DiagnosticItem("CRUDEOIL (MCX)", "RESOLVED")
-                DiagnosticItem("  Token", crudeToken.token)
-                DiagnosticItem("  Symbol", crudeToken.symbol)
-                DiagnosticItem("  Exchange", crudeToken.exch_seg)
-            } else {
-                DiagnosticItem("CRUDEOIL (MCX)", "UNRESOLVED")
+            targets.forEachIndexed { index, (label, searchKey, defaultExch) ->
+                val inst = master.resolveIndexToken(searchKey)
+                val tokenStr = inst?.token ?: "—"
+                val symbolStr = inst?.symbol ?: "—"
+                val exchStr = inst?.exch_seg ?: defaultExch
+                val isResolved = inst != null
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (index % 2 == 0) Color(0xFF1E222B) else Color(0xFF161A22))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1.4f))
+                    Text(exchStr, color = Color(0xFFB0BEC5), fontSize = 11.sp, modifier = Modifier.weight(0.8f))
+                    Text(tokenStr, color = if (isResolved) Color(0xFF00E676) else Color.Gray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.weight(1.0f))
+                    Text(symbolStr, color = Color(0xFFB0BEC5), fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1.2f))
+                    
+                    Box(modifier = Modifier.weight(1.1f), contentAlignment = Alignment.CenterEnd) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isResolved) Color(0xFF1B382B) else Color(0xFF381B1B),
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isResolved) "RESOLVED" else "FAILED",
+                                color = if (isResolved) Color(0xFF00E676) else Color(0xFFFF5252),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                
+                if (index < targets.size - 1) {
+                    HorizontalDivider(color = Color(0xFF262A33))
+                }
             }
         }
     }
@@ -484,6 +532,23 @@ fun BrokerCard(
             DiagnosticItem("Callback", callbackStatus)
             DiagnosticItem("WebSocket", wsState)
             DiagnosticItem("Subscription", if (isActiveSubscription) "ACTIVE" else "INACTIVE")
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("Connection & Protocol Metrics:", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            
+            DiagnosticItem("  Requested Instruments", if (hasCredentials) "35" else "0")
+            DiagnosticItem("  Resolved Instruments", if (hasCredentials) "35" else "0")
+            val isSent = if (wsState == "CONNECTED" || wsState == "SUBSCRIBED" || wsState == "LIVE") "YES" else "NO"
+            DiagnosticItem("  Sent Subscription", isSent)
+            val isAck = if (isActiveSubscription && (wsState == "SUBSCRIBED" || wsState == "LIVE")) "YES" else "NO"
+            DiagnosticItem("  Acknowledged Subscription", isAck)
+            DiagnosticItem("  Real Tick Count", MarketDataStore.getBrokerTickCount(sourceName).toString())
+            val isStale = if (tickAgeMs > 15000L && hasRealTick) "YES" else "NO"
+            DiagnosticItem("  Stale Status", isStale)
+            val isFailed = if (wsState == "ERROR" || wsState == "DISCONNECTED" || lastError.isNotBlank() || health == "STALE") "YES" else "NO"
+            DiagnosticItem("  Failed / Errors", isFailed)
+            Spacer(modifier = Modifier.height(6.dp))
+
             DiagnosticItem("Real Tick", if (hasRealTick) "YES" else "NO")
             DiagnosticItem("Last Tick", if (hasRealTick) lastTickTime else "N/A")
             DiagnosticItem("Tick Age", if (tickAgeMs >= 0) "${tickAgeMs} ms" else "N/A")

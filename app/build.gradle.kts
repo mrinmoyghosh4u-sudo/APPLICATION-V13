@@ -298,3 +298,9 @@ gradle.projectsEvaluated {
 dependencies {
     implementation("com.google.protobuf:protobuf-java:3.24.4")
 }
+
+tasks.withType<Test> {
+    testLogging {
+        showStandardStreams = true
+    }
+}

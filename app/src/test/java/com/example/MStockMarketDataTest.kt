@@ -16,6 +16,7 @@ class MStockMarketDataTest {
     @Before
     fun setUp() {
         healthManager = ProviderHealthManager()
+        MarketDataStore.reset()
     }
 
     @Test
@@ -173,10 +174,17 @@ class MStockMarketDataTest {
         service.parseBinaryPacket(multiPacketBytes)
 
         val tick1 = MarketDataStore.getTick("NSE", "2885") ?: MarketDataStore.getTick("2885")
+        println("TEST_DEBUG: tick1=$tick1")
         assertNotNull("Tick 1 (NSE:2885) must be ingested", tick1)
         assertEquals(2500.50, tick1?.ltp ?: 0.0, 0.01)
 
         val tick2 = MarketDataStore.getTick("NFO", "54321") ?: MarketDataStore.getTick("54321")
+        if (tick2 == null) {
+            println("TEST_DEBUG: tick2 is NULL!")
+            println("TEST_DEBUG: marketData value keys=${MarketDataStore.marketData.value.keys}")
+            val activeLiveSource = MarketDataStore.getActiveLiveSource(System.currentTimeMillis(), 15000L)
+            println("TEST_DEBUG: getActiveLiveSource=$activeLiveSource")
+        }
         assertNotNull("Tick 2 (NFO:54321) must be ingested", tick2)
         assertEquals(125.50, tick2?.ltp ?: 0.0, 0.01)
 

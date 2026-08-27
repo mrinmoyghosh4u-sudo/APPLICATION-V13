@@ -243,6 +243,17 @@ class SessionManager(context: Context) {
         get() = prefs.getString("last_completed_dhan_fingerprint", "") ?: ""
         set(value) { prefs.edit().putString("last_completed_dhan_fingerprint", value).commit() }
 
+    fun isDhanTokenIdConsumed(tokenId: String): Boolean {
+        val consumedSet = prefs.getStringSet("dhan_consumed_token_ids", emptySet()) ?: emptySet()
+        return consumedSet.contains(tokenId)
+    }
+
+    fun markDhanTokenIdConsumed(tokenId: String) {
+        val consumedSet = prefs.getStringSet("dhan_consumed_token_ids", emptySet()) ?: emptySet()
+        val newSet = consumedSet.toMutableSet().apply { add(tokenId) }
+        prefs.edit().putStringSet("dhan_consumed_token_ids", newSet).commit()
+    }
+
     var activeBroker: String
         get() = "Dhan" // Always Dhan for execution
         set(value) {

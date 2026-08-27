@@ -213,7 +213,7 @@ object MarketDataStore {
         if (activeSource != "NONE" && activeSource != lastActiveSource) {
             val oldSource = lastActiveSource
             lastActiveSource = activeSource
-            Log.i("MarketDataStore", "[SOURCE_FAILOVER] Switching authoritative source from $oldSource to $activeSource")
+            try { Log.i("MarketDataStore", "[SOURCE_FAILOVER] Switching authoritative source from $oldSource to $activeSource") } catch (_: Throwable) {}
 
             // Clear current active maps
             symbolIndex.clear()
@@ -453,6 +453,7 @@ object MarketDataStore {
         state: String = "LIVE",
         sequenceNumber: Long = 0L
     ) {
+        println("TEST_DEBUG: ENTERING updateTick symbol=$symbol token=$token exchange=$exchange ltp=$ltp source=$source")
         // 1. Invalid Price Validation
         if (ltp <= 0.0 || ltp.isNaN() || ltp.isInfinite()) {
             try { Log.w("MarketDataStore", "[$source] REJECTED INVALID LTP: $ltp for $symbol") } catch (_: Throwable) {}
@@ -597,6 +598,7 @@ object MarketDataStore {
 
         // Write to active authoritative maps only if this source is the current authoritative one
         val isAuthoritative = (source == lastActiveSource) || (lastActiveSource == "NONE")
+        println("TEST_DEBUG: updateTick source=$source, lastActiveSource=$lastActiveSource, isAuthoritative=$isAuthoritative, symbol=$symbol")
         if (isAuthoritative) {
             compositeMap[compositeKey] = newState
             if (normToken.isNotBlank()) {
@@ -621,11 +623,39 @@ object MarketDataStore {
         recalculateAuthoritativeProviderState(receivedTimestamp, staleThreshold)
     }
 
+    fun reset() {
+        _marketData.value = emptyMap()
+        lastActiveSource = "NONE"
+        compositeMap.clear()
+        symbolIndex.clear()
+        sourceSymbolMaps.values.forEach { it.clear() }
+        sourceCompositeMaps.values.forEach { it.clear() }
+        sourceLastUpdate.clear()
+        sourceLastSequence.clear()
+        _upstoxHealth.value = "OFFLINE"
+        _fyersHealth.value = "OFFLINE"
+        _angelOneHealth.value = "OFFLINE"
+        _mStockHealth.value = "OFFLINE"
+        _providerState.value = MarketDataProviderState()
+        _exchangeTickCount.clear()
+        _brokerTickCount.clear()
+        _tickCountFlow.value = 0L
+    }
+
     fun getTick(symbol: String): MarketDataState? {
         val direct = symbolIndex[symbol] ?: symbolIndex[symbol.trim().uppercase()]
         if (direct != null) return direct
         val key = symbolIndex.keys.find { it.equals(symbol, ignoreCase = true) }
-        return key?.let { symbolIndex[it] }
+        if (key != null) {
+            val result = symbolIndex[key]
+            if (result != null) return result
+        }
+        val normSym = symbol.trim().uppercase()
+        for (sourceMap in sourceSymbolMaps.values) {
+            val sTick = sourceMap[normSym] ?: sourceMap[symbol]
+            if (sTick != null) return sTick
+        }
+        return null
     }
 
     fun getTickFlow(symbol: String): kotlinx.coroutines.flow.Flow<MarketDataState?> {
@@ -640,13 +670,27 @@ object MarketDataStore {
     fun getTick(exchange: String, symbol: String): MarketDataState? {
         val normExch = exchange.trim().uppercase()
         val normSym = symbol.trim().uppercase()
-        return compositeMap["$normExch:$normSym"] ?: getTick(symbol)
+        val direct = compositeMap["$normExch:$normSym"] ?: getTick(symbol)
+        if (direct != null) return direct
+        val compKey = "$normExch:$normSym"
+        for (sourceCompMap in sourceCompositeMaps.values) {
+            val sTick = sourceCompMap[compKey]
+            if (sTick != null) return sTick
+        }
+        return null
     }
 
     fun getTickByToken(exchange: String, token: String): MarketDataState? {
         val normExch = exchange.trim().uppercase()
         val normToken = token.trim()
-        return compositeMap["$normExch:$normToken"]
+        val direct = compositeMap["$normExch:$normToken"]
+        if (direct != null) return direct
+        val compKey = "$normExch:$normToken"
+        for (sourceCompMap in sourceCompositeMaps.values) {
+            val sTick = sourceCompMap[compKey]
+            if (sTick != null) return sTick
+        }
+        return null
     }
 
     fun setPreviousClose(symbol: String, prevClose: Double, exchange: String = "NSE", source: String = MarketDataSourceNames.ANGEL_ONE) {

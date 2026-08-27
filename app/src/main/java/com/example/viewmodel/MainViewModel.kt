@@ -1149,6 +1149,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // 2.3 One-time callback token consumption check
+        if (!dhanTokenId.isNullOrBlank()) {
+            if (sessionManager.isDhanTokenIdConsumed(dhanTokenId)) {
+                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback - tokenId $dhanTokenId already consumed previously")
+                _isAuthInProgress.value = false
+                return
+            }
+            sessionManager.markDhanTokenIdConsumed(dhanTokenId)
+        }
+
         // 2.5 State validation and atomic consumption
         if (pendingSession != null && pendingSession.provider.equals("DHAN", ignoreCase = true)) {
             val trimExpected = pendingSession.state.trim()
