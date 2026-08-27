@@ -53,12 +53,15 @@ object UpstoxSymbolMapper {
     )
 
     fun toUpstoxInstrumentKey(symbol: String, exchange: String = "NSE"): String {
-        val clean = symbol.trim().uppercase(Locale.ENGLISH)
+        val raw = symbol.trim()
+        if (raw.isEmpty()) return ""
 
-        // If already formatted as Upstox instrument key (contains '|')
-        if (clean.contains("|")) {
-            return clean
+        // If already formatted as a valid Upstox instrument key (e.g. contains '|'), preserve exactly as-is
+        if (raw.contains("|")) {
+            return raw
         }
+
+        val clean = raw.uppercase(Locale.ENGLISH)
 
         // Direct Index matching
         when {

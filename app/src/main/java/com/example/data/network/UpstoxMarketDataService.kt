@@ -22,6 +22,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.ByteString.Companion.toByteString
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -134,13 +135,15 @@ class UpstoxMarketDataService(
                     })
                 }
 
-                val sent = webSocket?.send(json.toString()) ?: false
+                val payload = json.toString().toByteArray(Charsets.UTF_8)
+                val byteString = payload.toByteString()
+                val sent = webSocket?.send(byteString) ?: false
                 if (sent) {
-                    Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Dynamic subscription payload sent for ${keysToSend.size} new instrument(s). Waiting for server confirmation.")
+                    Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Dynamic binary subscription payload sent for ${keysToSend.size} new instrument(s). Waiting for server confirmation.")
                 } else {
                     _connectionState.value = "SUBSCRIPTION_ERROR"
                     healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, "Failed to send subscription frame")
-                    Log.e(TAG, "[UPSTOX_ERROR] Failed to send dynamic subscription frame")
+                    Log.e(TAG, "[UPSTOX_ERROR] Failed to send dynamic binary subscription frame")
                 }
             } catch (e: Exception) {
                 _connectionState.value = "SUBSCRIPTION_ERROR"
@@ -164,8 +167,10 @@ class UpstoxMarketDataService(
                         put("instrumentKeys", JSONArray(validKeys))
                     })
                 }
-                webSocket?.send(json.toString())
-                Log.i(TAG, "[UPSTOX_UNSUB_SENT] Unsubscribed from ${validKeys.size} instrument(s)")
+                val payload = json.toString().toByteArray(Charsets.UTF_8)
+                val byteString = payload.toByteString()
+                webSocket?.send(byteString)
+                Log.i(TAG, "[UPSTOX_UNSUB_SENT] Unsubscribed binary frame sent for ${validKeys.size} instrument(s)")
             } catch (e: Exception) {
                 Log.e(TAG, "[UPSTOX_ERROR] Error sending unsubscribe: ${e.message}", e)
             }
@@ -336,9 +341,11 @@ class UpstoxMarketDataService(
                                 })
                             }
 
-                            val sent = ws.send(json.toString())
+                            val payload = json.toString().toByteArray(Charsets.UTF_8)
+                            val byteString = payload.toByteString()
+                            val sent = ws.send(byteString)
                             if (sent) {
-                                Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Subscription payload sent for ${keys.size} instrument(s): mode=ltpc. Awaiting server confirmation.")
+                                Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Binary subscription payload sent for ${keys.size} instrument(s): mode=ltpc. Awaiting server confirmation.")
                             } else {
                                 _connectionState.value = "SUBSCRIPTION_ERROR"
                                 healthManager?.reportError(ProviderHealthManager.PROVIDER_UPSTOX, "Failed to send initial subscription frame")

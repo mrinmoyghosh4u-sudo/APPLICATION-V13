@@ -26,7 +26,11 @@ import com.example.data.network.UpstoxOptionChainResponse
 import com.example.data.network.UpstoxOptionContractsResponse
 import com.example.data.network.UpstoxProfileData
 import com.example.data.network.UpstoxProfileResponse
+import com.example.data.network.UpstoxSymbolMapper
 import com.example.data.network.UpstoxTokenResponse
+import okio.ByteString
+import okio.ByteString.Companion.toByteString
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -299,6 +303,116 @@ class Phase2MarketDataWsTest {
         assertFalse("REST quote MUST NOT make WebSocket state LIVE", upstoxService.isConnectionLive())
         assertFalse("REST quote MUST NOT mark first real tick received", upstoxService.hasFirstTickReceived())
         assertEquals("REST_QUOTE_AVAILABLE", com.example.data.model.MarketDataStore.getTick("NIFTY")?.state)
+    }
+
+    @Test
+    fun test12_upstoxInstrumentKeyPreservationAndDisplaySymbolResolution() {
+        // 1. Valid Upstox instrument_key must remain completely unchanged (never uppercase already-valid keys)
+        assertEquals("NSE_INDEX|Nifty 50", UpstoxSymbolMapper.toUpstoxInstrumentKey("NSE_INDEX|Nifty 50"))
+        assertEquals("NSE_INDEX|Nifty Bank", UpstoxSymbolMapper.toUpstoxInstrumentKey("NSE_INDEX|Nifty Bank"))
+        assertEquals("NSE_INDEX|Nifty Fin Service", UpstoxSymbolMapper.toUpstoxInstrumentKey("NSE_INDEX|Nifty Fin Service"))
+        assertEquals("NSE_EQ|INE002A01018", UpstoxSymbolMapper.toUpstoxInstrumentKey("NSE_EQ|INE002A01018"))
+        assertEquals("BSE_INDEX|SENSEX", UpstoxSymbolMapper.toUpstoxInstrumentKey("BSE_INDEX|SENSEX"))
+        assertEquals("MCX_FO|CRUDEOIL", UpstoxSymbolMapper.toUpstoxInstrumentKey("MCX_FO|CRUDEOIL"))
+
+        // 2. Display symbols must resolve through existing instrument mapping
+        assertEquals("NSE_INDEX|Nifty 50", UpstoxSymbolMapper.toUpstoxInstrumentKey("NIFTY"))
+        assertEquals("NSE_INDEX|Nifty 50", UpstoxSymbolMapper.toUpstoxInstrumentKey("NIFTY 50"))
+        assertEquals("NSE_INDEX|Nifty 50", UpstoxSymbolMapper.toUpstoxInstrumentKey("nifty 50"))
+        assertEquals("NSE_INDEX|Nifty Bank", UpstoxSymbolMapper.toUpstoxInstrumentKey("BANKNIFTY"))
+        assertEquals("NSE_INDEX|Nifty Fin Service", UpstoxSymbolMapper.toUpstoxInstrumentKey("FINNIFTY"))
+        assertEquals("BSE_INDEX|SENSEX", UpstoxSymbolMapper.toUpstoxInstrumentKey("SENSEX"))
+        assertEquals("NSE_EQ|INE002A01018", UpstoxSymbolMapper.toUpstoxInstrumentKey("RELIANCE"))
+
+        // 3. Reverse resolution
+        val (niftySym, niftyExch) = UpstoxSymbolMapper.fromUpstoxInstrumentKey("NSE_INDEX|Nifty 50")
+        assertEquals("NIFTY 50", niftySym)
+        assertEquals("NSE", niftyExch)
+
+        val (relianceSym, relianceExch) = UpstoxSymbolMapper.fromUpstoxInstrumentKey("NSE_EQ|INE002A01018")
+        assertEquals("RELIANCE", relianceSym)
+        assertEquals("NSE", relianceExch)
+    }
+
+    @Test
+    fun test13_upstoxBinarySubscriptionPayloadConstruction() {
+        val keys = listOf("NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank")
+        val json = JSONObject().apply {
+            put("guid", "test-guid-1234")
+            put("method", "sub")
+            put("data", JSONObject().apply {
+                put("mode", "ltpc")
+                put("instrumentKeys", org.json.JSONArray(keys))
+            })
+        }
+
+        val payload = json.toString().toByteArray(Charsets.UTF_8)
+        val byteString = payload.toByteString()
+
+        assertTrue(byteString.size > 0)
+        val decodedJson = JSONObject(byteString.utf8())
+        assertEquals("sub", decodedJson.getString("method"))
+        assertEquals("ltpc", decodedJson.getJSONObject("data").getString("mode"))
+        assertEquals(2, decodedJson.getJSONObject("data").getJSONArray("instrumentKeys").length())
+        assertEquals("NSE_INDEX|Nifty 50", decodedJson.getJSONObject("data").getJSONArray("instrumentKeys").getString(0))
+        assertEquals("NSE_INDEX|Nifty Bank", decodedJson.getJSONObject("data").getJSONArray("instrumentKeys").getString(1))
+    }
+
+    @Test
+    fun test14_upstoxBinaryFeedProducesLtpAndSetsLive() {
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, 1)
+
+        val stateBefore = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("WAITING_FOR_FIRST_TICK", stateBefore.status)
+        assertFalse(stateBefore.healthy)
+
+        // Construct valid Upstox V3 binary Protobuf feed with LTP = 22450.75
+        val key = "NSE_INDEX|Nifty 50"
+        val keyBytes = key.toByteArray(Charsets.UTF_8)
+
+        val ltpcBuf = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
+        ltpcBuf.put(0x09.toByte())
+        ltpcBuf.putDouble(22450.75)
+        ltpcBuf.put(0x10.toByte())
+        writeVarint(ltpcBuf, System.currentTimeMillis())
+
+        val ltpcBytes = ByteArray(ltpcBuf.position())
+        System.arraycopy(ltpcBuf.array(), 0, ltpcBytes, 0, ltpcBytes.size)
+
+        val feedBuf = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN)
+        feedBuf.put(0x0A.toByte())
+        writeVarint(feedBuf, ltpcBytes.size.toLong())
+        feedBuf.put(ltpcBytes)
+        val feedBytes = ByteArray(feedBuf.position())
+        System.arraycopy(feedBuf.array(), 0, feedBytes, 0, feedBytes.size)
+
+        val mapEntryBuf = ByteBuffer.allocate(200).order(ByteOrder.LITTLE_ENDIAN)
+        mapEntryBuf.put(0x0A.toByte())
+        writeVarint(mapEntryBuf, keyBytes.size.toLong())
+        mapEntryBuf.put(keyBytes)
+        mapEntryBuf.put(0x12.toByte())
+        writeVarint(mapEntryBuf, feedBytes.size.toLong())
+        mapEntryBuf.put(feedBytes)
+        val mapBytes = ByteArray(mapEntryBuf.position())
+        System.arraycopy(mapEntryBuf.array(), 0, mapBytes, 0, mapBytes.size)
+
+        val outerBuf = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
+        outerBuf.put(0x0A.toByte())
+        writeVarint(outerBuf, mapBytes.size.toLong())
+        outerBuf.put(mapBytes)
+
+        val payload = ByteArray(outerBuf.position())
+        System.arraycopy(outerBuf.array(), 0, payload, 0, payload.size)
+
+        val parsedTicks = upstoxService.parseBinaryPacket(payload)
+        assertEquals(1, parsedTicks)
+        assertTrue(upstoxService.hasFirstTickReceived())
+        assertEquals("LIVE", upstoxService.connectionState.value)
+
+        val stateAfter = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertEquals("LIVE", stateAfter.status)
+        assertTrue(stateAfter.healthy)
     }
 
     private fun writeVarint(buffer: ByteBuffer, value: Long) {
