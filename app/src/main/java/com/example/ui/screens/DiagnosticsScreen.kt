@@ -331,9 +331,6 @@ fun InstrumentResolutionSection(viewModel: MainViewModel) {
     }
 
     val targets = listOf(
-        Triple("NSE TOTAL INDEX", "NSE TOTAL INDEX", "NSE"),
-        Triple("BSE TOTAL INDEX", "BSE TOTAL INDEX", "BSE"),
-        Triple("MCX TOTAL INDEX", "MCX TOTAL INDEX", "MCX"),
         Triple("Nifty 50", "NIFTY 50", "NSE"),
         Triple("Bank Nifty", "BANKNIFTY", "NSE"),
         Triple("Fin Nifty", "FINNIFTY", "NSE"),

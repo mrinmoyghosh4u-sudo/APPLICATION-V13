@@ -741,14 +741,143 @@ class MStockMarketDataService(
         if (!isConfigured()) {
             return Result.failure(Exception("m.Stock Market Data is not configured. Please enter valid m.Stock API Key and Access Token."))
         }
-        return Result.failure(Exception("m.Stock streaming active via WebSocket. Snapshot REST quotes unavailable."))
+
+        val resolver = instrumentMasterService?.let { MStockInstrumentResolver(it) }
+        val results = mutableListOf<WatchlistItem>()
+
+        for (sym in symbols) {
+            val resolved = resolver?.resolve(sym)
+            val token = resolved?.token ?: sym
+            val exch = resolved?.exchange ?: "NSE"
+            val lot = resolved?.lotSize ?: 1
+
+            // Ensure subscription so ticks flow into store
+            if (token.isNotBlank()) {
+                subscribe(exch, listOf(token))
+            }
+
+            // Lookup from MarketDataStore
+            val tick = MarketDataStore.getTick(exch, sym)
+                ?: MarketDataStore.getTickByToken(exch, token)
+                ?: MarketDataStore.getTick(token)
+                ?: MarketDataStore.getTick(sym)
+
+            if (tick != null && tick.ltp > 0.0) {
+                results.add(
+                    WatchlistItem(
+                        symbol = sym,
+                        exchange = exch,
+                        ltp = tick.ltp,
+                        change = tick.change,
+                        changePercent = tick.changePercent,
+                        lotSize = lot,
+                        isPositive = tick.change >= 0.0,
+                        volume = tick.volume
+                    )
+                )
+            }
+        }
+
+        if (results.isNotEmpty()) {
+            return Result.success(results)
+        }
+
+        return Result.failure(Exception("m.Stock live quotes waiting for WebSocket ticks for $symbols"))
     }
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> {
         if (!isConfigured()) {
             return Result.failure(Exception("m.Stock Market Data is not configured."))
         }
-        return Result.failure(Exception("m.Stock REST option chain endpoint unavailable. Real-time option chain data requires streaming broker source."))
+        if (instrumentMasterService == null || !instrumentMasterService.isLoaded) {
+            return Result.failure(Exception("Instrument Master is loading. Option contracts unavailable."))
+        }
+
+        val cleanExpiry = if (expiry.isNotBlank()) com.example.util.OptionExpiryUtil.formatForAngel(expiry) else ""
+        val instruments = instrumentMasterService.getOptionInstruments(symbol, cleanExpiry)
+        if (instruments.isEmpty()) {
+            return Result.failure(Exception("No option contracts found for $symbol with expiry $expiry"))
+        }
+
+        // Extract option tokens and ensure they are subscribed on m.Stock WebSocket
+        val tokensToSub = instruments.map { it.token }.filter { it.isNotBlank() }
+        val exchSeg = instruments.firstOrNull()?.exch_seg ?: "NFO"
+        val exch = InstrumentMasterService.normalizeExchange(exchSeg)
+        if (tokensToSub.isNotEmpty()) {
+            subscribe(exch, tokensToSub)
+        }
+
+        // Group instruments by strike
+        val strikeMap = mutableMapOf<Double, Pair<com.example.data.network.Instrument?, com.example.data.network.Instrument?>>()
+        for (inst in instruments) {
+            val rawStrike = inst.strike.toDoubleOrNull() ?: 0.0
+            val strike = if (rawStrike > 100000.0) rawStrike / 100.0 else rawStrike
+            val pair = strikeMap.getOrDefault(strike, Pair(null, null))
+            if (inst.symbol.endsWith("CE", ignoreCase = true) || inst.symbol.contains("CE")) {
+                strikeMap[strike] = pair.copy(first = inst)
+            } else if (inst.symbol.endsWith("PE", ignoreCase = true) || inst.symbol.contains("PE")) {
+                strikeMap[strike] = pair.copy(second = inst)
+            }
+        }
+
+        val strikes = mutableListOf<OptionStrikeItem>()
+        for ((strike, pair) in strikeMap) {
+            val ce = pair.first
+            val pe = pair.second
+
+            val ceTick = if (ce != null) {
+                MarketDataStore.getTick(ce.symbol)
+                    ?: MarketDataStore.getTickByToken(exch, ce.token)
+                    ?: MarketDataStore.getTick(exch, ce.symbol)
+                    ?: MarketDataStore.getTick(ce.token)
+            } else null
+
+            val peTick = if (pe != null) {
+                MarketDataStore.getTick(pe.symbol)
+                    ?: MarketDataStore.getTickByToken(exch, pe.token)
+                    ?: MarketDataStore.getTick(exch, pe.symbol)
+                    ?: MarketDataStore.getTick(pe.token)
+            } else null
+
+            val ceLtp = ceTick?.ltp ?: 0.0
+            val peLtp = peTick?.ltp ?: 0.0
+            val ceVol = ceTick?.volume ?: 0L
+            val peVol = peTick?.volume ?: 0L
+
+            val strikeItem = OptionStrikeItem(
+                strikePrice = strike,
+                callLtp = ceLtp,
+                putLtp = peLtp,
+                callVolume = if (ceVol > 0L) ceVol.toString() else "0",
+                putVolume = if (peVol > 0L) peVol.toString() else "0",
+                callToken = ce?.token ?: "",
+                putToken = pe?.token ?: "",
+                callSymbol = ce?.symbol ?: "",
+                putSymbol = pe?.symbol ?: ""
+            )
+            strikes.add(strikeItem)
+        }
+
+        val sortedStrikes = strikes.sortedBy { it.strikePrice }
+        if (sortedStrikes.isNotEmpty()) {
+            return Result.success(sortedStrikes)
+        }
+
+        return Result.failure(Exception("Option chain data unavailable for $symbol $expiry"))
+    }
+
+    suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
+        if (!isConfigured()) {
+            return Result.failure(Exception("m.Stock Market Data is not configured."))
+        }
+        val expiries = instrumentMasterService?.getOptionExpiries(symbol) ?: emptyList()
+        if (expiries.isNotEmpty()) {
+            val formatted = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, expiries)
+            if (formatted.isNotEmpty()) {
+                return Result.success(formatted)
+            }
+        }
+        return Result.failure(Exception("Option expiries unavailable for $symbol"))
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.data.model.HistoricalCandle>> {

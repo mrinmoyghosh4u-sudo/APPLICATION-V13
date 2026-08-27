@@ -795,6 +795,7 @@ class MainActivity : FragmentActivity() {
                                 onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },
                                 onFyersLogin = { appId, secretId, authCode -> viewModel.connectFyers(appId, secretId, authCode) },
                                 onUpstoxLogin = { apiKey, apiSecret, authCode -> viewModel.connectUpstox(apiKey, apiSecret, authCode) },
+                                onDhanLogin = { clientId, accessToken -> viewModel.connectDhan(clientId, accessToken) },
                                 onStartUpstoxOAuth = { apiKey, apiSecret ->
                                     viewModel.startUpstoxOAuth(apiKey, apiSecret,
                                         onUrlGenerated = { loginUrl ->

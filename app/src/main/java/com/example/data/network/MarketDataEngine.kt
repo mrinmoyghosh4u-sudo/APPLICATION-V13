@@ -195,6 +195,12 @@ class MarketDataEngine(
             val angelRes = angelMarketDataService.getOptionExpiries(symbol)
             if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) return angelRes
         }
+
+        // Priority 4: m.Stock
+        if (mStockMarketDataService?.isConfigured() == true) {
+            val mStockRes = mStockMarketDataService.getOptionExpiries(symbol)
+            if (mStockRes.isSuccess && mStockRes.getOrDefault(emptyList()).isNotEmpty()) return mStockRes
+        }
         
         return Result.failure(Exception("REAL EXPIRIES UNAVAILABLE"))
     }

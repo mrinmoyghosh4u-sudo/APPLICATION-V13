@@ -57,6 +57,7 @@ object MStockAuthHelper {
 
     /**
      * Executes official m.Stock Type A TOTP authentication using clientCode, apiKey, and TOTP secret/code.
+     * Also supports direct JWT Access Token input.
      */
     suspend fun verifyTotp(
         clientCode: String,
@@ -67,10 +68,23 @@ object MStockAuthHelper {
         runCatching {
             val sanitizedClientCode = clientCode.trim()
             val sanitizedApiKey = apiKey.trim()
-            val sanitizedTotpInput = totpOrSecret.trim()
+            val sanitizedTotpInput = totpOrSecret.trim().removePrefix("Bearer ").removePrefix("bearer ").trim()
 
             _authStage.value = "INITIALIZING"
             _lastAuthMessage.value = "Validating input parameters"
+
+            // 0. Check if the user entered a direct JWT / Access Token
+            if (sanitizedTotpInput.startsWith("ey", ignoreCase = true) || 
+                (sanitizedTotpInput.length > 50 && !sanitizedTotpInput.contains("&") && !sanitizedTotpInput.contains("="))) {
+                Log.d(TAG, "Direct m.Stock Access Token detected")
+                _authStage.value = "AUTHENTICATED"
+                _lastAuthMessage.value = "Success (Direct Token Stored)"
+                return@runCatching MStockTokens(
+                    accessToken = sanitizedTotpInput,
+                    refreshToken = refreshToken ?: "",
+                    feedToken = sanitizedTotpInput
+                )
+            }
 
             if (sanitizedApiKey.isBlank()) {
                 _authStage.value = "FAILED"
@@ -79,8 +93,8 @@ object MStockAuthHelper {
             }
             if (sanitizedTotpInput.isBlank()) {
                 _authStage.value = "FAILED"
-                _lastAuthMessage.value = "m.Stock TOTP Secret or 6-digit TOTP code is required"
-                throw Exception("m.Stock TOTP Secret or 6-digit TOTP code is required.")
+                _lastAuthMessage.value = "m.Stock TOTP Secret, 6-digit OTP, or Access Token is required"
+                throw Exception("m.Stock TOTP Secret, 6-digit OTP, or Access Token is required.")
             }
 
             Log.d(TAG, "Initiating m.Stock Type A TOTP authentication")
@@ -99,7 +113,7 @@ object MStockAuthHelper {
                 generated
             }
 
-            // 2. Execute Official Type A Authentication ONLY
+            // 2. Execute Official Type A Authentication
             _lastEndpoint.value = TYPE_A_VERIFY_TOTP_URL
             _authStage.value = "VERIFYING_TOTP_TYPE_A"
             Log.d(TAG, "Executing m.Stock Type A authentication...")
@@ -115,6 +129,36 @@ object MStockAuthHelper {
         totp: String,
         clientCode: String = ""
     ): MStockTokens {
+        // First try JSON payload
+        val jsonPayload = JSONObject().apply {
+            put("api_key", apiKey)
+            put("apiKey", apiKey)
+            put("totp", totp)
+            put("totp_pin", totp)
+            if (clientCode.isNotBlank()) {
+                put("client_code", clientCode)
+                put("clientCode", clientCode)
+            }
+        }.toString()
+
+        val jsonBody = jsonPayload.toRequestBody("application/json".toMediaType())
+        val jsonRequest = Request.Builder()
+            .url(TYPE_A_VERIFY_TOTP_URL)
+            .post(jsonBody)
+            .addHeader("X-Mirae-Version", "1")
+            .addHeader("x-api-key", apiKey)
+            .addHeader("api_key", apiKey)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .build()
+
+        try {
+            return parseResponseAndExtractTokens(jsonRequest)
+        } catch (e: Exception) {
+            Log.w(TAG, "JSON verifytotp attempt failed: ${e.message}, trying form-urlencoded...")
+        }
+
+        // Fallback to Form URL-encoded
         val formBodyBuilder = StringBuilder()
         formBodyBuilder.append("api_key=").append(URLEncoder.encode(apiKey, "UTF-8"))
         formBodyBuilder.append("&totp=").append(URLEncoder.encode(totp, "UTF-8"))
@@ -125,15 +169,17 @@ object MStockAuthHelper {
         val bodyString = formBodyBuilder.toString()
         _lastEndpoint.value = TYPE_A_VERIFY_TOTP_URL
         val body = bodyString.toRequestBody("application/x-www-form-urlencoded".toMediaType())
-        val request = Request.Builder()
+        val formRequest = Request.Builder()
             .url(TYPE_A_VERIFY_TOTP_URL)
             .post(body)
             .addHeader("X-Mirae-Version", "1")
+            .addHeader("x-api-key", apiKey)
+            .addHeader("api_key", apiKey)
             .addHeader("Content-Type", "application/x-www-form-urlencoded")
             .addHeader("Accept", "application/json")
             .build()
 
-        return parseResponseAndExtractTokens(request)
+        return parseResponseAndExtractTokens(formRequest)
     }
 
     private fun parseResponseAndExtractTokens(request: Request): MStockTokens {

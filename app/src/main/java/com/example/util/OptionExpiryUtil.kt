@@ -46,7 +46,26 @@ object OptionExpiryUtil {
             }
         }
 
-        // 2. Dynamic Fallback Generation in case liveBrokerExpiries is empty
+        // 2. Query InstrumentMasterService for real exchange/broker option contracts
+        val masterExpiries = com.example.data.network.InstrumentMasterService.instance?.getOptionExpiries(symbol) ?: emptyList()
+        if (masterExpiries.isNotEmpty()) {
+            val parsed = masterExpiries.mapNotNull { expStr ->
+                parseExpiryDate(expStr)?.let { date ->
+                    val displayStr = formatDisplayExpiry(date, isMonthlyExpiryDate(symbol, date))
+                    displayStr to date
+                }
+            }.filter { (_, date) ->
+                date.time >= activeCutoff.time
+            }.sortedBy { (_, date) ->
+                date.time
+            }.map { it.first }
+
+            if (parsed.isNotEmpty()) {
+                return parsed.distinct()
+            }
+        }
+
+        // 3. Dynamic Fallback Generation in case liveBrokerExpiries and Instrument Master are empty
         val symUpper = symbol.uppercase()
         val targetDayOfWeek = when {
             symUpper.contains("BANKNIFTY") -> Calendar.WEDNESDAY

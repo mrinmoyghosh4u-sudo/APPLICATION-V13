@@ -37,13 +37,20 @@ fun SplashScreen(
         label = "alpha"
     )
 
-    LaunchedEffect(isRestoring) {
+    var hasFinished by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
         startAnimation = true
         delay(1200)
-        while (isRestoring) {
+        var waitCount = 0
+        while (isRestoring && waitCount < 10) { // Max 1s extra wait
             delay(100)
+            waitCount++
         }
-        onSplashFinished()
+        if (!hasFinished) {
+            hasFinished = true
+            onSplashFinished()
+        }
     }
 
     Box(

@@ -45,6 +45,7 @@ fun BrokerConnectDialog(
     onMStockLogin: ((String, String, String) -> Unit)? = null,
     onFyersLogin: ((String, String, String) -> Unit)? = null,
     onUpstoxLogin: ((String, String, String) -> Unit)? = null,
+    onDhanLogin: ((String, String) -> Unit)? = null,
     onStartUpstoxOAuth: ((String, String) -> Unit)? = null,
     onStartFyersOAuth: ((String, String) -> Unit)? = null,
     onStartDhanOAuth: ((String, String, String) -> Unit)? = null
@@ -67,7 +68,9 @@ fun BrokerConnectDialog(
     var dhanClientIdInput by remember { mutableStateOf(sessionManager.dhanClientId.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientId) }
     var dhanApiKeyInput by remember { mutableStateOf(sessionManager.dhanApiKey.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanApiKey) }
     var dhanClientSecretInput by remember { mutableStateOf(sessionManager.dhanClientSecret.takeIf { it.isNotBlank() } ?: BrokerConfig.dhanClientSecret) }
+    var dhanAccessTokenInput by remember { mutableStateOf(sessionManager.dhanAccessToken ?: "") }
     var showDhanCreds by remember { mutableStateOf(dhanClientIdInput.isBlank() || dhanClientSecretInput.isBlank()) }
+    var showDhanDirectToken by remember { mutableStateOf(false) }
 
     var mstockClientId by remember { mutableStateOf(sessionManager.mstockClientId) }
     var mstockApiKey by remember { mutableStateOf(sessionManager.mstockApiKey) }
@@ -835,7 +838,7 @@ fun BrokerConnectDialog(
                         }
                     }
                     else -> {
-                        // Dhan OAuth Flow
+                        // Dhan Official OAuth Flow (Primary) + Direct Token (Alternative)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
@@ -861,8 +864,79 @@ fun BrokerConnectDialog(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Primary Official Login Button
+                        Button(
+                            onClick = {
+                                val clientId = dhanClientIdInput.trim().ifBlank { BrokerConfig.dhanClientId }
+                                val apiKey = dhanApiKeyInput.trim().ifBlank { BrokerConfig.dhanApiKey }
+                                val clientSecret = dhanClientSecretInput.trim().ifBlank { BrokerConfig.dhanClientSecret }
+
+                                if (clientId.isBlank() || clientSecret.isBlank()) {
+                                    showDhanCreds = true
+                                    localErrorMsg = "Please enter your Dhan Client ID and Client Secret below."
+                                } else {
+                                    localErrorMsg = null
+                                    sessionManager.dhanClientId = clientId
+                                    sessionManager.dhanApiKey = apiKey
+                                    sessionManager.dhanClientSecret = clientSecret
+
+                                    val redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
+                                    val dhanState = com.example.util.DhanAuthHelper.generateSecureState()
+                                    sessionManager.pendingOAuthBroker = "Dhan"
+                                    sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
+                                        provider = "DHAN",
+                                        state = dhanState,
+                                        createdAt = System.currentTimeMillis(),
+                                        redirectUri = redirectUri,
+                                        consumed = false
+                                    )
+                                    if (onStartDhanOAuth != null) {
+                                        onStartDhanOAuth(clientId, apiKey, clientSecret)
+                                    } else {
+                                        isDhanConsentLoading = true
+                                        coroutineScope.launch {
+                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret, state = dhanState)
+                                            isDhanConsentLoading = false
+                                            consentRes.onSuccess { url ->
+                                                android.util.Log.d("DhanAuth", "Opening browser for Dhan authorization")
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    localErrorMsg = "Unable to open browser: ${e.localizedMessage}"
+                                                }
+                                            }.onFailure { err ->
+                                                localErrorMsg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isAuthInProgress && !isDhanConsentLoading,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFA5))
+                        ) {
+                            if (isDhanConsentLoading || isAuthInProgress) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_dhan_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("LOGIN WITH DHAN", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // API Credentials section toggle
                         TextButton(
                             onClick = { showDhanCreds = !showDhanCreds },
                             modifier = Modifier.fillMaxWidth()
@@ -873,7 +947,7 @@ fun BrokerConnectDialog(
                                 fontSize = 11.sp
                             )
                         }
-                        
+
                         if (showDhanCreds) {
                             Spacer(modifier = Modifier.height(6.dp))
                             OutlinedTextField(
@@ -899,79 +973,65 @@ fun BrokerConnectDialog(
                                 onValueChange = { dhanClientSecretInput = it },
                                 label = { Text("Client Secret") },
                                 singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
 
-                        Button(
-                            onClick = {
-                                val clientId = dhanClientIdInput.trim()
-                                val apiKey = dhanApiKeyInput.trim()
-                                val clientSecret = dhanClientSecretInput.trim()
-                                
-                                if (clientId.isBlank() || clientSecret.isBlank()) {
-                                    localErrorMsg = "Client ID and Secret are required for Dhan API."
-                                } else {
-                                    localErrorMsg = null
-                                    
-                                    // Save to session manager so it persists
-                                    sessionManager.dhanClientId = clientId
-                                    sessionManager.dhanApiKey = apiKey
-                                    sessionManager.dhanClientSecret = clientSecret
-                                    
-                                    val redirectUri = BrokerConfig.dhanRedirectUri.ifBlank { "kingkhan://oauth/callback" }
-                                    val dhanState = com.example.util.DhanAuthHelper.generateSecureState()
-                                    sessionManager.pendingOAuthBroker = "Dhan"
-                                    sessionManager.pendingOAuthSession = com.example.data.network.SessionManager.PendingOAuthSession(
-                                        provider = "DHAN",
-                                        state = dhanState,
-                                        createdAt = System.currentTimeMillis(),
-                                        redirectUri = redirectUri,
-                                        consumed = false
-                                    )
-                                    if (onStartDhanOAuth != null) {
-                                        onStartDhanOAuth(clientId, apiKey, clientSecret)
-                                    } else {
-                                        isDhanConsentLoading = true
-                                        coroutineScope.launch {
-                                            val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret, state = dhanState)
-                                            isDhanConsentLoading = false
-                                            consentRes.onSuccess { url ->
-                                                android.util.Log.d("DhanAuth", "Opening browser for Dhan authorization")
-                                                try {
-                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                    context.startActivity(intent)
-                                                    android.util.Log.d("DhanAuth", "Browser opened: PASS")
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("DhanAuth", "Failed to launch browser: ${e.message}", e)
-                                                    localErrorMsg = "Unable to open browser: ${e.localizedMessage}"
-                                                }
-                                            }.onFailure { err ->
-                                                localErrorMsg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = !isAuthInProgress && !isDhanConsentLoading,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFA5))
+                        // Direct Access Token option toggle
+                        TextButton(
+                            onClick = { showDhanDirectToken = !showDhanDirectToken },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (isDhanConsentLoading || isAuthInProgress) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.ic_dhan_logo),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("LOGIN WITH DHAN", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                }
+                            Text(
+                                if (showDhanDirectToken) "Hide Direct Access Token ▲" else "Direct Access Token (Alternative) ▼",
+                                color = TextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        if (showDhanDirectToken) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = dhanAccessTokenInput,
+                                onValueChange = { dhanAccessTokenInput = it },
+                                label = { Text("DhanHQ Access Token") },
+                                placeholder = { Text("Paste token from web.dhan.co", color = TextGray) },
+                                singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedBorderColor = Color(0xFF00BFA5),
+                                    unfocusedBorderColor = DarkCardBorder,
+                                    focusedLabelColor = Color(0xFF00BFA5),
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val clientId = dhanClientIdInput.trim()
+                                    val token = dhanAccessTokenInput.trim()
+                                    if (token.isBlank()) {
+                                        localErrorMsg = "Please enter your Dhan Access Token."
+                                    } else {
+                                        localErrorMsg = null
+                                        sessionManager.dhanClientId = clientId
+                                        sessionManager.dhanAccessToken = token
+                                        onDhanLogin?.invoke(clientId, token)
+                                    }
+                                },
+                                enabled = !isAuthInProgress,
+                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00BFA5)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00BFA5))
+                            ) {
+                                Text("CONNECT WITH ACCESS TOKEN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
