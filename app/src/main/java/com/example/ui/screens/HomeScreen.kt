@@ -152,6 +152,7 @@ fun HomeScreen(
             AiMarketInsightsSection(
                 marketDataMap = marketDataMap,
                 watchlist = watchlist,
+                viewModel = viewModel,
                 onNavigateToAISignals = onNavigateToAISignals
             )
 
@@ -703,6 +704,7 @@ private fun QuickActionButton(
 private fun AiMarketInsightsSection(
     marketDataMap: Map<String, com.example.data.model.MarketDataState>,
     watchlist: List<WatchlistItem>,
+    viewModel: MainViewModel? = null,
     onNavigateToAISignals: () -> Unit
 ) {
     val insightSymbols = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL", "GOLD", "SILVER")
@@ -713,13 +715,29 @@ private fun AiMarketInsightsSection(
         ?: marketDataMap.values.find { it.symbol.contains(selectedSymbol, ignoreCase = true) }
     val watchItem = watchlist.find { it.symbol.equals(selectedSymbol, ignoreCase = true) }
 
+    var candleList by remember { mutableStateOf<List<com.example.ui.components.CandleData>>(emptyList()) }
+    LaunchedEffect(selectedSymbol) {
+        viewModel?.getHistoricalCandlesForIndex(selectedSymbol, "15m") { fetched ->
+            candleList = fetched
+        }
+    }
+
     val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
     val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else (watchItem?.change ?: 0.0)
     val hasPrice = ltp > 0.0
     val isBullish = change >= 0
 
-    val supportPrice = if (hasPrice) (ltp * 0.992).toInt() else 0
-    val resistancePrice = if (hasPrice) (ltp * 1.008).toInt() else 0
+    val supportPrice = if (candleList.isNotEmpty()) {
+        candleList.minOf { it.low }.toInt()
+    } else {
+        if (hasPrice) (ltp * 0.992).toInt() else 0
+    }
+
+    val resistancePrice = if (candleList.isNotEmpty()) {
+        candleList.maxOf { it.high }.toInt()
+    } else {
+        if (hasPrice) (ltp * 1.008).toInt() else 0
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(

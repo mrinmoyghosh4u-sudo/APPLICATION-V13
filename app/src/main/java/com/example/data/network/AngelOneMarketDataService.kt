@@ -604,8 +604,8 @@ class AngelOneMarketDataService(
                         val peLive = if (peOpt != null) MarketDataStore.getTick(peOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peOpt.token) else null
                         
                         item.copy(
-                            callLtp = ceLive?.ltp ?: 0.0,
-                            putLtp = peLive?.ltp ?: 0.0,
+                            callLtp = ceLive?.ltp ?: item.callLtp,
+                            putLtp = peLive?.ltp ?: item.putLtp,
                             callToken = ceOpt?.token ?: "",
                             putToken = peOpt?.token ?: "",
                             callSymbol = ceOpt?.symbol ?: "",
@@ -614,7 +614,36 @@ class AngelOneMarketDataService(
                     }
                     return Result.success(strikes)
                 } else {
-                    return Result.success(emptyList()) // Do not generate fake/unavailable rows if real API fails
+                    // Extract strikes directly from real Master Option contracts
+                    val strikeMap = mutableMapOf<Double, Pair<Instrument?, Instrument?>>()
+                    options.forEach { opt ->
+                        val rawStrike = opt.strike.toDoubleOrNull() ?: 0.0
+                        val sp = if (rawStrike > 100000) rawStrike / 100.0 else if (rawStrike > 10000 && (symbol.contains("NIFTY", true) || symbol.contains("SENSEX", true) || symbol.contains("BANKEX", true))) rawStrike / 100.0 else rawStrike
+                        if (sp > 0.0) {
+                            val current = strikeMap.getOrDefault(sp, Pair(null, null))
+                            if (opt.symbol.endsWith("CE") || opt.symbol.contains("CE")) {
+                                strikeMap[sp] = Pair(opt, current.second)
+                            } else if (opt.symbol.endsWith("PE") || opt.symbol.contains("PE")) {
+                                strikeMap[sp] = Pair(current.first, opt)
+                            }
+                        }
+                    }
+                    val strikes = strikeMap.map { (sp, pair) ->
+                        val ceOpt = pair.first
+                        val peOpt = pair.second
+                        val ceLive = if (ceOpt != null) MarketDataStore.getTick(ceOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, ceOpt.token) else null
+                        val peLive = if (peOpt != null) MarketDataStore.getTick(peOpt.symbol) ?: MarketDataStore.getTickByToken(exchSeg, peOpt.token) else null
+                        OptionStrikeItem(
+                            strikePrice = sp,
+                            callLtp = ceLive?.ltp ?: 0.0,
+                            putLtp = peLive?.ltp ?: 0.0,
+                            callToken = ceOpt?.token ?: "",
+                            putToken = peOpt?.token ?: "",
+                            callSymbol = ceOpt?.symbol ?: "",
+                            putSymbol = peOpt?.symbol ?: ""
+                        )
+                    }.sortedBy { it.strikePrice }
+                    return Result.success(strikes)
                 }
             }
         }

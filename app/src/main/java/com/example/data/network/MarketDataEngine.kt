@@ -388,9 +388,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
         )
 
         healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, tick.timestamp)
-        _unifiedFeedStatus.value = "LIVE • UPSTOX"
-        _internalActiveProvider.value = "UPSTOX"
-        updateLastTickTime()
     }
     
     suspend fun updateFyersTick(tick: MarketTick) {
@@ -413,9 +410,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
         )
         
         healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, tick.timestamp)
-        _unifiedFeedStatus.value = "WEBSOCKET_LIVE • FYERS"
-        _internalActiveProvider.value = "FYERS"
-        updateLastTickTime()
     }
 
 

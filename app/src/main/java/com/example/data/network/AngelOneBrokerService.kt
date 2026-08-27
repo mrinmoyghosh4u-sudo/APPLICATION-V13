@@ -300,10 +300,18 @@ class AngelOneBrokerService(
             val instrument = instrumentMaster.resolveIndexToken(symbol)
                 ?: throw Exception("Index token not found for option chain: $symbol")
             
+            val upperSym = symbol.uppercase().trim()
+            val exch = when {
+                upperSym.contains("CRUDE", true) -> "MCX"
+                upperSym.contains("SENSEX", true) || upperSym.contains("BANKEX", true) -> "BFO"
+                else -> "NFO"
+            }
+            val angelExpiry = com.example.util.OptionExpiryUtil.formatForAngel(expiry)
+
             val request = AngelOptionChainRequest(
-                exchange = instrument.exch_seg,
+                exchange = exch,
                 symboltoken = instrument.token,
-                expirydate = expiry
+                expirydate = angelExpiry
             )
             val response = api.getOptionChain(request)
             if (response.isSuccessful && response.body()?.status == true) {

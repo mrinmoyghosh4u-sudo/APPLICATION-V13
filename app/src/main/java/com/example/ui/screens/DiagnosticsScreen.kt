@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -319,8 +320,21 @@ fun InstrumentResolutionSection(viewModel: MainViewModel) {
     SectionHeader("INSTRUMENT RESOLUTION MATRIX")
     
     val master = viewModel.brokerManager.instrumentMasterService
+    val providerState by MarketDataStore.providerState.collectAsStateWithLifecycle()
+    val activeProvider = providerState.provider
+    
+    var selectedBroker by remember { mutableStateOf("Upstox") }
+    LaunchedEffect(activeProvider) {
+        if (activeProvider != "NONE") {
+            selectedBroker = activeProvider
+        }
+    }
+
     val targets = listOf(
-        Triple("Nifty 50", "NIFTY", "NSE"),
+        Triple("NSE TOTAL INDEX", "NSE TOTAL INDEX", "NSE"),
+        Triple("BSE TOTAL INDEX", "BSE TOTAL INDEX", "BSE"),
+        Triple("MCX TOTAL INDEX", "MCX TOTAL INDEX", "MCX"),
+        Triple("Nifty 50", "NIFTY 50", "NSE"),
         Triple("Bank Nifty", "BANKNIFTY", "NSE"),
         Triple("Fin Nifty", "FINNIFTY", "NSE"),
         Triple("Midcap Nifty", "MIDCPNIFTY", "NSE"),
@@ -329,68 +343,172 @@ fun InstrumentResolutionSection(viewModel: MainViewModel) {
         Triple("Crude Oil", "CRUDEOIL", "MCX"),
         Triple("Crude Oil Mini", "CRUDEOIL M", "MCX")
     )
-    
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            // Header Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF161A22), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Instrument", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.4f))
-                Text("Exch", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.8f))
-                Text("Token", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.0f))
-                Text("Symbol", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.2f))
-                Text("Status", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Broker Selectors
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("Upstox", "Fyers", "Angel One", "m.Stock").forEach { broker ->
+                val isSelected = selectedBroker == broker
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (isSelected) Color(0xFF0288D1) else Color(0xFF161A22),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .clickable { selectedBroker = broker }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = broker,
+                        color = if (isSelected) Color.White else Color.Gray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-            
-            HorizontalDivider(color = Color(0xFF2C313C))
-            
-            targets.forEachIndexed { index, (label, searchKey, defaultExch) ->
-                val inst = master.resolveIndexToken(searchKey)
-                val tokenStr = inst?.token ?: "—"
-                val symbolStr = inst?.symbol ?: "—"
-                val exchStr = inst?.exch_seg ?: defaultExch
-                val isResolved = inst != null
-                
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                // Header Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (index % 2 == 0) Color(0xFF1E222B) else Color(0xFF161A22))
+                        .background(Color(0xFF161A22), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1.4f))
-                    Text(exchStr, color = Color(0xFFB0BEC5), fontSize = 11.sp, modifier = Modifier.weight(0.8f))
-                    Text(tokenStr, color = if (isResolved) Color(0xFF00E676) else Color.Gray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.weight(1.0f))
-                    Text(symbolStr, color = Color(0xFFB0BEC5), fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1.2f))
-                    
-                    Box(modifier = Modifier.weight(1.1f), contentAlignment = Alignment.CenterEnd) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = if (isResolved) Color(0xFF1B382B) else Color(0xFF381B1B),
-                            modifier = Modifier.padding(horizontal = 2.dp)
-                        ) {
-                            Text(
-                                text = if (isResolved) "RESOLVED" else "FAILED",
-                                color = if (isResolved) Color(0xFF00E676) else Color(0xFFFF5252),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+                    Text("Instrument", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.4f))
+                    Text("Exch", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.6f))
+                    Text("Security Key / ID", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.8f))
+                    Text("Status", color = Color(0xFF81D4FA), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.0f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
                 }
                 
-                if (index < targets.size - 1) {
-                    HorizontalDivider(color = Color(0xFF262A33))
+                HorizontalDivider(color = Color(0xFF2C313C))
+                
+                targets.forEachIndexed { index, (label, searchKey, defaultExch) ->
+                    val cleanSym = searchKey.trim().uppercase(Locale.ENGLISH)
+                    val normExch = when (cleanSym) {
+                        "SENSEX", "BANKEX", "BSE TOTAL INDEX" -> "BSE"
+                        "CRUDEOIL", "CRUDEOIL M", "MCX TOTAL INDEX" -> "MCX"
+                        else -> defaultExch.uppercase(Locale.ENGLISH)
+                    }
+
+                    val canonical = when (cleanSym) {
+                        "NSE TOTAL INDEX" -> "NIFTY"
+                        "BSE TOTAL INDEX" -> "SENSEX"
+                        "MCX TOTAL INDEX" -> "CRUDEOIL"
+                        else -> cleanSym
+                    }
+
+                    var brokerKeyOrToken = ""
+                    var status = "REAL INSTRUMENT UNAVAILABLE"
+                    var source = "NONE"
+                    var displayName = searchKey
+
+                    when (selectedBroker) {
+                        "Upstox" -> {
+                            val resolver = com.example.data.network.UpstoxInstrumentResolver(master)
+                            val res = resolver.resolve(canonical, normExch)
+                            if (res != null && res.instrumentKey.isNotBlank()) {
+                                brokerKeyOrToken = res.instrumentKey
+                                status = "RESOLVED"
+                                source = "UpstoxSymbolMapper"
+                                displayName = res.displayName
+                            }
+                        }
+                        "Fyers" -> {
+                            val resolver = com.example.data.network.FyersInstrumentResolver(master)
+                            val res = resolver.resolve(canonical, normExch)
+                            if (res != null && res.token.isNotBlank()) {
+                                brokerKeyOrToken = res.token
+                                status = "RESOLVED"
+                                source = "FyersSymbolMapper"
+                                displayName = res.displayName
+                            }
+                        }
+                        "Angel One" -> {
+                            val resolver = com.example.data.network.AngelOneInstrumentResolver(master)
+                            val res = resolver.resolve(canonical, normExch)
+                            if (res != null && res.token.isNotBlank()) {
+                                brokerKeyOrToken = res.token
+                                status = "RESOLVED"
+                                source = if (master.isLoaded) "AngelScripMaster" else "ManualOverridden"
+                                displayName = res.displayName
+                            }
+                        }
+                        "m.Stock" -> {
+                            val resolver = com.example.data.network.MStockInstrumentResolver(master)
+                            val res = resolver.resolve(canonical, normExch)
+                            if (res != null && res.token.isNotBlank()) {
+                                brokerKeyOrToken = res.token
+                                status = "RESOLVED"
+                                source = if (master.isLoaded) "MStockScripMaster" else "ManualOverridden"
+                                displayName = res.displayName
+                            }
+                        }
+                    }
+
+                    val isResolved = status == "RESOLVED"
+                    val tokenStr = if (isResolved) brokerKeyOrToken else "REAL INSTRUMENT UNAVAILABLE"
+                    val symbolStr = if (isResolved) displayName else "REAL INSTRUMENT UNAVAILABLE"
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (index % 2 == 0) Color(0xFF1E222B) else Color(0xFF161A22))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1.4f)) {
+                            Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Src: $source", color = Color.Gray, fontSize = 9.sp)
+                        }
+                        Text(normExch, color = Color(0xFFB0BEC5), fontSize = 11.sp, modifier = Modifier.weight(0.6f))
+                        
+                        Column(modifier = Modifier.weight(1.8f)) {
+                            Text(
+                                text = tokenStr,
+                                color = if (isResolved) Color(0xFF00E676) else Color(0xFFFF5252),
+                                fontSize = 11.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            if (isResolved) {
+                                Text("Sym: $symbolStr", color = Color.LightGray, fontSize = 9.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                        }
+                        
+                        Box(modifier = Modifier.weight(1.0f), contentAlignment = Alignment.CenterEnd) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isResolved) Color(0xFF1B382B) else Color(0xFF381B1B),
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isResolved) "RESOLVED" else "FAILED",
+                                    color = if (isResolved) Color(0xFF00E676) else Color(0xFFFF5252),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    if (index < targets.size - 1) {
+                        HorizontalDivider(color = Color(0xFF262A33))
+                    }
                 }
             }
         }
