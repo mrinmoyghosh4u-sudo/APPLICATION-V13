@@ -89,7 +89,7 @@ fun PortfolioScreen(
                     dataSource = marketDataSource,
                     modifier = Modifier.padding(end = 6.dp)
                 )
-                if (userProfile.connectedBroker.isNotEmpty()) {
+                if (userProfile.isBrokerConnected && userProfile.connectedBroker.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .background(ProfitGreen.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
@@ -164,11 +164,25 @@ fun PortfolioScreen(
                 ) {
                     Column {
                         Text("Available Margin", fontSize = 10.sp, color = TextGray)
-                        Text(String.format("₹%,.2f", userProfile.availableMargin), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        val marginText = if (userProfile.isBrokerConnected) {
+                            String.format("₹%,.2f", userProfile.availableMargin)
+                        } else if (userProfile.availableMargin > 0) {
+                            String.format("₹%,.2f (Paper)", userProfile.availableMargin)
+                        } else {
+                            "--"
+                        }
+                        Text(marginText, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Account Balance", fontSize = 10.sp, color = TextGray)
-                        Text(String.format("₹%,.2f", userProfile.accountBalance), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        val balText = if (userProfile.isBrokerConnected) {
+                            String.format("₹%,.2f", userProfile.accountBalance)
+                        } else if (userProfile.accountBalance > 0) {
+                            String.format("₹%,.2f (Paper)", userProfile.accountBalance)
+                        } else {
+                            "--"
+                        }
+                        Text(balText, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))

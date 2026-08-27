@@ -413,6 +413,7 @@ class Phase2MarketDataWsTest {
         val stateAfter = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
         assertEquals("LIVE", stateAfter.status)
         assertTrue(stateAfter.healthy)
+        assertEquals("", stateAfter.lastError)
     }
 
     private fun writeVarint(buffer: ByteBuffer, value: Long) {

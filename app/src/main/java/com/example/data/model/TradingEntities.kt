@@ -175,7 +175,10 @@ data class UserProfileEntity(
     val realizedPnl: Double = 0.0,
     val unrealizedPnl: Double = 0.0,
     val buyingPower: Double = 0.0
-)
+) {
+    val isBrokerConnected: Boolean
+        get() = (isAngelConnected || isDhanConnected) && connectedBroker.isNotBlank()
+}
 
 @Immutable
 data class OptionStrikeItem(

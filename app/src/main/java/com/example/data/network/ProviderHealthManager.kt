@@ -210,7 +210,7 @@ class ProviderHealthManager {
             authenticated = isAuthenticated,
             authenticationState = authState,
             status = newStatus,
-            lastError = if (errorMessage.isNotBlank()) errorMessage else current.lastError,
+            lastError = if (isAuthenticated) "" else (if (errorMessage.isNotBlank()) errorMessage else current.lastError),
             healthy = current.connected && isAuthenticated && current.firstTickReceived && !current.stale
         )
         healthMap[provider] = updated
@@ -239,7 +239,19 @@ class ProviderHealthManager {
             connected = isConnected,
             webSocketState = wsState,
             status = newStatus,
+            lastError = if (isConnected) "" else current.lastError,
+            errorCount = if (isConnected) 0 else current.errorCount,
             healthy = isConnected && current.authenticated && current.firstTickReceived && !current.stale
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun clearError(provider: String) {
+        val current = healthMap[provider] ?: return
+        val updated = current.copy(
+            lastError = "",
+            errorCount = 0
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
@@ -261,7 +273,8 @@ class ProviderHealthManager {
         val updated = current.copy(
             subscriptionState = STATE_SUBSCRIBED,
             activeSubscriptionCount = activeCount,
-            status = newStatus
+            status = newStatus,
+            lastError = ""
         )
         healthMap[provider] = updated
         _providerHealthFlow.value = HashMap(healthMap)
@@ -293,6 +306,7 @@ class ProviderHealthManager {
             latency = if (latencyMs > 0) latencyMs else current.latency,
             stale = false,
             errorCount = 0,
+            lastError = "",
             status = STATE_LIVE,
             healthy = true
         )

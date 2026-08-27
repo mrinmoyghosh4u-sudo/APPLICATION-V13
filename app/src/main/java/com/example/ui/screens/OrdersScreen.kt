@@ -234,7 +234,7 @@ fun OrdersScreen(
                 if (!isBrokerConnected) {
                     GoldCard(
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        borderColor = LossRed.copy(alpha = 0.6f)
+                        borderColor = DarkCardBorder
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -248,21 +248,22 @@ fun OrdersScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(28.dp)
-                                        .background(LossRedBg, CircleShape),
+                                        .background(Color(0xFF1F2430), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = LossRed, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = TextGray, modifier = Modifier.size(16.dp))
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
-                                    Text("Broker Disconnected", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                                    Text("Operating in Local State. Connect Dhan for real orders.", fontSize = 9.sp, color = TextGray)
+                                    Text("NOT CONNECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextGray)
+                                    Text("Operating in Paper Trading mode.", fontSize = 9.sp, color = TextGray)
                                 }
                             }
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("Available Margin", fontSize = 8.sp, color = TextGray)
-                                Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                                val marginDisplay = if (availableMargin > 0) String.format("₹%,.2f (Paper)", availableMargin) else "-- / Not Connected"
+                                Text(marginDisplay, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
                             }
                         }
                     }

@@ -640,7 +640,7 @@ fun ProfileScreen(
 
                 // 4. m.Stock Row (Fallback #3 Market Data)
                 val mstockInfo = brokerStatuses["m.Stock"]
-                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.STANDBY
+                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
                 BrokerStatusRow(
                     name = "m.Stock",
                     subtitle = "Quaternary Market Data Feed",
@@ -1534,16 +1534,16 @@ private fun BrokerStatusRow(
 ) {
     val statusText = when (status) {
         com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Live"
-        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟢 Live"
+        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟡 Standby (Idle)"
         com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> "🟠 Re-auth Required"
         com.example.data.network.BrokerAuthStatus.OFFLINE -> "⚪ Not Connected"
-        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Connected"
+        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Configured"
         com.example.data.network.BrokerAuthStatus.ERROR -> "⚠️ Auth Error"
     }
 
     val statusColor = when (status) {
         com.example.data.network.BrokerAuthStatus.CONNECTED -> ProfitGreen
-        com.example.data.network.BrokerAuthStatus.STANDBY -> ProfitGreen
+        com.example.data.network.BrokerAuthStatus.STANDBY -> SecondaryGold
         com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> Color(0xFFFF9800)
         com.example.data.network.BrokerAuthStatus.OFFLINE -> TextGray
         com.example.data.network.BrokerAuthStatus.CONFIGURE -> TextGray

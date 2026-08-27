@@ -529,9 +529,9 @@ fun BrokerCard(
                 else -> "NONE"
             }
             DiagnosticItem("Failure Stage", failureStage)
-            if (lastError.isNotBlank()) {
-                DiagnosticItem("Last Error", lastError.take(80))
-            }
+            val isHealthyLive = failureStage == "NONE" || (hasRealTick && (health == "LIVE" || wsState == "LIVE"))
+            val displayError = if (isHealthyLive || lastError.isBlank()) "NONE" else lastError.take(80)
+            DiagnosticItem("Last Error", displayError)
         }
     }
 }
