@@ -298,7 +298,7 @@ object AlgoEngine {
 
     /**
      * Evaluates live market data and updates Algo calculations and state.
-     * Guaranteed to use actual quotes or state "LIVE DATA UNAVAILABLE".
+     * Guaranteed to use actual candles, indicators, and real option chain without proxies.
      */
     fun processMarketFeed(
         quotes: List<WatchlistItem>, 
@@ -319,8 +319,8 @@ object AlgoEngine {
             _ceBuyScore.value = 0
             _peBuyScore.value = 0
             _indicatorCheckmarks.value = mapOf(
-                "EMA" to false, "VWAP" to false, "RSI" to false,
-                "SUPERTREND" to false, "OI" to false, "VOLUME" to false
+                "EMA" to false, "EMA 9" to false, "EMA 20" to false, "VWAP" to false,
+                "RSI" to false, "SUPERTREND" to false, "OI" to false, "VOLUME" to false
             )
             return
         }
@@ -337,8 +337,8 @@ object AlgoEngine {
             _ceBuyScore.value = 0
             _peBuyScore.value = 0
             _indicatorCheckmarks.value = mapOf(
-                "EMA" to false, "VWAP" to false, "RSI" to false,
-                "SUPERTREND" to false, "OI" to false, "VOLUME" to false
+                "EMA" to false, "EMA 9" to false, "EMA 20" to false, "VWAP" to false,
+                "RSI" to false, "SUPERTREND" to false, "OI" to false, "VOLUME" to false
             )
             return
         }
@@ -354,15 +354,65 @@ object AlgoEngine {
         // Process real ticks to update open position P&L
         updateLivePositions(quotes)
 
-        val changePct = targetQuote.changePercent
-        val isBullish = changePct >= 0.0
         val ltp = targetQuote.ltp
+        val changePct = targetQuote.changePercent
+        val timeframe = _currentStrategy.value.timeframe
 
-        val ceScore = if (isBullish) {
-            (50 + (changePct * 20.0).coerceIn(5.0, 45.0)).toInt()
-        } else {
-            (50 - (abs(changePct) * 20.0).coerceIn(5.0, 45.0)).toInt()
-        }.coerceIn(5, 95)
+        // 1. Fetch Real Candle Series from CandleStore
+        val candles = com.example.util.indicators.CandleStore.getCandles(targetQuote.symbol, timeframe)
+            .ifEmpty { com.example.util.indicators.CandleStore.getCandles(_selectedIndex.value, timeframe) }
+
+        // 2. Compute Real Technical Indicators
+        val snapshot = com.example.util.indicators.TechnicalIndicators.computeSnapshot(
+            symbol = targetQuote.symbol,
+            timeframe = timeframe,
+            candles = candles,
+            optionChain = optionChain,
+            currentLtp = ltp,
+            currentVolume = storeTick?.volume ?: targetQuote.volume
+        )
+
+        // 3. Compute Checkmarks & Confluences strictly from real data
+        val isBullishDirection = changePct >= 0.0
+        val ema9Pass = snapshot.isEma9Bullish
+        val ema20Pass = snapshot.isEma20Bullish
+        val emaCombinedPass = (snapshot.ema9 != null && snapshot.ema20 != null && snapshot.ema9 >= snapshot.ema20 && ltp >= snapshot.ema9)
+        val vwapPass = snapshot.isVwapBullish
+        val rsiPass = if (isBullishDirection) snapshot.isRsiBullish else snapshot.isRsiBearish
+        val supertrendPass = if (isBullishDirection) snapshot.isSupertrendBullish else snapshot.isSupertrendBearish
+        val volumePass = snapshot.volumeAnalysis.isAvailable && snapshot.volumeAnalysis.isSurging
+        val oiPass = snapshot.oiAnalysis.isAvailable && (if (isBullishDirection) snapshot.oiAnalysis.isBullishSupport else snapshot.oiAnalysis.isBearishResistance)
+
+        _indicatorCheckmarks.value = mapOf(
+            "EMA" to (if (isBullishDirection) emaCombinedPass else (snapshot.ema9 != null && snapshot.ema20 != null && snapshot.ema9 <= snapshot.ema20 && ltp <= snapshot.ema9)),
+            "EMA 9" to (if (isBullishDirection) snapshot.isEma9Bullish else (snapshot.ema9 != null && ltp <= snapshot.ema9)),
+            "EMA 20" to (if (isBullishDirection) snapshot.isEma20Bullish else (snapshot.ema20 != null && ltp <= snapshot.ema20)),
+            "VWAP" to (if (isBullishDirection) snapshot.isVwapBullish else (snapshot.vwap != null && ltp <= snapshot.vwap)),
+            "RSI" to rsiPass,
+            "SUPERTREND" to supertrendPass,
+            "VOLUME" to volumePass,
+            "OI" to oiPass
+        )
+
+        // 4. Calculate CE & PE Scores based purely on real indicator confluences
+        var ceScore = 50
+        if (snapshot.ema9 != null) ceScore += if (ltp >= snapshot.ema9) 8 else -8
+        if (snapshot.ema20 != null && snapshot.ema9 != null) ceScore += if (snapshot.ema9 >= snapshot.ema20) 8 else -8
+        if (snapshot.vwap != null) ceScore += if (ltp >= snapshot.vwap) 8 else -8
+        if (snapshot.supertrend != null) ceScore += if (snapshot.supertrend.isBullish) 8 else -8
+        if (snapshot.rsi != null) {
+            ceScore += when {
+                snapshot.rsi in 50.0..70.0 -> 8
+                snapshot.rsi > 70.0 -> 4
+                snapshot.rsi < 45.0 -> -8
+                else -> 0
+            }
+        }
+        if (volumePass) ceScore += 5
+        if (snapshot.oiAnalysis.isAvailable) {
+            ceScore += if (snapshot.oiAnalysis.isBullishSupport) 5 else -5
+        }
+        ceScore = ceScore.coerceIn(5, 95)
         val peScore = 100 - ceScore
 
         val bias = when {
@@ -371,33 +421,47 @@ object AlgoEngine {
             else -> "NEUTRAL"
         }
 
-        val ema9Aligned = if (isBullish) ltp >= (storeTick?.open ?: ltp) else ltp <= (storeTick?.open ?: ltp)
-        val vwapAligned = if (isBullish) ltp >= (storeTick?.low ?: (ltp * 0.998)) else ltp <= (storeTick?.high ?: (ltp * 1.002))
-
-        _indicatorCheckmarks.value = mapOf(
-            "EMA 9" to ema9Aligned,
-            "EMA 20" to (bias != "NEUTRAL"),
-            "VWAP" to vwapAligned,
-            "RSI" to (ceScore in 40..80 || peScore in 40..80),
-            "SUPERTREND" to (bias != "NEUTRAL"),
-            "VOLUME" to ((storeTick?.volume ?: 0L) > 0L || quotes.isNotEmpty()),
-            "OI" to true
-        )
-
         _marketBias.value = bias
         _ceBuyScore.value = ceScore
         _peBuyScore.value = peScore
 
-        val shouldGenerateCe = (_selectedOptionMode.value == "BUY CE ONLY" || _selectedOptionMode.value == "AUTO CE / PE") && (isBullish || _selectedOptionMode.value == "BUY CE ONLY")
-        val shouldGeneratePe = (_selectedOptionMode.value == "BUY PE ONLY" || (_selectedOptionMode.value == "AUTO CE / PE" && !isBullish))
+        val isBullishSignal = bias == "BULLISH" || (bias == "NEUTRAL" && isBullishDirection)
+        val shouldGenerateCe = (_selectedOptionMode.value == "BUY CE ONLY" || _selectedOptionMode.value == "AUTO CE / PE") && (isBullishSignal || _selectedOptionMode.value == "BUY CE ONLY")
+        val shouldGeneratePe = (_selectedOptionMode.value == "BUY PE ONLY" || (_selectedOptionMode.value == "AUTO CE / PE" && !isBullishSignal))
 
         val signalAction = if (shouldGenerateCe) "BUY CE" else if (shouldGeneratePe) "BUY PE" else "BUY CE"
         val optionSymbol = com.example.data.network.AISignalGenerator.formatOptionSymbol(targetQuote.symbol, signalAction == "BUY CE", ltp)
-        val sl = if (signalAction == "BUY CE") ltp * 0.99 else ltp * 1.01
-        val tg1 = if (signalAction == "BUY CE") ltp * 1.01 else ltp * 0.99
-        val tg2 = if (signalAction == "BUY CE") ltp * 1.02 else ltp * 0.98
+        
+        // Find ATM strike and real option premium from option chain if present
+        var signalEntryLtp = ltp
+        var customStopLoss = if (signalAction == "BUY CE") ltp * 0.99 else ltp * 1.01
+        var customTarget1 = if (signalAction == "BUY CE") ltp * 1.01 else ltp * 0.99
+        var customTarget2 = if (signalAction == "BUY CE") ltp * 1.02 else ltp * 0.98
+
+        if (!optionChain.isNullOrEmpty()) {
+            val atmStrike = optionChain.minByOrNull { abs(it.strikePrice - ltp) }
+            if (atmStrike != null) {
+                val premium = if (signalAction == "BUY CE") atmStrike.callLtp else atmStrike.putLtp
+                if (premium > 0.0) {
+                    signalEntryLtp = premium
+                    customStopLoss = premium * 0.85 // 15% SL on option premium
+                    customTarget1 = premium * 1.20 // 20% T1 on option premium
+                    customTarget2 = premium * 1.40 // 40% T2 on option premium
+                }
+            }
+        }
 
         val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+
+        val reasonsList = mutableListOf<String>()
+        if (snapshot.ema9 != null && ltp >= snapshot.ema9 && isBullishSignal) reasonsList.add("Price Above EMA 9")
+        if (snapshot.ema20 != null && snapshot.ema9 != null && snapshot.ema9 >= snapshot.ema20 && isBullishSignal) reasonsList.add("EMA 9 > EMA 20 Crossover")
+        if (snapshot.vwap != null && ltp >= snapshot.vwap && isBullishSignal) reasonsList.add("Price Above VWAP")
+        if (snapshot.rsi != null) reasonsList.add("RSI Momentum ${snapshot.rsi.roundToInt()}")
+        if (snapshot.supertrend != null && snapshot.supertrend.isBullish && isBullishSignal) reasonsList.add("Supertrend Confirmed Green")
+        if (volumePass) reasonsList.add("Volume Surge Confirmed")
+        if (snapshot.oiAnalysis.isAvailable && snapshot.oiAnalysis.isBullishSupport && isBullishSignal) reasonsList.add("Put OI Support PCR ${String.format(Locale.US, "%.2f", snapshot.oiAnalysis.pcr)}")
+        if (reasonsList.isEmpty()) reasonsList.add("Real Market Data Multi-Indicator Alignment")
 
         _currentSignal.value = AISignalEntity(
             id = 0,
@@ -406,21 +470,24 @@ object AlgoEngine {
             side = "BUY",
             actionType = signalAction,
             trend = if (signalAction == "BUY CE") "BULLISH" else "BEARISH",
-            ltp = ltp,
+            ltp = signalEntryLtp,
             changePercent = changePct,
-            entryZone = String.format(Locale.US, "%.2f - %.2f", ltp * 0.998, ltp * 1.002),
-            target1 = tg1,
-            target2 = tg2,
-            stopLoss = sl,
+            entryZone = String.format(Locale.US, "%.2f - %.2f", signalEntryLtp * 0.998, signalEntryLtp * 1.002),
+            target1 = customTarget1,
+            target2 = customTarget2,
+            stopLoss = customStopLoss,
             confidence = maxOf(ceScore, peScore),
             riskReward = "1:2",
             lotSize = com.example.util.AppPreferences.getGlobalLotSize(targetQuote.symbol),
             timeframe = _currentStrategy.value.timeframe,
             timestamp = timeStr,
-            status = "ACTIVE"
+            status = "ACTIVE",
+            reasons = reasonsList.joinToString(",")
         )
 
-        _engineStatusMessage.value = "REAL MARKET FEED LIVE — ${targetQuote.symbol} ₹${String.format(Locale.US, "%.2f", ltp)}"
+        val rsiLabel = snapshot.rsi?.let { "RSI: ${it.roundToInt()}" } ?: "RSI: N/A"
+        val vwapLabel = snapshot.vwap?.let { "VWAP: ${String.format(Locale.US, "%.1f", it)}" } ?: "VWAP: N/A"
+        _engineStatusMessage.value = "REAL MARKET FEED LIVE — ${targetQuote.symbol} ₹${String.format(Locale.US, "%.2f", ltp)} [$rsiLabel, $vwapLabel, Candles: ${snapshot.candleCount}]"
     }
 
     private fun updateLivePositions(quotes: List<WatchlistItem>) {

@@ -73,6 +73,14 @@ object UpstoxSymbolMapper {
             clean == "BANKEX" || clean == "BSE BANKEX" -> return KEY_BANKEX
             clean == "CRUDEOIL" -> return "MCX_FO|CRUDEOIL"
             clean == "CRUDEOIL M" || clean == "CRUDEOILM" -> return "MCX_FO|CRUDEOILM"
+            clean == "GOLD" -> return "MCX_FO|GOLD"
+            clean == "GOLD M" || clean == "GOLDM" -> return "MCX_FO|GOLDM"
+            clean == "SILVER" -> return "MCX_FO|SILVER"
+            clean == "SILVER M" || clean == "SILVERM" -> return "MCX_FO|SILVERM"
+            clean == "COPPER" -> return "MCX_FO|COPPER"
+            clean == "COPPER M" || clean == "COPPERM" -> return "MCX_FO|COPPERM"
+            clean == "NATURALGAS" || clean == "NATGAS" -> return "MCX_FO|NATURALGAS"
+            clean == "NATURALGAS M" || clean == "NATURALGASM" -> return "MCX_FO|NATURALGASM"
         }
 
         // Check Stock ISIN map

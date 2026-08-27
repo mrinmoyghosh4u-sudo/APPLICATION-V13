@@ -462,6 +462,14 @@ object MarketDataStore {
         // Construct unified state map for UI collection
         _marketData.value = HashMap(symbolIndex)
 
+        // Feed real ticks into CandleStore across standard timeframes
+        if (source != "REFERENCE" && ltp > 0.0) {
+            val effVol = if (volume > 0L) volume else (existing?.volume ?: 0L)
+            com.example.util.indicators.CandleStore.onLiveTick(symbol, ltp, effVol, validatedExchangeTs, "1 MIN")
+            com.example.util.indicators.CandleStore.onLiveTick(symbol, ltp, effVol, validatedExchangeTs, "5 MIN")
+            com.example.util.indicators.CandleStore.onLiveTick(symbol, ltp, effVol, validatedExchangeTs, "15 MIN")
+        }
+
         // Immediately update authoritative provider status
         recalculateAuthoritativeProviderState(receivedTimestamp, 15000L)
     }
