@@ -606,7 +606,7 @@ fun OptionChainTabContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "OPTION CHAIN UNAVAILABLE",
+                        "REAL OPTION CHAIN UNAVAILABLE",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFF5252) // Red color for unavailable

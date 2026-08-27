@@ -16,7 +16,7 @@ class UpstoxAuthManager(
         private const val TAG = "UpstoxAuthManager"
     }
 
-    private val _authStatus = MutableStateFlow(BrokerAuthStatus.OFFLINE)
+    private val _authStatus = MutableStateFlow<BrokerAuthStatus>(BrokerAuthStatus.DISCONNECTED)
     val authStatus: StateFlow<BrokerAuthStatus> = _authStatus.asStateFlow()
     private val exchangeMutex = kotlinx.coroutines.sync.Mutex()
 
@@ -213,7 +213,7 @@ class UpstoxAuthManager(
         val token = sessionManager.upstoxAccessToken
         if (token.isNullOrBlank()) {
             sessionManager.isUpstoxConnected = false
-            _authStatus.value = if (sessionManager.upstoxApiKey.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+            _authStatus.value = if (sessionManager.upstoxApiKey.isNotBlank()) BrokerAuthStatus.ERROR else BrokerAuthStatus.NOT_CONFIGURED
             return@withContext false
         }
 
@@ -224,7 +224,7 @@ class UpstoxAuthManager(
         if (isExpired) {
             Log.w(TAG, "Upstox access token expired. Re-authentication required.")
             sessionManager.isUpstoxConnected = false
-            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+            _authStatus.value = BrokerAuthStatus.ERROR
             return@withContext false
         }
 
@@ -241,7 +241,7 @@ class UpstoxAuthManager(
                 sessionManager.isUpstoxConnected = false
                 val code = profileRes.code()
                 if (code == 401 || code == 403) {
-                    _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                    _authStatus.value = BrokerAuthStatus.ERROR
                 } else {
                     _authStatus.value = BrokerAuthStatus.ERROR
                 }
@@ -256,6 +256,6 @@ class UpstoxAuthManager(
 
     fun clearSession() {
         sessionManager.clearUpstoxSession()
-        _authStatus.value = BrokerAuthStatus.OFFLINE
+        _authStatus.value = BrokerAuthStatus.DISCONNECTED
     }
 }

@@ -344,8 +344,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (brokerType) {
                 BrokerType.UPSTOX -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Upstox..."
+                    val upstoxStatus = brokerManager.brokerAuthManager.statuses.value["Upstox"]?.status
                     val isReady = brokerManager.upstoxMarketDataService.isConnectionLive() ||
-                            brokerManager.brokerAuthManager.statuses.value["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            (upstoxStatus != null && upstoxStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && upstoxStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && upstoxStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasUpstoxSession()
 
                     if (!isReady) {
@@ -367,8 +368,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 BrokerType.FYERS -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Fyers..."
+                    val fyersStatus = brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status
                     val isReady = brokerManager.fyersMarketDataService.isConnectionLive() ||
-                            brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            (fyersStatus != null && fyersStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && fyersStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && fyersStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasFyersSession()
 
                     if (!isReady) {
@@ -390,8 +392,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 BrokerType.ANGEL_ONE -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Angel One..."
+                    val angelStatus = brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status
                     val isReady = brokerManager.angelMarketDataService.isConnectionLive() ||
-                            brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            (angelStatus != null && angelStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && angelStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && angelStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasAngelSession()
 
                     if (!isReady) {
@@ -413,8 +416,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 BrokerType.MSTOCK -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to m.Stock..."
+                    val mstockStatus = brokerManager.brokerAuthManager.statuses.value["m.Stock"]?.status
                     val isReady = brokerManager.mStockMarketDataService.isConnectionLive() ||
-                            brokerManager.brokerAuthManager.statuses.value["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                            (mstockStatus != null && mstockStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && mstockStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && mstockStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasMStockSession()
 
                     if (!isReady) {
@@ -1143,6 +1147,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (dhanFingerprint == currentlyProcessingDhanFingerprint) {
             android.util.Log.i("DhanAuth", "[DHAN_IN_FLIGHT_IGNORED] Callback with fingerprint $dhanFingerprint is already in-flight. Ignoring duplicate intent.")
             return
+        }
+
+        // 2.5 State validation and atomic consumption
+        if (pendingSession != null && pendingSession.provider.equals("DHAN", ignoreCase = true)) {
+            val trimExpected = pendingSession.state.trim()
+            if (trimExpected.isNotBlank() && trimExpected != callbackState) {
+                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback for state = $callbackState - expected state = $trimExpected")
+                _isAuthInProgress.value = false
+                return
+            }
+            if (pendingSession.consumed) {
+                android.util.Log.w("DhanAuth", "[DHAN_OAUTH] Dropping duplicate callback for state = $callbackState - already marked as consumed")
+                _isAuthInProgress.value = false
+                return
+            }
+            // Mark as consumed immediately
+            sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
         }
 
         // 3. Pending Session Expiry Check

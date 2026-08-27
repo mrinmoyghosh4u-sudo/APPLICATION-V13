@@ -13,7 +13,7 @@ class FyersAuthManager(
 ) {
     private val TAG = "FyersAuthManager"
 
-    private val _authStatus = MutableStateFlow(BrokerAuthStatus.OFFLINE)
+    private val _authStatus = MutableStateFlow<BrokerAuthStatus>(BrokerAuthStatus.DISCONNECTED)
     val authStatus: StateFlow<BrokerAuthStatus> = _authStatus
     private val exchangeMutex = kotlinx.coroutines.sync.Mutex()
 
@@ -225,14 +225,14 @@ class FyersAuthManager(
 
     fun clearSession() {
         sessionManager.clearFyersSession()
-        _authStatus.value = BrokerAuthStatus.OFFLINE
+        _authStatus.value = BrokerAuthStatus.DISCONNECTED
     }
 
     suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
         val token = sessionManager.fyersAccessToken
         val appId = sessionManager.fyersAppId
         if (token.isNullOrBlank() || appId.isBlank()) {
-            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.ERROR else BrokerAuthStatus.NOT_CONFIGURED
             return@withContext false
         }
 
@@ -240,7 +240,7 @@ class FyersAuthManager(
         val timestamp = sessionManager.fyersTokenTimestamp
         val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
         if (isExpired) {
-            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+            _authStatus.value = BrokerAuthStatus.ERROR
             return@withContext false
         }
 
@@ -253,12 +253,12 @@ class FyersAuthManager(
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 true
             } else {
-                _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                _authStatus.value = BrokerAuthStatus.ERROR
                 false
             }
         } catch (e: Exception) {
             Log.e(TAG, "Fyers validateSession profile call failed: ${e.message}")
-            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+            _authStatus.value = BrokerAuthStatus.ERROR
             false
         }
     }

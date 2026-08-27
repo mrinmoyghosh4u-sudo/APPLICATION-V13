@@ -94,10 +94,10 @@ fun ProfileScreen(
 
     // Stat calculations strictly from Dhan / Broker Orders
     val isDhanConnected = userProfile.isDhanConnected || brokerStatuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-    val isUpstoxConnected = brokerStatuses["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-    val isFyersConnected = brokerStatuses["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-    val isAngelConnected = userProfile.isAngelConnected || brokerStatuses["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-    val isMStockConnected = brokerStatuses["m.Stock"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isUpstoxConnected = brokerStatuses["Upstox"]?.let { it.status != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && it.status != com.example.data.network.BrokerAuthStatus.DISCONNECTED && it.status != com.example.data.network.BrokerAuthStatus.ERROR } ?: false
+    val isFyersConnected = brokerStatuses["Fyers"]?.let { it.status != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && it.status != com.example.data.network.BrokerAuthStatus.DISCONNECTED && it.status != com.example.data.network.BrokerAuthStatus.ERROR } ?: false
+    val isAngelConnected = userProfile.isAngelConnected || (brokerStatuses["Angel One"]?.let { it.status != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && it.status != com.example.data.network.BrokerAuthStatus.DISCONNECTED && it.status != com.example.data.network.BrokerAuthStatus.ERROR } ?: false)
+    val isMStockConnected = brokerStatuses["m.Stock"]?.let { it.status != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && it.status != com.example.data.network.BrokerAuthStatus.DISCONNECTED && it.status != com.example.data.network.BrokerAuthStatus.ERROR } ?: false
     val isAnyBrokerConnected = isDhanConnected || isUpstoxConnected || isFyersConnected || isAngelConnected || isMStockConnected || (userProfile.connectedBroker.isNotBlank() && (userProfile.isDhanConnected || userProfile.isAngelConnected))
 
     val completedOrders = remember(orders) {
@@ -591,7 +591,7 @@ fun ProfileScreen(
 
                 // 1. Upstox Row (Primary Market Data)
                 val upstoxInfo = brokerStatuses["Upstox"]
-                val upstoxStatus = upstoxInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                val upstoxStatus = upstoxInfo?.status ?: com.example.data.network.BrokerAuthStatus.DISCONNECTED
                 BrokerStatusRow(
                     name = "Upstox",
                     subtitle = "Primary Market Data Feed (API V2/V3)",
@@ -608,7 +608,7 @@ fun ProfileScreen(
 
                 // 2. Fyers Row (Fallback #1 Market Data)
                 val fyersInfo = brokerStatuses["Fyers"]
-                val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                val fyersStatus = fyersInfo?.status ?: com.example.data.network.BrokerAuthStatus.DISCONNECTED
                 BrokerStatusRow(
                     name = "Fyers",
                     subtitle = "Secondary Market Data Feed (API V3)",
@@ -624,7 +624,7 @@ fun ProfileScreen(
 
                 // 3. Angel One Row (Fallback #2 Market Data)
                 val angelInfo = brokerStatuses["Angel One"]
-                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
+                val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.DISCONNECTED
                 BrokerStatusRow(
                     name = "Angel One",
                     subtitle = "Tertiary Market Data Feed (SmartAPI)",
@@ -640,7 +640,7 @@ fun ProfileScreen(
 
                 // 4. m.Stock Row (Fallback #3 Market Data)
                 val mstockInfo = brokerStatuses["m.Stock"]
-                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.OFFLINE
+                val mstockStatus = mstockInfo?.status ?: com.example.data.network.BrokerAuthStatus.DISCONNECTED
                 BrokerStatusRow(
                     name = "m.Stock",
                     subtitle = "Quaternary Market Data Feed",
@@ -657,7 +657,7 @@ fun ProfileScreen(
 
                 // 5. Dhan Row (Order Execution Only)
                 val dhanInfo = brokerStatuses["Dhan"]
-                val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.OFFLINE
+                val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) com.example.data.network.BrokerAuthStatus.CONNECTED else com.example.data.network.BrokerAuthStatus.DISCONNECTED
                 BrokerStatusRow(
                     name = "Dhan",
                     subtitle = "Order Execution Only (Zero Market Data)",
@@ -1533,20 +1533,28 @@ private fun BrokerStatusRow(
     onRemoveAccount: (() -> Unit)? = null
 ) {
     val statusText = when (status) {
-        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Live"
-        com.example.data.network.BrokerAuthStatus.STANDBY -> "🟡 Standby (Idle)"
-        com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> "🟠 Re-auth Required"
-        com.example.data.network.BrokerAuthStatus.OFFLINE -> "⚪ Not Connected"
-        com.example.data.network.BrokerAuthStatus.CONFIGURE -> "⚪ Not Configured"
+        com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED -> "⚪ Not Configured"
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATING -> "🟡 Authenticating..."
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATED -> "🟢 Authenticated"
+        com.example.data.network.BrokerAuthStatus.CONNECTING -> "🟡 Connecting..."
+        com.example.data.network.BrokerAuthStatus.CONNECTED -> "🟢 Connected"
+        com.example.data.network.BrokerAuthStatus.SUBSCRIBING -> "🟡 Subscribing..."
+        com.example.data.network.BrokerAuthStatus.LIVE -> "🟢 Live Ticks Active"
+        com.example.data.network.BrokerAuthStatus.STALE -> "🔴 Stale Feed (Unhealthy)"
+        com.example.data.network.BrokerAuthStatus.DISCONNECTED -> "⚪ Disconnected"
         com.example.data.network.BrokerAuthStatus.ERROR -> "⚠️ Auth Error"
     }
 
     val statusColor = when (status) {
+        com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED -> TextGray
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATING -> SecondaryGold
+        com.example.data.network.BrokerAuthStatus.AUTHENTICATED -> ProfitGreen
+        com.example.data.network.BrokerAuthStatus.CONNECTING -> SecondaryGold
         com.example.data.network.BrokerAuthStatus.CONNECTED -> ProfitGreen
-        com.example.data.network.BrokerAuthStatus.STANDBY -> SecondaryGold
-        com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED -> Color(0xFFFF9800)
-        com.example.data.network.BrokerAuthStatus.OFFLINE -> TextGray
-        com.example.data.network.BrokerAuthStatus.CONFIGURE -> TextGray
+        com.example.data.network.BrokerAuthStatus.SUBSCRIBING -> SecondaryGold
+        com.example.data.network.BrokerAuthStatus.LIVE -> ProfitGreen
+        com.example.data.network.BrokerAuthStatus.STALE -> LossRed
+        com.example.data.network.BrokerAuthStatus.DISCONNECTED -> TextGray
         com.example.data.network.BrokerAuthStatus.ERROR -> LossRed
     }
 
@@ -1584,60 +1592,58 @@ private fun BrokerStatusRow(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            when (status) {
-                com.example.data.network.BrokerAuthStatus.CONNECTED,
-                com.example.data.network.BrokerAuthStatus.STANDBY -> {
-                    OutlinedButton(
-                        onClick = onConnect,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, ProfitGreen),
-                        modifier = Modifier.height(30.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    OutlinedButton(
-                        onClick = onDisconnect,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, LossRed),
-                        modifier = Modifier.height(30.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
-                    }
+            val isLiveOrConnected = status == com.example.data.network.BrokerAuthStatus.CONNECTED ||
+                    status == com.example.data.network.BrokerAuthStatus.LIVE ||
+                    status == com.example.data.network.BrokerAuthStatus.STALE ||
+                    status == com.example.data.network.BrokerAuthStatus.AUTHENTICATED
+
+            if (isLiveOrConnected) {
+                OutlinedButton(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, ProfitGreen),
+                    modifier = Modifier.height(30.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text("SWITCH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
                 }
-                com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,
-                com.example.data.network.BrokerAuthStatus.ERROR -> {
-                    OutlinedButton(
-                        onClick = onConnect,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, PrimaryGold),
-                        modifier = Modifier.height(30.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text("RE-AUTH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-                    }
+                Spacer(modifier = Modifier.width(4.dp))
+                OutlinedButton(
+                    onClick = onDisconnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, LossRed),
+                    modifier = Modifier.height(30.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text("DISCONNECT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LossRed)
                 }
-                com.example.data.network.BrokerAuthStatus.CONFIGURE,
-                com.example.data.network.BrokerAuthStatus.OFFLINE -> {
-                    OutlinedButton(
-                        onClick = onConnect,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, PrimaryGold),
-                        modifier = Modifier.height(30.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text("CONFIGURE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-                    }
+            } else if (status == com.example.data.network.BrokerAuthStatus.ERROR) {
+                OutlinedButton(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, PrimaryGold),
+                    modifier = Modifier.height(30.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text("RE-AUTH", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, PrimaryGold),
+                    modifier = Modifier.height(30.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text("CONFIGURE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
                 }
             }
 
-            if (status == com.example.data.network.BrokerAuthStatus.CONNECTED || status == com.example.data.network.BrokerAuthStatus.STANDBY) {
+            if (isLiveOrConnected) {
                 Spacer(modifier = Modifier.width(2.dp))
                 IconButton(
                     onClick = { onRemoveAccount?.invoke() },

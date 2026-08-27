@@ -15,12 +15,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class BrokerAuthStatus {
-    CONNECTED,                // Authenticated + active in its designated role
-    STANDBY,                  // Authenticated & ready as backup/fallback
-    AUTHENTICATION_REQUIRED,  // Token/session expired and cannot be renewed automatically
-    OFFLINE,                  // Provider unreachable or explicitly disconnected
-    CONFIGURE,                // Credentials not yet configured
-    ERROR                     // Authentication or network error
+    NOT_CONFIGURED,
+    AUTHENTICATING,
+    AUTHENTICATED,
+    CONNECTING,
+    CONNECTED,
+    SUBSCRIBING,
+    LIVE,
+    STALE,
+    DISCONNECTED,
+    ERROR
 }
 
 data class BrokerConnectionState(
@@ -62,14 +66,85 @@ class BrokerAuthManager(
 
     private val _statuses = MutableStateFlow<Map<String, BrokerConnectionState>>(
         mapOf(
-            "Dhan" to BrokerConnectionState("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE),
-            "Upstox" to BrokerConnectionState("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE),
-            "Fyers" to BrokerConnectionState("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE),
-            "Angel One" to BrokerConnectionState("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE),
-            "m.Stock" to BrokerConnectionState("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.CONFIGURE)
+            "Dhan" to BrokerConnectionState("Dhan", "Primary Order Execution", BrokerAuthStatus.NOT_CONFIGURED),
+            "Upstox" to BrokerConnectionState("Upstox", "Primary Market Data", BrokerAuthStatus.NOT_CONFIGURED),
+            "Fyers" to BrokerConnectionState("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.NOT_CONFIGURED),
+            "Angel One" to BrokerConnectionState("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.NOT_CONFIGURED),
+            "m.Stock" to BrokerConnectionState("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.NOT_CONFIGURED)
         )
     )
     val statuses: StateFlow<Map<String, BrokerConnectionState>> = _statuses.asStateFlow()
+
+    init {
+        scope.launch {
+            com.example.data.model.MarketDataStore.upstoxHealth.collect { health ->
+                val current = _statuses.value["Upstox"] ?: return@collect
+                val mappedStatus = when (health) {
+                    "LIVE" -> BrokerAuthStatus.LIVE
+                    "STALE" -> BrokerAuthStatus.STALE
+                    "OFFLINE" -> BrokerAuthStatus.DISCONNECTED
+                    "ERROR" -> BrokerAuthStatus.ERROR
+                    "CONNECTED" -> BrokerAuthStatus.CONNECTED
+                    "STANDBY" -> BrokerAuthStatus.CONNECTED
+                    else -> current.status
+                }
+                if (current.status != mappedStatus) {
+                    updateStatus("Upstox", "Primary Market Data", mappedStatus, "Health state updated to $health")
+                }
+            }
+        }
+        scope.launch {
+            com.example.data.model.MarketDataStore.fyersHealth.collect { health ->
+                val current = _statuses.value["Fyers"] ?: return@collect
+                val mappedStatus = when (health) {
+                    "LIVE" -> BrokerAuthStatus.LIVE
+                    "STALE" -> BrokerAuthStatus.STALE
+                    "OFFLINE" -> BrokerAuthStatus.DISCONNECTED
+                    "ERROR" -> BrokerAuthStatus.ERROR
+                    "CONNECTED" -> BrokerAuthStatus.CONNECTED
+                    "STANDBY" -> BrokerAuthStatus.CONNECTED
+                    else -> current.status
+                }
+                if (current.status != mappedStatus) {
+                    updateStatus("Fyers", "Fallback #1 Market Data", mappedStatus, "Health state updated to $health")
+                }
+            }
+        }
+        scope.launch {
+            com.example.data.model.MarketDataStore.angelOneHealth.collect { health ->
+                val current = _statuses.value["Angel One"] ?: return@collect
+                val mappedStatus = when (health) {
+                    "LIVE" -> BrokerAuthStatus.LIVE
+                    "STALE" -> BrokerAuthStatus.STALE
+                    "OFFLINE" -> BrokerAuthStatus.DISCONNECTED
+                    "ERROR" -> BrokerAuthStatus.ERROR
+                    "CONNECTED" -> BrokerAuthStatus.CONNECTED
+                    "STANDBY" -> BrokerAuthStatus.CONNECTED
+                    else -> current.status
+                }
+                if (current.status != mappedStatus) {
+                    updateStatus("Angel One", "Fallback #2 Market Data", mappedStatus, "Health state updated to $health")
+                }
+            }
+        }
+        scope.launch {
+            com.example.data.model.MarketDataStore.mStockHealth.collect { health ->
+                val current = _statuses.value["m.Stock"] ?: return@collect
+                val mappedStatus = when (health) {
+                    "LIVE" -> BrokerAuthStatus.LIVE
+                    "STALE" -> BrokerAuthStatus.STALE
+                    "OFFLINE" -> BrokerAuthStatus.DISCONNECTED
+                    "ERROR" -> BrokerAuthStatus.ERROR
+                    "CONNECTED" -> BrokerAuthStatus.CONNECTED
+                    "STANDBY" -> BrokerAuthStatus.CONNECTED
+                    else -> current.status
+                }
+                if (current.status != mappedStatus) {
+                    updateStatus("m.Stock", "Fallback #3 Market Data", mappedStatus, "Health state updated to $health")
+                }
+            }
+        }
+    }
 
     private val _isInitializing = MutableStateFlow(false)
     val isInitializing: StateFlow<Boolean> = _isInitializing.asStateFlow()
@@ -114,7 +189,7 @@ class BrokerAuthManager(
     private suspend fun validateDhanSession() {
         val hasDhanSession = sessionManager.hasValidSession() && !sessionManager.dhanAccessToken.isNullOrBlank()
         if (!hasDhanSession) {
-            updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.NOT_CONFIGURED, "Credentials not configured")
             return
         }
 
@@ -128,7 +203,7 @@ class BrokerAuthManager(
                 val err = profileRes.exceptionOrNull()?.message ?: "Unknown error"
                 if (isAuthExpiredError(err)) {
                     Log.w(TAG, "Dhan token expired. Re-authentication required.")
-                    updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session expired. Re-authentication required.")
+                    updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.ERROR, "Session expired. Re-authentication required.")
                 } else {
                     Log.w(TAG, "Dhan network warning: $err")
                     updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONNECTED, "Connected (Network Notice)")
@@ -183,7 +258,7 @@ class BrokerAuthManager(
         brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_UPSTOX, isConfigured || hasSession)
 
         if (!isConfigured && !hasSession) {
-            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Credentials not configured")
             return
         }
 
@@ -198,7 +273,7 @@ class BrokerAuthManager(
 
         if (isExpired) {
             brokerManager.healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, false, "TOKEN_EXPIRED")
-            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Session Expired. Login Required.")
             return
         }
 
@@ -218,7 +293,7 @@ class BrokerAuthManager(
                     if (code == 401 || code == 403) {
                         sessionManager.clearUpstoxSession()
                         brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "TOKEN_INVALID", "TOKEN_INVALID: $msg")
-                        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Session Expired. Login Required.")
                     } else {
                         brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, "AUTH_FAILED", "AUTH_FAILED: $msg")
                         updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Profile Validation Failed: $msg")
@@ -241,7 +316,7 @@ class BrokerAuthManager(
             }
         }
 
-        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Authentication Required. Tap LOGIN VIA BROWSER.")
+        updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.ERROR, "Authentication Required. Tap LOGIN VIA BROWSER.")
     }
 
     suspend fun exchangeUpstoxCode(code: String): Result<String> = withContext(Dispatchers.IO) {
@@ -272,7 +347,7 @@ class BrokerAuthManager(
         brokerManager.healthManager.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, isConfigured || hasSession)
 
         if (!isConfigured && !hasSession) {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Credentials not configured")
             return
         }
 
@@ -305,7 +380,7 @@ class BrokerAuthManager(
                     if (code == 401 || code == 403 || pErr.contains("invalid", ignoreCase = true) || pErr.contains("expire", ignoreCase = true)) {
                         sessionManager.clearFyersSession()
                         brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, "TOKEN_INVALID", "TOKEN_INVALID: $pErr")
-                        updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                        updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Session Expired. Login Required.")
                     } else {
                         brokerManager.healthManager.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, "AUTH_FAILED", "AUTH_FAILED: $pErr")
                         updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Profile Validation Failed: $pErr")
@@ -329,7 +404,7 @@ class BrokerAuthManager(
         }
         
         if (hasRefreshToken) {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
+            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Restoring Session...")
             val result = reconnectBroker("Fyers")
             if (result.isSuccess) {
                 try {
@@ -355,9 +430,9 @@ class BrokerAuthManager(
                     )
                 }
             }
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Session Expired. Login Required.")
         } else {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Session Expired. Login Required.")
         }
     }
 
@@ -371,7 +446,7 @@ class BrokerAuthManager(
         val hasCredentials = sessionManager.angelClientId.isNotBlank() && sessionManager.angelMpin.isNotBlank() && sessionManager.angelTotpSecret.isNotBlank()
 
         if (!hasAngelToken && !hasRefreshToken && !hasCredentials) {
-            updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Credentials not configured")
             return
         }
 
@@ -412,7 +487,7 @@ class BrokerAuthManager(
         }
 
         Log.w(TAG, "Angel One session expired and auto-renew unavailable. Re-auth required.")
-        updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session expired. MPIN/TOTP login required.")
+        updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.ERROR, "Session expired. MPIN/TOTP login required.")
     }
 
     suspend fun connectAngelOne(
@@ -515,7 +590,7 @@ class BrokerAuthManager(
 
     private suspend fun validateMStockSession() {
         if (!sessionManager.isMStockConfigured()) {
-            updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Credentials not configured")
             return
         }
 
@@ -538,7 +613,7 @@ class BrokerAuthManager(
                 updateStatus(
                     "m.Stock",
                     "Fallback #3 Market Data",
-                    BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+                    BrokerAuthStatus.ERROR,
                     "Auto-login failed: ${autoAuthRes.exceptionOrNull()?.message ?: "Re-authentication required"}"
                 )
                 mStockMarketDataService.connect()
@@ -685,34 +760,34 @@ class BrokerAuthManager(
     }
 
     fun getConnectionStatus(brokerName: String): BrokerAuthStatus {
-        return _statuses.value[brokerName]?.status ?: BrokerAuthStatus.OFFLINE
+        return _statuses.value[brokerName]?.status ?: BrokerAuthStatus.DISCONNECTED
     }
 
     fun disconnectBroker(brokerName: String) {
         when (brokerName) {
             "Dhan" -> {
                 sessionManager.clearDhanSession()
-                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.OFFLINE, "Disconnected")
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Upstox" -> {
                 brokerManager.upstoxMarketDataService.disconnect()
                 sessionManager.clearUpstoxSession()
-                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.OFFLINE, "Disconnected")
+                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Fyers" -> {
                 brokerManager.fyersMarketDataService.disconnect()
                 sessionManager.clearFyersSession()
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.OFFLINE, "Disconnected")
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Angel One" -> {
                 angelMarketDataService.disconnect()
                 sessionManager.clearAngelSessionTokens()
-                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
+                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected • Credentials Saved")
             }
             "m.Stock" -> {
                 mStockMarketDataService.disconnect()
                 sessionManager.clearMStockSessionTokens()
-                updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.OFFLINE, "Disconnected • Credentials Saved")
+                updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected • Credentials Saved")
             }
         }
     }
@@ -721,29 +796,29 @@ class BrokerAuthManager(
         when (brokerName) {
             "Dhan" -> {
                 sessionManager.clearDhanCredentials()
-                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.NOT_CONFIGURED, "Account Removed")
             }
             "Upstox" -> {
                 brokerManager.upstoxMarketDataService.disconnect()
                 sessionManager.clearUpstoxCredentials()
-                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Account Removed")
             }
             "Fyers" -> {
                 brokerManager.fyersMarketDataService.disconnect()
                 sessionManager.clearFyersSession()
                 sessionManager.fyersAppId = ""
                 sessionManager.fyersSecretId = ""
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Account Removed")
             }
             "Angel One" -> {
                 angelMarketDataService.disconnect()
                 sessionManager.clearAngelOneCredentials()
-                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Account Removed")
             }
             "m.Stock" -> {
                 mStockMarketDataService.disconnect()
                 sessionManager.clearMStockCredentials()
-                updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.CONFIGURE, "Account Removed")
+                updateStatus("m.Stock", "Fallback #3 Market Data", BrokerAuthStatus.NOT_CONFIGURED, "Account Removed")
             }
         }
     }
@@ -828,11 +903,7 @@ class BrokerAuthManager(
         val msg = error.message ?: "Authentication error"
         Log.e(TAG, "Auth error for $brokerName: $msg", error)
 
-        val status = if (isAuthExpiredError(msg)) {
-            BrokerAuthStatus.AUTHENTICATION_REQUIRED
-        } else {
-            BrokerAuthStatus.ERROR
-        }
+        val status = BrokerAuthStatus.ERROR
 
         val role = getBrokerRole(brokerName)
         updateStatus(brokerName, role, status, msg)

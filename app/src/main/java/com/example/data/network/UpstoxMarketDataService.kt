@@ -323,11 +323,52 @@ class UpstoxMarketDataService(
                             _connectionState.value = "SUBSCRIBING"
                             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_UPSTOX)
 
-                            // Prepare initial instrument keys
+                            // Prepare initial instrument keys using UpstoxInstrumentResolver
+                            val resolver = UpstoxInstrumentResolver(InstrumentMasterService.instance)
+                            val universe = listOf(
+                                Pair("NIFTY 50", "NSE"),
+                                Pair("BANKNIFTY", "NSE"),
+                                Pair("FINNIFTY", "NSE"),
+                                Pair("MIDCPNIFTY", "NSE"),
+                                Pair("NIFTY NEXT 50", "NSE"),
+                                Pair("NIFTY 100", "NSE"),
+                                Pair("NIFTY 200", "NSE"),
+                                Pair("NIFTY 500", "NSE"),
+                                Pair("NIFTY IT", "NSE"),
+                                Pair("NIFTY AUTO", "NSE"),
+                                Pair("NIFTY PHARMA", "NSE"),
+                                Pair("NIFTY FMCG", "NSE"),
+                                Pair("NIFTY METAL", "NSE"),
+                                Pair("NIFTY REALTY", "NSE"),
+                                Pair("NIFTY PSU BANK", "NSE"),
+                                Pair("NIFTY PRIVATE BANK", "NSE"),
+                                Pair("SENSEX", "BSE"),
+                                Pair("BANKEX", "BSE"),
+                                Pair("CRUDEOIL", "MCX"),
+                                Pair("CRUDEOIL M", "MCX"),
+                                Pair("GOLD", "MCX"),
+                                Pair("GOLD M", "MCX"),
+                                Pair("SILVER", "MCX"),
+                                Pair("SILVER M", "MCX"),
+                                Pair("NATURALGAS", "MCX"),
+                                Pair("NATURALGAS M", "MCX"),
+                                Pair("RELIANCE", "NSE"),
+                                Pair("TCS", "NSE"),
+                                Pair("INFY", "NSE"),
+                                Pair("SBIN", "NSE"),
+                                Pair("HDFCBANK", "NSE"),
+                                Pair("ICICIBANK", "NSE"),
+                                Pair("TATAMOTORS", "NSE"),
+                                Pair("TATASTEEL", "NSE")
+                            )
+                            val universeKeys = universe.mapNotNull { (sym, exch) ->
+                                resolver.resolve(sym, exch)?.instrumentKey
+                            }
+                            
                             val rawKeys = if (subscribedInstrumentKeys.isNotEmpty()) {
-                                subscribedInstrumentKeys.toList()
+                                (subscribedInstrumentKeys.toList() + universeKeys).distinct()
                             } else {
-                                listOf(UpstoxSymbolMapper.KEY_NIFTY_50)
+                                universeKeys.distinct()
                             }
                             val keys = UpstoxSymbolMapper.filterValidKeys(rawKeys)
                             subscribedInstrumentKeys.addAll(keys)

@@ -662,19 +662,48 @@ class MStockMarketDataService(
 
     private fun resubscribeAll() {
         if (subscribedTokens.isEmpty() && instrumentMasterService != null && instrumentMasterService.isLoaded) {
-            val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL")
-            for (idx in indices) {
-                val inst = instrumentMasterService.resolveIndexToken(idx)
-                if (inst != null && inst.token.isNotBlank()) {
-                    val exch = if (inst.exch_seg.isNotBlank()) inst.exch_seg else "NSE"
-                    subscribedTokens[inst.token] = exch
-                }
-            }
-            val defaultStocks = listOf("RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK")
-            for (sym in defaultStocks) {
-                val token = instrumentMasterService.resolveAngelToken(sym, "NSE")
-                if (!token.isNullOrBlank()) {
-                    subscribedTokens[token] = "NSE"
+            val resolver = MStockInstrumentResolver(instrumentMasterService)
+            val universe = listOf(
+                Pair("NIFTY 50", "NSE"),
+                Pair("BANKNIFTY", "NSE"),
+                Pair("FINNIFTY", "NSE"),
+                Pair("MIDCPNIFTY", "NSE"),
+                Pair("NIFTY NEXT 50", "NSE"),
+                Pair("NIFTY 100", "NSE"),
+                Pair("NIFTY 200", "NSE"),
+                Pair("NIFTY 500", "NSE"),
+                Pair("NIFTY IT", "NSE"),
+                Pair("NIFTY AUTO", "NSE"),
+                Pair("NIFTY PHARMA", "NSE"),
+                Pair("NIFTY FMCG", "NSE"),
+                Pair("NIFTY METAL", "NSE"),
+                Pair("NIFTY REALTY", "NSE"),
+                Pair("NIFTY PSU BANK", "NSE"),
+                Pair("NIFTY PRIVATE BANK", "NSE"),
+                Pair("SENSEX", "BSE"),
+                Pair("BANKEX", "BSE"),
+                Pair("CRUDEOIL", "MCX"),
+                Pair("CRUDEOIL M", "MCX"),
+                Pair("GOLD", "MCX"),
+                Pair("GOLD M", "MCX"),
+                Pair("SILVER", "MCX"),
+                Pair("SILVER M", "MCX"),
+                Pair("NATURALGAS", "MCX"),
+                Pair("NATURALGAS M", "MCX"),
+                Pair("RELIANCE", "NSE"),
+                Pair("TCS", "NSE"),
+                Pair("INFY", "NSE"),
+                Pair("SBIN", "NSE"),
+                Pair("HDFCBANK", "NSE"),
+                Pair("ICICIBANK", "NSE"),
+                Pair("TATAMOTORS", "NSE"),
+                Pair("TATASTEEL", "NSE")
+            )
+            for ((sym, exch) in universe) {
+                val resolved = resolver.resolve(sym, exch)
+                if (resolved != null && resolved.token.isNotBlank()) {
+                    val ex = if (resolved.exchange.isNotBlank()) resolved.exchange else "NSE"
+                    subscribedTokens[resolved.token] = ex
                 }
             }
         }

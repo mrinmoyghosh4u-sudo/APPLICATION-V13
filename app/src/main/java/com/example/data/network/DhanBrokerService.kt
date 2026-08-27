@@ -65,6 +65,7 @@ class DhanBrokerService(
     }
 
     override suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> {
+        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.success(emptyList())
 
         return runCatching {
             val response = api.getHoldings()

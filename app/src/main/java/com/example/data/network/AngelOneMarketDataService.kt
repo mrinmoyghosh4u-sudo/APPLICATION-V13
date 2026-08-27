@@ -189,22 +189,49 @@ class AngelOneMarketDataService(
             return
         }
 
-        // Register core indices via Instrument Master lookup
-        val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
-        for (index in indices) {
-            val inst = instrumentMaster.resolveIndexToken(index)
-            if (inst != null) {
-                val exType = InstrumentMasterService.getExchangeType(inst.exch_seg)
-                activeSubscribedTokens.getOrPut(exType) { ConcurrentHashMap.newKeySet() }.add(inst.token)
-            }
-        }
-
-        // Register default stocks via Instrument Master lookup
-        val watchlistStockSymbols = listOf("RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "TATAMOTORS", "TATASTEEL")
-        for (sym in watchlistStockSymbols) {
-            val token = instrumentMaster.resolveAngelToken(sym, "NSE")
-            if (!token.isNullOrBlank()) {
-                activeSubscribedTokens.getOrPut(1) { ConcurrentHashMap.newKeySet() }.add(token)
+        // Register core indices and stock universe via AngelOneInstrumentResolver
+        val resolver = AngelOneInstrumentResolver(instrumentMaster)
+        val universe = listOf(
+            Pair("NIFTY 50", "NSE"),
+            Pair("BANKNIFTY", "NSE"),
+            Pair("FINNIFTY", "NSE"),
+            Pair("MIDCPNIFTY", "NSE"),
+            Pair("NIFTY NEXT 50", "NSE"),
+            Pair("NIFTY 100", "NSE"),
+            Pair("NIFTY 200", "NSE"),
+            Pair("NIFTY 500", "NSE"),
+            Pair("NIFTY IT", "NSE"),
+            Pair("NIFTY AUTO", "NSE"),
+            Pair("NIFTY PHARMA", "NSE"),
+            Pair("NIFTY FMCG", "NSE"),
+            Pair("NIFTY METAL", "NSE"),
+            Pair("NIFTY REALTY", "NSE"),
+            Pair("NIFTY PSU BANK", "NSE"),
+            Pair("NIFTY PRIVATE BANK", "NSE"),
+            Pair("SENSEX", "BSE"),
+            Pair("BANKEX", "BSE"),
+            Pair("CRUDEOIL", "MCX"),
+            Pair("CRUDEOIL M", "MCX"),
+            Pair("GOLD", "MCX"),
+            Pair("GOLD M", "MCX"),
+            Pair("SILVER", "MCX"),
+            Pair("SILVER M", "MCX"),
+            Pair("NATURALGAS", "MCX"),
+            Pair("NATURALGAS M", "MCX"),
+            Pair("RELIANCE", "NSE"),
+            Pair("TCS", "NSE"),
+            Pair("INFY", "NSE"),
+            Pair("SBIN", "NSE"),
+            Pair("HDFCBANK", "NSE"),
+            Pair("ICICIBANK", "NSE"),
+            Pair("TATAMOTORS", "NSE"),
+            Pair("TATASTEEL", "NSE")
+        )
+        for ((sym, exch) in universe) {
+            val resolved = resolver.resolve(sym, exch)
+            if (resolved != null && resolved.token.isNotBlank()) {
+                val exType = InstrumentMasterService.getExchangeType(resolved.exchange)
+                activeSubscribedTokens.getOrPut(exType) { ConcurrentHashMap.newKeySet() }.add(resolved.token)
             }
         }
 

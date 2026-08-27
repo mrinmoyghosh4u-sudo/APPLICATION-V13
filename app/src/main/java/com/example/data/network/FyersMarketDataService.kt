@@ -376,10 +376,51 @@ class FyersMarketDataService(
             webSocket?.send(okio.ByteString.of(*liteData.array()))
 
             // Send Subscribe message (ReqType = 4)
+            val resolver = FyersInstrumentResolver(InstrumentMasterService.instance)
+            val universe = listOf(
+                Pair("NIFTY 50", "NSE"),
+                Pair("BANKNIFTY", "NSE"),
+                Pair("FINNIFTY", "NSE"),
+                Pair("MIDCPNIFTY", "NSE"),
+                Pair("NIFTY NEXT 50", "NSE"),
+                Pair("NIFTY 100", "NSE"),
+                Pair("NIFTY 200", "NSE"),
+                Pair("NIFTY 500", "NSE"),
+                Pair("NIFTY IT", "NSE"),
+                Pair("NIFTY AUTO", "NSE"),
+                Pair("NIFTY PHARMA", "NSE"),
+                Pair("NIFTY FMCG", "NSE"),
+                Pair("NIFTY METAL", "NSE"),
+                Pair("NIFTY REALTY", "NSE"),
+                Pair("NIFTY PSU BANK", "NSE"),
+                Pair("NIFTY PRIVATE BANK", "NSE"),
+                Pair("SENSEX", "BSE"),
+                Pair("BANKEX", "BSE"),
+                Pair("CRUDEOIL", "MCX"),
+                Pair("CRUDEOIL M", "MCX"),
+                Pair("GOLD", "MCX"),
+                Pair("GOLD M", "MCX"),
+                Pair("SILVER", "MCX"),
+                Pair("SILVER M", "MCX"),
+                Pair("NATURALGAS", "MCX"),
+                Pair("NATURALGAS M", "MCX"),
+                Pair("RELIANCE", "NSE"),
+                Pair("TCS", "NSE"),
+                Pair("INFY", "NSE"),
+                Pair("SBIN", "NSE"),
+                Pair("HDFCBANK", "NSE"),
+                Pair("ICICIBANK", "NSE"),
+                Pair("TATAMOTORS", "NSE"),
+                Pair("TATASTEEL", "NSE")
+            )
+            val universeSymbols = universe.mapNotNull { (sym, exch) ->
+                resolver.resolve(sym, exch)?.token
+            }
+            
             val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {
-                subscribedSymbols.toList()
+                (subscribedSymbols.toList() + universeSymbols).distinct()
             } else {
-                listOf("NSE:NIFTY50-INDEX", "NSE:NIFTYBANK-INDEX", "NSE:FINNIFTY-INDEX", "NSE:MIDCPNIFTY-INDEX")
+                universeSymbols.distinct()
             }
             subscribedSymbols.addAll(symbolsToSub)
 
