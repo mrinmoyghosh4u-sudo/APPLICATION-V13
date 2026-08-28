@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -141,8 +142,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _marketDataSource = MutableStateFlow(brokerManager.currentMarketDataSource)
     val marketDataSource: StateFlow<String> = _marketDataSource.asStateFlow()
-    val isLiveFeedActive: StateFlow<Boolean> = marketDataProviderState.map {
-        it.live && !it.stale
+    val isLiveFeedActive: StateFlow<Boolean> = combine(
+        marketDataProviderState,
+        _userProfile,
+        brokerManager.brokerAuthManager.statuses
+    ) { providerState, profile, statuses ->
+        val isDhanConnected = profile.isDhanConnected || statuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+        providerState.live && !providerState.stale && isDhanConnected
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
 
@@ -267,6 +273,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (currentProfile.isDhanConnected != actualDhanStatus) {
                     _userProfile.value = currentProfile.copy(isDhanConnected = actualDhanStatus)
                 }
+                val rawFeedStatus = brokerManager.marketDataEngine.unifiedFeedStatus.value
+                _marketDataSource.value = if (actualDhanStatus) rawFeedStatus else "REAL MARKET DATA UNAVAILABLE"
             }
         }
         viewModelScope.launch {
@@ -1371,7 +1379,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             launch {
                 brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
-                    _marketDataSource.value = status
+                    val isDhanConnected = _userProfile.value.isDhanConnected || brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                    _marketDataSource.value = if (isDhanConnected) status else "REAL MARKET DATA UNAVAILABLE"
                 }
             }
             launch {
@@ -1545,10 +1554,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 instrumentMasterService.getOptionExpiries(index)
             }
             
-            val parsedExpiries = OptionExpiryUtil.getUpcomingExpiriesForSymbol(index, sourceExpiries)
-            _availableOptionExpiries.value = parsedExpiries
-            if (parsedExpiries.isNotEmpty() && !parsedExpiries.contains(_selectedOptionExpiry.value)) {
-                _selectedOptionExpiry.value = parsedExpiries.first()
+            val finalExpiries = sourceExpiries
+            _availableOptionExpiries.value = finalExpiries
+            if (finalExpiries.isNotEmpty() && !finalExpiries.contains(_selectedOptionExpiry.value)) {
+                _selectedOptionExpiry.value = finalExpiries.first()
             }
             fetchOptionChain()
         }
@@ -1563,23 +1572,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val indexName = _selectedOptionIndex.value
             val expiry = _selectedOptionExpiry.value
-            val indexTick = com.example.data.model.MarketDataStore.getTick(indexName)
-            val indexLtp = indexTick?.ltp ?: _watchlist.value.find { it.symbol.equals(indexName, ignoreCase = true) }?.ltp ?: 0.0
-
             val res = brokerManager.getOptionChain(indexName, expiry)
             val strikes = res.getOrNull()
             
-            // Validate if returned strikes match the underlying LTP or if strikes are present
-            val isValidForIndex = !strikes.isNullOrEmpty() && (indexLtp <= 0.0 || strikes.any { strike ->
-                kotlin.math.abs(strike.strikePrice - indexLtp) < (indexLtp * 0.50)
-            })
-
-            if (isValidForIndex && strikes != null) {
-                _optionStrikes.value = strikes
-            } else if (!strikes.isNullOrEmpty()) {
+            if (!strikes.isNullOrEmpty()) {
                 _optionStrikes.value = strikes
             } else {
-                // Strict Real Data Rule: Set empty list if no real option chain feed
                 _optionStrikes.value = emptyList()
             }
         }
@@ -2061,6 +2059,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSmsStatus() {
         _smsStatusMessage.value = null
+    }
+
+    fun notifyBreakingNews(articles: List<OptionBuyerNewsArticle>) {
+        viewModelScope.launch {
+            articles.filter { it.isBreaking }.forEach { article ->
+                alertService.notifyMarketNews(article)
+            }
+        }
     }
 
     fun toggleBiometric(enabled: Boolean) {

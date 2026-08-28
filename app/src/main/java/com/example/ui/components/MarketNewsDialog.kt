@@ -64,6 +64,7 @@ fun MarketNewsDialog(
 
     LaunchedEffect(Unit) {
         MarketIntelligenceService.refreshIntelligence(marketDataMap)
+        viewModel?.notifyBreakingNews(MarketIntelligenceService.intelligenceState.value.breakingNews)
     }
 
     // Full Screen Premium Modal Dialog

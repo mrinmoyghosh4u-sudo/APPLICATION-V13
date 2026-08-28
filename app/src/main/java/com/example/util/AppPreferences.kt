@@ -79,7 +79,8 @@ data class AlertPreferences(
     val orderRejected: Boolean = true,
     val algoStarted: Boolean = true,
     val algoStopped: Boolean = true,
-    val riskLimitReached: Boolean = true
+    val riskLimitReached: Boolean = true,
+    val marketNews: Boolean = true
 )
 
 data class AiSignalSettings(

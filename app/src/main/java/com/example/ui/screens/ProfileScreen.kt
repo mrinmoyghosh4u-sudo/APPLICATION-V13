@@ -341,8 +341,8 @@ fun ProfileScreen(
                             }
                         }
 
-                        // Dynamic Broker Live Status Badge
-                        if (isAnyBrokerConnected) {
+                        // Dynamic Broker Live Status Badge (Strictly Dhan Connected)
+                        if (isDhanConnected) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0D2517),

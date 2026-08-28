@@ -325,13 +325,7 @@ private fun MarketOverviewSection(
             Triple("BSE", "SENSEX", "INDEX"),
             Triple("BSE", "BANKEX", "INDEX"),
             Triple("MCX", "CRUDEOIL", "COMMODITY"),
-            Triple("MCX", "CRUDEOIL M", "COMMODITY"),
-            Triple("MCX", "GOLD", "COMMODITY"),
-            Triple("MCX", "GOLD M", "COMMODITY"),
-            Triple("MCX", "SILVER", "COMMODITY"),
-            Triple("MCX", "SILVER M", "COMMODITY"),
-            Triple("MCX", "COPPER", "COMMODITY"),
-            Triple("MCX", "COPPER M", "COMMODITY")
+            Triple("MCX", "CRUDEOIL M", "COMMODITY")
         )
     }
 
@@ -374,7 +368,7 @@ private fun MarketOverviewSection(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             listOf(
-                "ALL" to "All (14)",
+                "ALL" to "All (8)",
                 "INDICES" to "Indices (NSE/BSE)",
                 "COMMODITIES" to "Commodities (MCX)"
             ).forEach { (catKey, catLabel) ->
@@ -529,10 +523,10 @@ private fun PortfolioOverviewSection(
                 )
             }
 
-            val isBrokerConnected = userProfile.isAngelConnected || userProfile.isDhanConnected
+            val isDhanConnected = userProfile.isDhanConnected
             Text(
-                text = if (isBrokerConnected) "BROKER LIVE" else "READY",
-                color = if (isBrokerConnected) ProfitGreen else PrimaryGold,
+                text = if (isDhanConnected) "BROKER LIVE" else "READY",
+                color = if (isDhanConnected) ProfitGreen else PrimaryGold,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier

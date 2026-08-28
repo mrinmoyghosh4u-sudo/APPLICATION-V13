@@ -705,28 +705,7 @@ private fun ExchangeIndicesSection(
         )
         "MCX" -> listOf(
             IndexCardData("CRUDEOIL", 0.0, 0.0, 0.0, 100),
-            IndexCardData("CRUDEOIL M", 0.0, 0.0, 0.0, 10),
-            IndexCardData("NATURALGAS", 0.0, 0.0, 0.0, 1250),
-            IndexCardData("NATURALGAS M", 0.0, 0.0, 0.0, 250),
-            IndexCardData("GOLD", 0.0, 0.0, 0.0, 100),
-            IndexCardData("GOLD M", 0.0, 0.0, 0.0, 10),
-            IndexCardData("GOLD GUINEA", 0.0, 0.0, 0.0, 1),
-            IndexCardData("GOLD PETAL", 0.0, 0.0, 0.0, 1),
-            IndexCardData("SILVER", 0.0, 0.0, 0.0, 30),
-            IndexCardData("SILVER M", 0.0, 0.0, 0.0, 5),
-            IndexCardData("SILVER MIC", 0.0, 0.0, 0.0, 1),
-            IndexCardData("COPPER", 0.0, 0.0, 0.0, 2500),
-            IndexCardData("COPPER M", 0.0, 0.0, 0.0, 250),
-            IndexCardData("ZINC", 0.0, 0.0, 0.0, 5000),
-            IndexCardData("ZINC M", 0.0, 0.0, 0.0, 1000),
-            IndexCardData("ALUMINIUM", 0.0, 0.0, 0.0, 5000),
-            IndexCardData("ALUMINIUM M", 0.0, 0.0, 0.0, 1000),
-            IndexCardData("LEAD", 0.0, 0.0, 0.0, 5000),
-            IndexCardData("LEAD M", 0.0, 0.0, 0.0, 1000),
-            IndexCardData("NICKEL", 0.0, 0.0, 0.0, 1500),
-            IndexCardData("MCXBULLDEX", 0.0, 0.0, 0.0, 50),
-            IndexCardData("MCXMETLDEX", 0.0, 0.0, 0.0, 50),
-            IndexCardData("MCXENRGDEX", 0.0, 0.0, 0.0, 125)
+            IndexCardData("CRUDEOIL M", 0.0, 0.0, 0.0, 10)
         )
         else -> listOf(
             IndexCardData("NIFTY 50", 0.0, 0.0, 0.0, 65),

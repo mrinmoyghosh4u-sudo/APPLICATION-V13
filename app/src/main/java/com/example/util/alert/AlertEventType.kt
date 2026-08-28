@@ -16,5 +16,6 @@ enum class AlertEventType(val key: String, val displayName: String) {
     ORDER_REJECTED("ORDER_REJECTED", "Order Rejected"),
     ALGO_STARTED("ALGO_STARTED", "Algo Started"),
     ALGO_STOPPED("ALGO_STOPPED", "Algo Stopped"),
-    RISK_LIMIT_REACHED("RISK_LIMIT_REACHED", "Risk Limit Reached")
+    RISK_LIMIT_REACHED("RISK_LIMIT_REACHED", "Risk Limit Reached"),
+    MARKET_NEWS("MARKET_NEWS", "Market News & Intelligence")
 }

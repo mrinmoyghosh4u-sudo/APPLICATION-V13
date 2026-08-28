@@ -46,6 +46,7 @@ fun AlertPreferencesDialog(
     var algoStarted by remember { mutableStateOf(initialPrefs.algoStarted) }
     var algoStopped by remember { mutableStateOf(initialPrefs.algoStopped) }
     var riskLimitReached by remember { mutableStateOf(initialPrefs.riskLimitReached) }
+    var marketNews by remember { mutableStateOf(initialPrefs.marketNews) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -102,6 +103,7 @@ fun AlertPreferencesDialog(
                 AlertToggleRow("Algo Started", "▶️", algoStarted) { algoStarted = it }
                 AlertToggleRow("Algo Stopped", "⏹️", algoStopped) { algoStopped = it }
                 AlertToggleRow("Risk Limit Reached", "⚠️", riskLimitReached) { riskLimitReached = it }
+                AlertToggleRow("Market News & Intelligence", "📰", marketNews) { marketNews = it }
 
                 Spacer(modifier = Modifier.height(14.dp))
 

@@ -24,6 +24,7 @@ class AlertPreferenceManager(private val appPreferences: AppPreferences) {
             AlertEventType.ALGO_STARTED -> prefs.algoStarted
             AlertEventType.ALGO_STOPPED -> prefs.algoStopped
             AlertEventType.RISK_LIMIT_REACHED -> prefs.riskLimitReached
+            AlertEventType.MARKET_NEWS -> prefs.marketNews
         }
     }
 

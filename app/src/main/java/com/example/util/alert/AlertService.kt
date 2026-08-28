@@ -536,4 +536,25 @@ class AlertService(
             dispatchAlert(eventType, eventKey, tg, sms, push)
         }
     }
+
+    // 17. Market News & Intelligence Alert
+    fun notifyMarketNews(article: com.example.data.model.OptionBuyerNewsArticle) {
+        serviceScope.launch {
+            val eventType = AlertEventType.MARKET_NEWS
+            val eventKey = duplicateGuard.buildEventKey(
+                broker = "NEWS",
+                account = article.id,
+                eventType = eventType,
+                timestampBucket = System.currentTimeMillis() / 60000 // 1 min debounce per news ID
+            )
+            val tg = "📰 *MARKET LIVE NEWS*\n\n*${article.headline}*\n\n_${article.summary}_\n\nCategory: ${article.category} | Impact: ${article.impact} (${article.impactStrength})\nBias: ${article.optionBuyerBias}"
+            val sms = "News: ${article.headline}"
+            val push = PushNotificationPayload(
+                title = "📰 ${article.category}: ${article.affectedMarket}",
+                message = article.headline,
+                type = "NEWS"
+            )
+            dispatchAlert(eventType, eventKey, tg, sms, push)
+        }
+    }
 }
