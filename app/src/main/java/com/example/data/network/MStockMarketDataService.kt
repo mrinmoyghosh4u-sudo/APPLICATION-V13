@@ -684,7 +684,7 @@ class MStockMarketDataService(
     }
 
     private fun resubscribeAll() {
-        if (subscribedTokens.isEmpty() && instrumentMasterService != null && instrumentMasterService.isLoaded) {
+        if (subscribedTokens.isEmpty()) {
             val resolver = MStockInstrumentResolver(instrumentMasterService)
             val universe = listOf(
                 Pair("NIFTY 50", "NSE"),
@@ -727,6 +727,20 @@ class MStockMarketDataService(
                 if (resolved != null && resolved.token.isNotBlank()) {
                     val ex = if (resolved.exchange.isNotBlank()) resolved.exchange else "NSE"
                     subscribedTokens[resolved.token] = ex
+                } else {
+                    val fallback = when (sym) {
+                        "NIFTY 50" -> "99926000" to "NSE"
+                        "BANKNIFTY" -> "99926009" to "NSE"
+                        "FINNIFTY" -> "99926037" to "NSE"
+                        "MIDCPNIFTY" -> "99926074" to "NSE"
+                        "SENSEX" -> "99919000" to "BSE"
+                        "BANKEX" -> "99919012" to "BSE"
+                        "CRUDEOIL" -> "260012" to "MCX"
+                        else -> null
+                    }
+                    if (fallback != null) {
+                        subscribedTokens[fallback.first] = fallback.second
+                    }
                 }
             }
         }
