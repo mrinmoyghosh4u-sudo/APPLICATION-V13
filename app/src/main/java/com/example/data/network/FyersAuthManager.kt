@@ -116,19 +116,6 @@ class FyersAuthManager(
                     }
                 }
 
-                // If code is already an Access Token, test it directly via Profile endpoint
-                if (tokenBody == null) {
-                    val authHeader = if (cleanCode.contains(":")) cleanCode else "$fullAppId:$cleanCode"
-                    val directProfileTest = try {
-                        fyersApi.getProfile(authHeader)
-                    } catch (_: Exception) { null }
-
-                    if (directProfileTest != null && directProfileTest.isSuccessful && directProfileTest.body()?.s == "ok") {
-                        Log.i(TAG, "[FYERS_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")
-                        tokenBody = FyersTokenResponse(s = "ok", code = 200, access_token = if (cleanCode.contains(":")) cleanCode.substringAfter(":") else cleanCode)
-                    }
-                }
-
                 if (tokenBody == null) {
                     val err = directExchangeError ?: "Failed to exchange Fyers auth code. Please verify Secret ID."
                     sessionManager.isFyersConnected = false

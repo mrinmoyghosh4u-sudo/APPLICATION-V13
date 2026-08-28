@@ -125,8 +125,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authSuccessEvent = MutableStateFlow(false)
     val authSuccessEvent: StateFlow<Boolean> = _authSuccessEvent.asStateFlow()
 
-    private var lastProcessedOAuthCode: String? = null
-    private var lastProcessedOAuthTime: Long = 0L
+    private var lastReceivedOAuthCode: String? = null
+    private var lastReceivedOAuthTime: Long = 0L
 
     private val _selectedExchange = MutableStateFlow("NSE")
     val selectedExchange: StateFlow<String> = _selectedExchange.asStateFlow()
@@ -1067,8 +1067,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val cleanedCode = code?.trim() ?: ""
-            val lastCode = sessionManager.lastProcessedOAuthCode
-            val lastTime = sessionManager.lastProcessedOAuthTime
+            val lastCode = sessionManager.lastReceivedOAuthCode
+            val lastTime = sessionManager.lastReceivedOAuthTime
             if (cleanedCode.isNotBlank() && cleanedCode == lastCode && System.currentTimeMillis() - lastTime < 15_000L) {
                 android.util.Log.w("Auth", "[$logPrefix" + "_DUPLICATE_CALLBACK_IGNORED] Ignoring duplicate authorization code within 15s window")
                 _isAuthInProgress.value = false
@@ -1125,10 +1125,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            sessionManager.lastProcessedOAuthCode = cleanedCode
-            sessionManager.lastProcessedOAuthTime = System.currentTimeMillis()
-            lastProcessedOAuthCode = cleanedCode
-            lastProcessedOAuthTime = System.currentTimeMillis()
+            sessionManager.lastReceivedOAuthCode = cleanedCode
+            sessionManager.lastReceivedOAuthTime = System.currentTimeMillis()
+            lastReceivedOAuthCode = cleanedCode
+            lastReceivedOAuthTime = System.currentTimeMillis()
 
             brokerManager.healthManager.reportAuthCodeReceived(providerName)
 
@@ -1267,13 +1267,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!token.isNullOrBlank()) {
                 // Direct access token received
                 sessionManager.dhanAccessToken = token
-                sessionManager.activeBroker = "Dhan"
-                sessionManager.isDhanConnected = true
-                sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
-                brokerManager.setActiveBroker("Dhan")
+                
+                val profileResult = brokerManager.getProfile()
+                if (profileResult.isSuccess) {
+                    sessionManager.activeBroker = "Dhan"
+                    sessionManager.isDhanConnected = true
+                    sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
+                    brokerManager.setActiveBroker("Dhan")
 
-                val valid = validateAndRestoreSession()
-                if (valid) {
                     android.util.Log.d("DhanAuth", "Dhan profile validation: SUCCESS")
                     sessionManager.lastCompletedDhanFingerprint = dhanFingerprint
                     sessionManager.pendingOAuthBroker = ""
@@ -1285,8 +1286,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     repository.addNotification("Broker Connected", "Connected to Dhan via OAuth successfully", "SUCCESS")
                     val accountId = clientId?.takeIf { it.isNotBlank() } ?: sessionManager.dhanClientId.takeIf { it.isNotBlank() } ?: "Dhan User"
                     alertService.notifyBrokerConnected("Dhan", account = accountId)
+                    
+                    validateAndRestoreSession()
                 } else {
                     android.util.Log.e("DhanAuth", "Dhan profile validation: FAILURE")
+                    sessionManager.dhanAccessToken = null
                     _authErrorMessage.value = "Failed to validate Dhan session. Please check your credentials."
                 }
             } else if (!dhanTokenId.isNullOrBlank()) {
@@ -1301,17 +1305,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val accessToken = exchangeRes.getOrThrow()
                     android.util.Log.d("DhanAuth", "Dhan token exchange: SUCCESS")
                     sessionManager.dhanAccessToken = accessToken
-                    sessionManager.activeBroker = "Dhan"
-                    sessionManager.isDhanConnected = true
-                    sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
-                    brokerManager.setActiveBroker("Dhan")
-
-                    val valid = validateAndRestoreSession()
-                    if (valid) {
+                    
+                    val profileResult = brokerManager.getProfile()
+                    if (profileResult.isSuccess) {
+                        sessionManager.activeBroker = "Dhan"
+                        sessionManager.isDhanConnected = true
+                        sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
+                        brokerManager.setActiveBroker("Dhan")
+    
                         android.util.Log.d("DhanAuth", "Dhan profile validation: SUCCESS")
                         sessionManager.lastCompletedDhanFingerprint = dhanFingerprint
                         sessionManager.pendingOAuthBroker = ""
-
+    
                         brokerManager.brokerAuthManager.updateStatus("Dhan", "Primary Order Execution", com.example.data.network.BrokerAuthStatus.CONNECTED, "Active for Order Execution")
                         _brokerSwitchStatus.value = "✓ DHAN CONNECTED"
                         _authSuccessEvent.value = true
@@ -1319,8 +1324,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         repository.addNotification("Broker Connected", "Connected to Dhan via OAuth successfully", "SUCCESS")
                         val accountId = clientId?.takeIf { it.isNotBlank() } ?: sessionManager.dhanClientId.takeIf { it.isNotBlank() } ?: "Dhan User"
                         alertService.notifyBrokerConnected("Dhan", account = accountId)
+                        
+                        validateAndRestoreSession()
                     } else {
                         android.util.Log.e("DhanAuth", "Dhan profile validation: FAILURE")
+                        sessionManager.dhanAccessToken = null
                         _authErrorMessage.value = "Failed to validate Dhan session after token exchange."
                     }
                 } else {

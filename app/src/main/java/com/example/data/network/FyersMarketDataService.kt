@@ -767,6 +767,7 @@ class FyersMarketDataService(
         if (!hasFirstTick) {
             Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received: $rawSymbol = $ltp")
             hasFirstTick = true
+            com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "LIVE")
         }
         lastTickReceivedTime = now
         _connectionState.value = "WEBSOCKET_LIVE"

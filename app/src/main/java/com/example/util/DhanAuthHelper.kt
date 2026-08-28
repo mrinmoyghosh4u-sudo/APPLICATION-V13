@@ -164,6 +164,7 @@ object DhanAuthHelper {
             }
             if (appSecret.isNotBlank()) {
                 requestBuilder.addHeader("app_secret", appSecret)
+                requestBuilder.addHeader("client_secret", appSecret)
             }
 
             val response = httpClient.newCall(requestBuilder.build()).execute()

@@ -433,19 +433,15 @@ class InstrumentMasterService(
         // Match exact strike & expiry from Instrument Master
         return matchingOptions.find { inst ->
             val instStrikeRaw = inst.strike.toDoubleOrNull() ?: 0.0
-            // Angel One option strikes are either in paise (e.g. 2485000 for 24850.0) or rupees (24850)
-            val instStrike = if (instStrikeRaw > 10000.0 && strike < 10000.0) {
-                instStrikeRaw / 100.0
-            } else if (instStrikeRaw > 100000.0 && strike < 100000.0) {
-                instStrikeRaw / 100.0
-            } else {
-                instStrikeRaw
-            }
+            // Angel One option strikes are ALWAYS in paise (e.g. 2485000 for 24850.0)
+            val instStrike = instStrikeRaw / 100.0
 
             val strikeMatches = kotlin.math.abs(instStrike - strike) < 0.01
 
+            val angelTargetExpiry = com.example.util.OptionExpiryUtil.formatForAngel(expiry)
             val expiryMatches = expiry.isBlank() ||
                                 inst.expiry.equals(expiry, ignoreCase = true) ||
+                                inst.expiry.equals(angelTargetExpiry, ignoreCase = true) ||
                                 inst.expiry.replace("-", "").equals(expiry.replace("-", ""), ignoreCase = true)
 
             strikeMatches && expiryMatches

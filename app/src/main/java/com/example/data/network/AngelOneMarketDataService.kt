@@ -154,6 +154,7 @@ class AngelOneMarketDataService(
                 _connectionState.value = "DISCONNECTED"
                 isSubscribed = false
                 hasFirstTick = false
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "OFFLINE")
                 Log.d("SmartStream", "WebSocket Closed: $reason")
                 scheduleReconnect()
             }
@@ -162,6 +163,7 @@ class AngelOneMarketDataService(
                 _connectionState.value = "ERROR"
                 isSubscribed = false
                 hasFirstTick = false
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "ERROR")
                 Log.e("SmartStream", "WebSocket Failure: ${t.message}")
                 scheduleReconnect()
             }
@@ -355,6 +357,7 @@ class AngelOneMarketDataService(
             if (!hasFirstTick || _connectionState.value != "LIVE") {
                 hasFirstTick = true
                 _connectionState.value = "LIVE"
+                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "LIVE")
                 Log.d("SmartStream", "[LIVE]")
             }
             lastTickTimestamp = System.currentTimeMillis()
@@ -548,6 +551,7 @@ class AngelOneMarketDataService(
         webSocket = null
         pingJob?.cancel()
         _connectionState.value = "DISCONNECTED"
+        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "OFFLINE")
     }
 
     fun reconnect() {
@@ -670,6 +674,7 @@ class AngelOneMarketDataService(
             if (_connectionState.value == "LIVE") {
                 if (System.currentTimeMillis() - lastTickTimestamp > 15000) {
                     _connectionState.value = "STALE"
+                    com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "STALE")
                     Log.w("AngelOneMarketData", "No ticks received for 15s. Marking connection STALE.")
                 }
             }

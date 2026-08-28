@@ -239,6 +239,14 @@ class SessionManager(context: Context) {
         get() = prefs.getLong("last_processed_oauth_time", 0L)
         set(value) { prefs.edit().putLong("last_processed_oauth_time", value).commit() }
 
+    var lastReceivedOAuthCode: String
+        get() = prefs.getString("last_received_oauth_code", "") ?: ""
+        set(value) { prefs.edit().putString("last_received_oauth_code", value).commit() }
+
+    var lastReceivedOAuthTime: Long
+        get() = prefs.getLong("last_received_oauth_time", 0L)
+        set(value) { prefs.edit().putLong("last_received_oauth_time", value).commit() }
+
     var lastCompletedDhanFingerprint: String
         get() = prefs.getString("last_completed_dhan_fingerprint", "") ?: ""
         set(value) { prefs.edit().putString("last_completed_dhan_fingerprint", value).commit() }
