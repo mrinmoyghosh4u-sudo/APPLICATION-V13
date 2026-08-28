@@ -227,6 +227,16 @@ class MStockMarketDataService(
 
                 startHeartbeat()
                 startStaleChecker()
+
+                // m.Stock does not send an explicit auth success response.
+                // We assume successful auth if the connection remains open, 
+                // so we proceed to subscription immediately.
+                scope.launch {
+                    delay(500)
+                    if (isConnected.get()) {
+                        onAuthenticationSuccess()
+                    }
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -325,6 +335,13 @@ class MStockMarketDataService(
                     (code != 0 && code != 200) ||
                     msg.contains("fail", ignoreCase = true) || msg.contains("invalid", ignoreCase = true)
             )
+
+            val isSubAck = type in listOf("subscribe", "mode", "sub", "ack") || (status in listOf("success", "ok") && isSubscriptionSent)
+            if (isSubAck) {
+                isSubscriptionAck = true
+                healthManager?.reportSubscriptionAcknowledged(ProviderHealthManager.PROVIDER_MSTOCK)
+                safeLogI(TAG, "[MSTOCK_SUB_ACK] Subscription acknowledged by m.Stock server")
+            }
 
             if (isAuthSuccess) {
                 onAuthenticationSuccess()

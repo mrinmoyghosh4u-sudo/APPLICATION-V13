@@ -365,7 +365,7 @@ class FyersMarketDataService(
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
 
             // Send Lite mode message (ReqType = 12)
-            val liteData = ByteBuffer.allocate(11)
+            val liteData = ByteBuffer.allocate(19)
             liteData.order(ByteOrder.BIG_ENDIAN)
             liteData.putShort(0.toShort()) // placeholder
             liteData.put(12.toByte()) // Msg type
@@ -461,6 +461,9 @@ class FyersMarketDataService(
             subMsg.get(subBytes)
 
             webSocket?.send(okio.ByteString.of(*subBytes))
+            isSubscriptionSent = true
+            _connectionState.value = "SUBSCRIPTION_SENT"
+            healthManager?.reportSubscriptionSent(ProviderHealthManager.PROVIDER_FYERS)
             Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send FYERS subscription: ${e.message}")
@@ -481,7 +484,9 @@ class FyersMarketDataService(
 
             when (respType) {
                 6 -> {
-                    if (_connectionState.value == "SUBSCRIBING") {
+                    isSubscriptionAck = true
+                    healthManager?.reportSubscriptionAcknowledged(ProviderHealthManager.PROVIDER_FYERS)
+                    if (_connectionState.value == "SUBSCRIBING" || _connectionState.value == "SUBSCRIPTION_SENT") {
                         _connectionState.value = "SUBSCRIBED"
                         healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
                         Log.i(TAG, "[FYERS_SUB_CONFIRMED] FYERS Topic Init confirmed by server")
