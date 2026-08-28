@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -75,6 +76,14 @@ fun MarketScreen(
     val bseStatus = MarketStatusUtil.getDetailedMarketStatus("BSE")
     val mcxStatus = MarketStatusUtil.getDetailedMarketStatus("MCX")
     val isMarketOpen = nseStatus.isOpen || bseStatus.isOpen || mcxStatus.isOpen
+
+    BackHandler(enabled = chartDialogInstrument != null || showAddSymbolDialog || searchQuery.isNotBlank()) {
+        when {
+            chartDialogInstrument != null -> chartDialogInstrument = null
+            showAddSymbolDialog -> showAddSymbolDialog = false
+            searchQuery.isNotBlank() -> searchQuery = ""
+        }
+    }
 
     // Search Database containing Comprehensive NSE, BSE, MCX Indices & Option Contracts
     

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -76,7 +77,14 @@ fun HomeScreen(
     }
 
     if (showMarketNewsDialog) {
-        MarketNewsDialog(onDismiss = { showMarketNewsDialog = false })
+        MarketNewsDialog(
+            viewModel = viewModel,
+            onDismiss = { showMarketNewsDialog = false }
+        )
+    }
+
+    BackHandler(enabled = showMarketNewsDialog) {
+        showMarketNewsDialog = false
     }
 
     PullToRefreshLayout(isRefreshing = isRefreshing, onRefresh = onRefresh) {

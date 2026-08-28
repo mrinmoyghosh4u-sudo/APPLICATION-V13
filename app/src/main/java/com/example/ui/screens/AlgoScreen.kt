@@ -84,6 +84,26 @@ fun AlgoScreen(
     onRefresh: () -> Unit = {}
 ) {
     var currentState by remember { mutableStateOf(AlgoScreenState.DASHBOARD) }
+    val stateHistory = remember { mutableStateListOf<AlgoScreenState>() }
+
+    fun navigateTo(newState: AlgoScreenState) {
+        if (newState != currentState) {
+            stateHistory.add(currentState)
+            currentState = newState
+        }
+    }
+
+    val handleBack: () -> Unit = {
+        if (stateHistory.isNotEmpty()) {
+            currentState = stateHistory.removeAt(stateHistory.lastIndex)
+        } else {
+            currentState = AlgoScreenState.DASHBOARD
+        }
+    }
+
+    BackHandler(enabled = currentState != AlgoScreenState.DASHBOARD) {
+        handleBack()
+    }
 
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
@@ -106,7 +126,7 @@ fun AlgoScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (currentState != AlgoScreenState.DASHBOARD) {
-                        IconButton(onClick = { currentState = AlgoScreenState.DASHBOARD }) {
+                        IconButton(onClick = handleBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
@@ -171,19 +191,19 @@ fun AlgoScreen(
 
             when (currentState) {
                 AlgoScreenState.DASHBOARD -> AlgoDashboard(
-                    onNavigate = { currentState = it }
+                    onNavigate = { navigateTo(it) }
                 )
                 AlgoScreenState.CURRENT_SIGNAL_DETAIL -> CurrentSignalDetailScreen(
-                    onBack = { currentState = AlgoScreenState.DASHBOARD }
+                    onBack = handleBack
                 )
-                AlgoScreenState.AI_CREATE -> AiCreateStrategy(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.STRATEGY_BUILDER -> StrategyBuilder(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.MY_STRATEGIES -> MyStrategies(onNavigate = { currentState = it }, onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.RISK_MANAGEMENT -> RiskManagement(onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.PERFORMANCE -> AlgoPerformance(onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.TRADE_HISTORY -> TradeHistory(onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.BACKTEST -> BacktestScreen(onBack = { currentState = AlgoScreenState.DASHBOARD })
-                AlgoScreenState.SYSTEM_LOGS -> SystemLogsScreen(onBack = { currentState = AlgoScreenState.DASHBOARD })
+                AlgoScreenState.AI_CREATE -> AiCreateStrategy(onNavigate = { navigateTo(it) }, onBack = handleBack)
+                AlgoScreenState.STRATEGY_BUILDER -> StrategyBuilder(onNavigate = { navigateTo(it) }, onBack = handleBack)
+                AlgoScreenState.MY_STRATEGIES -> MyStrategies(onNavigate = { navigateTo(it) }, onBack = handleBack)
+                AlgoScreenState.RISK_MANAGEMENT -> RiskManagement(onBack = handleBack)
+                AlgoScreenState.PERFORMANCE -> AlgoPerformance(onBack = handleBack)
+                AlgoScreenState.TRADE_HISTORY -> TradeHistory(onBack = handleBack)
+                AlgoScreenState.BACKTEST -> BacktestScreen(onBack = handleBack)
+                AlgoScreenState.SYSTEM_LOGS -> SystemLogsScreen(onBack = handleBack)
             }
         }
     }
@@ -1000,6 +1020,7 @@ fun QuickActionCard(
 // -------------------------------------------------------------
 @Composable
 fun CurrentSignalDetailScreen(onBack: () -> Unit) {
+    BackHandler(enabled = true) { onBack() }
     val signal by AlgoEngine.currentSignal.collectAsState()
 
     Column(
@@ -1151,6 +1172,7 @@ fun AlgoSubScreenTopBar(title: String, onBack: () -> Unit, suffix: (@Composable 
 
 @Composable
 fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     val strategies by AlgoEngine.strategies.collectAsState()
     val liveTradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
     val currentStrategy by AlgoEngine.currentStrategy.collectAsState()
@@ -1305,6 +1327,7 @@ fun MyStrategies(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {})
 // -------------------------------------------------------------
 @Composable
 fun StrategyBuilder(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     var strategyName by remember { mutableStateOf("MOMENTUM SCALPER AI") }
     var selectedIndex by remember { mutableStateOf("NIFTY 50") }
     var selectedMode by remember { mutableStateOf("AUTO CE / PE") }
@@ -1319,12 +1342,7 @@ fun StrategyBuilder(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = 
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("STRATEGY BUILDER", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        AlgoSubScreenTopBar("STRATEGY BUILDER", onBack, suffix = {
             TextButton(onClick = {
                 val newStrat = AlgoStrategy(
                     id = "strat_${System.currentTimeMillis()}",
@@ -1343,7 +1361,7 @@ fun StrategyBuilder(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = 
             }) {
                 Text("SAVE", color = PrimaryGold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
-        }
+        })
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1585,6 +1603,7 @@ fun ConditionRow(left: String, operator: String, right: String) {
 // -------------------------------------------------------------
 @Composable
 fun AlgoPerformance(onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     var selectedTimeframe by remember { mutableStateOf("Today") }
     val liveTradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
 
@@ -1594,14 +1613,9 @@ fun AlgoPerformance(onBack: () -> Unit = {}) {
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("PERFORMANCE", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+        AlgoSubScreenTopBar("PERFORMANCE", onBack, suffix = {
             Icon(Icons.Default.FilterList, contentDescription = "Filter", tint = SecondaryGold)
-        }
+        })
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1726,6 +1740,7 @@ fun PerformanceMetricBox(title: String, value: String, valueColor: Color, modifi
 // -------------------------------------------------------------
 @Composable
 fun BacktestScreen(onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     val strategies by AlgoEngine.strategies.collectAsState()
     var selectedStrategy by remember { mutableStateOf(strategies.firstOrNull() ?: AlgoEngine.currentStrategy.value) }
     var selectedDays by remember { mutableIntStateOf(30) }
@@ -1738,7 +1753,7 @@ fun BacktestScreen(onBack: () -> Unit = {}) {
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text("BACKTEST SIMULATOR", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+        AlgoSubScreenTopBar("BACKTEST SIMULATOR", onBack)
         Text("Simulate quantitative strategy performance over historical market data", color = TextGray, fontSize = 11.sp)
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -1914,6 +1929,7 @@ fun BacktestScreen(onBack: () -> Unit = {}) {
 // -------------------------------------------------------------
 @Composable
 fun SystemLogsScreen(onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     val logs by AlgoEngine.systemLogs.collectAsState()
     var filterLevel by remember { mutableStateOf("ALL") }
 
@@ -1926,19 +1942,12 @@ fun SystemLogsScreen(onBack: () -> Unit = {}) {
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("SYSTEM LOGS", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
-                Text("Live algorithmic engine diagnostics & events", color = TextGray, fontSize = 11.sp)
-            }
+        AlgoSubScreenTopBar("SYSTEM LOGS", onBack, suffix = {
             IconButton(onClick = { AlgoEngine.clearLogs() }) {
                 Icon(Icons.Default.DeleteOutline, contentDescription = "Clear Logs", tint = LossRed)
             }
-        }
+        })
+        Text("Live algorithmic engine diagnostics & events", color = TextGray, fontSize = 11.sp)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -2039,12 +2048,13 @@ fun SystemLogsScreen(onBack: () -> Unit = {}) {
 // -------------------------------------------------------------
 @Composable
 fun AiCreateStrategy(onNavigate: (AlgoScreenState) -> Unit, onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     var index by remember { mutableStateOf("NIFTY 50") }
     var optionMode by remember { mutableStateOf("AUTO CE / PE") }
     var generatedStrategy by remember { mutableStateOf<AlgoStrategy?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("AI CREATE STRATEGY", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+        AlgoSubScreenTopBar("AI CREATE STRATEGY", onBack)
         Spacer(modifier = Modifier.height(16.dp))
 
         if (generatedStrategy == null) {
@@ -2132,6 +2142,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
 // -------------------------------------------------------------
 @Composable
 fun RiskManagement(onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     val riskPerTrade by AlgoEngine.riskPerTrade.collectAsState()
     val maxDailyLossPercent by AlgoEngine.maxDailyLossPercent.collectAsState()
     val maxTradesPerDay by AlgoEngine.maxTradesPerDay.collectAsState()
@@ -2204,6 +2215,7 @@ fun RiskManagement(onBack: () -> Unit = {}) {
 // -------------------------------------------------------------
 @Composable
 fun TradeHistory(onBack: () -> Unit = {}) {
+    BackHandler(enabled = true) { onBack() }
     val tradeHistory by AlgoEngine.liveTradeHistory.collectAsState()
     val paperHistory by AlgoEngine.paperTradeHistory.collectAsState()
 
@@ -2219,12 +2231,7 @@ fun TradeHistory(onBack: () -> Unit = {}) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("ALGO TRADE HISTORY", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryGold)
+        AlgoSubScreenTopBar("ALGO TRADE HISTORY", onBack, suffix = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("ALL", "LIVE", "PAPER").forEach { tab ->
                     val isSel = selectedTab == tab
@@ -2243,7 +2250,7 @@ fun TradeHistory(onBack: () -> Unit = {}) {
                     }
                 }
             }
-        }
+        })
 
         Spacer(modifier = Modifier.height(16.dp))
 

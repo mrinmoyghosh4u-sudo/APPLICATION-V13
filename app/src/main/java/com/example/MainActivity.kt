@@ -177,6 +177,14 @@ class MainActivity : FragmentActivity() {
                 var orderDialogState by remember { mutableStateOf<Triple<String, String, Pair<Double?, Int?>?>?>(null) } // symbol, side, (price, lot)
                 var showNotificationCenter by remember { mutableStateOf(false) }
 
+                val tabHistory = remember { mutableStateListOf<Int>(0) }
+
+                LaunchedEffect(pagerState.currentPage) {
+                    if (tabHistory.isEmpty() || tabHistory.last() != pagerState.currentPage) {
+                        tabHistory.add(pagerState.currentPage)
+                    }
+                }
+
                 val isMainPagerActive = currentRoute == "main" || currentRoute in tabRoutes
                 val showBottomBar = isMainPagerActive || currentRoute == "portfolio"
                 val activeBarRoute = if (isMainPagerActive) tabRoutes[pagerState.currentPage] else currentRoute
@@ -392,12 +400,31 @@ class MainActivity : FragmentActivity() {
                             composable("main") {
                                 val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
                                 androidx.activity.compose.BackHandler(enabled = true) {
-                                    if (pagerState.currentPage > 0) {
-                                        coroutineScope.launch {
-                                            pagerState.animateScrollToPage(0)
+                                    when {
+                                        orderDialogState != null -> {
+                                            orderDialogState = null
                                         }
-                                    } else {
-                                        activity?.moveTaskToBack(true)
+                                        showNotificationCenter -> {
+                                            showNotificationCenter = false
+                                        }
+                                        showConnectDialog -> {
+                                            viewModel.closeConnectDialog()
+                                        }
+                                        tabHistory.size > 1 -> {
+                                            tabHistory.removeAt(tabHistory.lastIndex)
+                                            val prevPage = tabHistory.lastOrNull() ?: 0
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(prevPage)
+                                            }
+                                        }
+                                        pagerState.currentPage != 0 -> {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(0)
+                                            }
+                                        }
+                                        else -> {
+                                            activity?.moveTaskToBack(true)
+                                        }
                                     }
                                 }
 
@@ -549,7 +576,9 @@ class MainActivity : FragmentActivity() {
                                             viewModel = viewModel,
                                             notifications = notifications,
                                             onOpenNotificationCenter = { showNotificationCenter = true },
-                                            onNavigateToAISignals = { navController.navigate("ai_signals") },
+                                            onNavigateToAISignals = {
+                                                coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                                            },
                                             isRefreshing = isRefreshing,
                                             onRefresh = { viewModel.refreshBrokerData() }
                                         )
@@ -624,24 +653,10 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
                             composable("ai_signals") {
-                                val aiSignals by viewModel.aiSignals.collectAsStateWithLifecycle()
-                                AISignalsScreen(
-                                    userProfile = userProfile,
-                                    signals = aiSignals,
-                                    marketDataSource = marketDataSource,
-                                    onOpenNotificationCenter = { showNotificationCenter = true },
-                                    onExecuteSignal = { signal ->
-                                        orderDialogState = Triple(
-                                            "${signal.symbol} ${signal.actionType}",
-                                            "BUY",
-                                            signal.ltp to signal.lotSize
-                                        )
-                                    },
-                                    onSendToTelegram = { signal ->
-                                        viewModel.sendSignalToTelegram(signal)
-                                    },
-                                    onRefresh = { viewModel.refreshBrokerData() }
-                                )
+                                LaunchedEffect(Unit) {
+                                    pagerState.scrollToPage(2)
+                                    navController.navigate("main") { popUpTo("main") { inclusive = true } }
+                                }
                             }
 
                             composable("portfolio") {

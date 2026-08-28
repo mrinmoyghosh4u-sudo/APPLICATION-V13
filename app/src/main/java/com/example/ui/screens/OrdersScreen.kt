@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,6 +80,19 @@ fun OrdersScreen(
     var selectedOrderForSquareOff by remember { mutableStateOf<Pair<OrderEntity, Double>?>(null) }
     // Dialog state for Partial Exit
     var selectedOrderForPartialExit by remember { mutableStateOf<Pair<OrderEntity, Double>?>(null) }
+
+    val hasOpenDialog = selectedOrderForModify != null || selectedOrderForSquareOff != null ||
+            selectedOrderForPartialExit != null || showFilterDialog || searchQuery.isNotBlank()
+
+    BackHandler(enabled = hasOpenDialog) {
+        when {
+            selectedOrderForModify != null -> selectedOrderForModify = null
+            selectedOrderForSquareOff != null -> selectedOrderForSquareOff = null
+            selectedOrderForPartialExit != null -> selectedOrderForPartialExit = null
+            showFilterDialog -> showFilterDialog = false
+            searchQuery.isNotBlank() -> searchQuery = ""
+        }
+    }
 
     // Derived Orders list with status, search, filter, and sort applied
     val filteredOrders = remember(orders, selectedOrderStatusFilter, searchQuery, selectedExchangeFilter, selectedSideFilter, selectedSortOrder) {

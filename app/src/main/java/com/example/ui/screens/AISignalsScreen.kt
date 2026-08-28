@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -72,6 +73,14 @@ fun AISignalsScreen(
     var isSoundAlertEnabled by remember { mutableStateOf(true) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedSignalForDetail by remember { mutableStateOf<AISignalEntity?>(null) }
+
+    BackHandler(enabled = showSettingsDialog || selectedSignalForDetail != null || viewMode != "LIVE") {
+        when {
+            showSettingsDialog -> showSettingsDialog = false
+            selectedSignalForDetail != null -> selectedSignalForDetail = null
+            viewMode != "LIVE" -> viewMode = "LIVE"
+        }
+    }
 
     // Market Session Status per Exchange in IST
     val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")

@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -89,6 +90,31 @@ fun ProfileScreen(
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     var showResetWalletDialog by remember { mutableStateOf(false) }
+
+    val hasOpenDialog = showAccountOverviewDialog || showFundsBreakdownDialog || showAlertPrefDialog ||
+            showRiskDialog || showOrderPrefDialog || showLotSizeDialog || showAiSignalDialog ||
+            showSecurityDialog || showNotifPrefDialog || showReportDialog || showTermsDialog ||
+            showAboutDialog || showUpdateDialog || showLogoutConfirmDialog || showClearCacheConfirmDialog ||
+            showResetWalletDialog
+
+    BackHandler(enabled = hasOpenDialog) {
+        showAccountOverviewDialog = false
+        showFundsBreakdownDialog = false
+        showAlertPrefDialog = false
+        showRiskDialog = false
+        showOrderPrefDialog = false
+        showLotSizeDialog = false
+        showAiSignalDialog = false
+        showSecurityDialog = false
+        showNotifPrefDialog = false
+        showReportDialog = false
+        showTermsDialog = false
+        showAboutDialog = false
+        showUpdateDialog = false
+        showLogoutConfirmDialog = false
+        showClearCacheConfirmDialog = false
+        showResetWalletDialog = false
+    }
 
     var isTelegramEnabled by remember { mutableStateOf(appPreferences.isTelegramEnabled()) }
     var isTestSending by remember { mutableStateOf(false) }
