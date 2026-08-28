@@ -487,6 +487,11 @@ class InstrumentMasterService(
         return indexSymbolMap[cleanName]
     }
 
+    fun getActiveContract(symbol: String): Instrument? {
+        val clean = symbol.uppercase().trim()
+        return resolveIndexToken(clean) ?: instrumentMap.values.find { it.symbol.equals(clean, ignoreCase = true) || it.name.equals(clean, ignoreCase = true) }
+    }
+
     fun resolveAngelToken(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
         val normExch = normalizeExchange(exchange)

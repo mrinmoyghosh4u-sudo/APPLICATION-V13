@@ -131,8 +131,9 @@ class AngelOneInstrumentResolver(private val instrumentMaster: InstrumentMasterS
             "MIDCPNIFTY", "NIFTY MID SELECT", "MIDCP NIFTY" -> "99926074"
             "SENSEX", "BSESN", "BSE SENSEX" -> "99919000"
             "BANKEX", "BSE BANKEX" -> "99919012"
-            "CRUDEOIL" -> "260012" // Or lookup from instrumentMaster
-            else -> ""
+            "CRUDEOIL" -> "260012"
+            "CRUDEOIL M", "CRUDEOILM" -> "260013"
+            else -> instrumentMaster?.getActiveContract(cleanSym)?.token ?: ""
         }
         
         val token = if (mappedToken.isNotBlank()) mappedToken else {
@@ -181,7 +182,8 @@ class MStockInstrumentResolver(private val instrumentMaster: InstrumentMasterSer
             "SENSEX", "BSESN", "BSE SENSEX" -> "99919000"
             "BANKEX", "BSE BANKEX" -> "99919012"
             "CRUDEOIL" -> "260012"
-            else -> ""
+            "CRUDEOIL M", "CRUDEOILM" -> "260013"
+            else -> instrumentMaster?.getActiveContract(cleanSym)?.token ?: ""
         }
         
         val token = if (mappedToken.isNotBlank()) mappedToken else {
