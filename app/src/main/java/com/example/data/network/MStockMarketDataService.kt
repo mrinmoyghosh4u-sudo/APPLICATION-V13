@@ -1,6 +1,7 @@
 package com.example.data.network
 
 import android.util.Log
+import com.example.util.SecurityLogger
 import com.example.data.model.MarketDataSourceNames
 import com.example.data.model.MarketDataStore
 import com.example.data.model.OptionStrikeItem
@@ -73,6 +74,10 @@ class MStockMarketDataService(
     private var hasFirstTick = false
     @Volatile
     private var hasSubscription = false
+    @Volatile
+    private var isSubscriptionSent = false
+    @Volatile
+    private var isSubscriptionAck = false
 
     init {
         if (isConfigured()) {
@@ -93,7 +98,7 @@ class MStockMarketDataService(
 
     fun hasFirstTickReceived(): Boolean = hasFirstTick
 
-    fun hasActiveSubscription(): Boolean = subscribedTokens.isNotEmpty() || hasSubscription || isConfigured()
+    fun hasActiveSubscription(): Boolean = isSubscriptionSent || (subscribedTokens.isNotEmpty() && !isConfigured())
 
     fun getTickAgeMs(): Long {
         if (lastTickReceivedTime <= 0L) return -1L
@@ -181,7 +186,7 @@ class MStockMarketDataService(
         if (isReconnecting.get()) {
             _connectionState.value = "RECONNECTING"
         } else {
-            _connectionState.value = "CONNECTING"
+            _connectionState.value = "WEBSOCKET_CONNECTING"
         }
         healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_MSTOCK)
 
@@ -207,6 +212,8 @@ class MStockMarketDataService(
                 isConnected.set(true)
                 isReconnecting.set(false)
                 reconnectAttempts.set(0)
+                isSubscriptionSent = false
+                isSubscriptionAck = false
 
                 safeLogD(TAG, "[MSTOCK_WS_OPEN]")
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_MSTOCK, true)
@@ -223,10 +230,12 @@ class MStockMarketDataService(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                SecurityLogger.debug(TAG, "MStock text message received: $text")
                 parseTextMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                SecurityLogger.debug(TAG, "MStock binary message received: ${bytes.hex()}")
                 parseBinaryPacket(bytes.toByteArray())
             }
 
@@ -359,18 +368,20 @@ class MStockMarketDataService(
     fun onAuthenticationSuccess() {
         if (isAuthenticated.compareAndSet(false, true)) {
             safeLogI(TAG, "[MSTOCK_AUTHENTICATED] m.Stock authentication verified!")
-            _connectionState.value = "AUTHENTICATED"
+            _connectionState.value = ProviderHealthManager.STATE_AUTHENTICATED
             healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
             MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "AUTHENTICATED")
 
-            _connectionState.value = "SUBSCRIBING"
+            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
             safeLogI(TAG, "[MSTOCK_SUBSCRIBED] Subscribed to registered tokens")
 
             resubscribeAll()
 
-            _connectionState.value = if (hasFirstTick) "LIVE" else "SUBSCRIBED"
-            healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
+            if (!isSubscriptionSent) {
+                _connectionState.value = if (hasFirstTick) ProviderHealthManager.STATE_LIVE else ProviderHealthManager.STATE_SUBSCRIBED
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
+            }
         }
     }
 
@@ -493,7 +504,7 @@ class MStockMarketDataService(
         }
 
         lastTickReceivedTime = now
-        _connectionState.value = "LIVE"
+        _connectionState.value = ProviderHealthManager.STATE_LIVE
         healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, now)
         MarketDataStore.setSourceHealth(MarketDataSourceNames.MSTOCK, "LIVE")
 
@@ -627,14 +638,19 @@ class MStockMarketDataService(
                 vArr.put(JSONArray(validIntTokens))
                 put("v", vArr)
             }
-            _connectionState.value = "SUBSCRIBING"
+            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_MSTOCK)
 
             webSocket?.send(subMsg.toString())
             webSocket?.send(modeMsg.toString())
 
+            isSubscriptionSent = true
             hasSubscription = true
-            _connectionState.value = if (hasFirstTick) "LIVE" else "SUBSCRIBED"
+            
+            _connectionState.value = "SUBSCRIPTION_SENT"
+            healthManager?.reportSubscriptionSent(ProviderHealthManager.PROVIDER_MSTOCK)
+
+            _connectionState.value = if (hasFirstTick) ProviderHealthManager.STATE_LIVE else ProviderHealthManager.STATE_WAITING_FOR_FIRST_TICK
             healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, subscribedTokens.size)
 
             safeLogD(TAG, "[MSTOCK_SUBSCRIBED] tokens=$tokens exch=$exchange mode=$mode")

@@ -878,10 +878,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
+            android.util.Log.i("DhanAuth", "[DHAN_CONSENT_CREATED] OAuth session created for Dhan")
             val consentRes = com.example.util.DhanAuthHelper.generateConsent(clientId, apiKey, clientSecret, state = randomState)
             _isAuthInProgress.value = false
             consentRes.onSuccess { url ->
-                android.util.Log.d("DhanAuth", "Generated Dhan consent URL successfully")
+                android.util.Log.i("DhanAuth", "[DHAN_BROWSER_LOGIN_STARTED] Navigating user to Dhan login...")
                 onUrlGenerated(url)
             }.onFailure { err ->
                 val msg = err.localizedMessage ?: "Failed to generate Dhan OAuth consent URL"
@@ -1206,6 +1207,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
 
         // 6. Check for cancellation or OAuth error query parameters
+        android.util.Log.i("DhanAuth", "[DHAN_CALLBACK_RECEIVED] OAuth callback received from redirect URL")
         val oauthError = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description")
         if (!oauthError.isNullOrBlank()) {
             val cleanMsg = if (oauthError.contains("cancel", ignoreCase = true) || oauthError.contains("user", ignoreCase = true) || oauthError.contains("access_denied", ignoreCase = true)) {
@@ -1222,6 +1224,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         var dhanTokenId = genericTokenId
         if (dhanTokenId.isNullOrBlank() && !genericCode.isNullOrBlank() && genericCode != "200" && genericCode != "0") {
             dhanTokenId = genericCode
+        }
+
+        if (!dhanTokenId.isNullOrBlank()) {
+            android.util.Log.i("DhanAuth", "[DHAN_TOKEN_ID_RECEIVED] Token ID extracted")
         }
 
         // Build callback fingerprint: provider + tokenId
@@ -1275,9 +1281,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
                     brokerManager.setActiveBroker("Dhan")
 
-                    android.util.Log.d("DhanAuth", "Dhan profile validation: SUCCESS")
+                    android.util.Log.i("DhanAuth", "[DHAN_PROFILE_VALIDATED] Dhan profile validation: SUCCESS")
                     sessionManager.lastCompletedDhanFingerprint = dhanFingerprint
                     sessionManager.pendingOAuthBroker = ""
+                    
+                    android.util.Log.i("DhanAuth", "[DHAN_READY] Dhan OAuth completed and ready for use")
 
                     brokerManager.brokerAuthManager.updateStatus("Dhan", "Primary Order Execution", com.example.data.network.BrokerAuthStatus.CONNECTED, "Active for Order Execution")
                     _brokerSwitchStatus.value = "✓ DHAN CONNECTED"

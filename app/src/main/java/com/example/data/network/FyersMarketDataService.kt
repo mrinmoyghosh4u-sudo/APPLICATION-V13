@@ -1,6 +1,7 @@
 package com.example.data.network
 
 import android.util.Log
+import com.example.util.SecurityLogger
 import com.example.data.model.MarketTick
 import com.example.data.model.OptionStrikeItem
 import com.example.data.model.WatchlistItem
@@ -50,6 +51,8 @@ class FyersMarketDataService(
     private var hasFirstTick = false
     private var isAuthSent = false
     private var isSubscribed = false
+    @Volatile private var isSubscriptionSent = false
+    @Volatile private var isSubscriptionAck = false
     private var lastTickReceivedTime: Long = 0L
 
     init {
@@ -61,7 +64,7 @@ class FyersMarketDataService(
         heartbeatJob = scope.launch {
             while (true) {
                 delay(5000)
-                if (isConnected && (_connectionState.value == "WEBSOCKET_LIVE" || _connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "STALE")) {
+                if (isConnected && (_connectionState.value == "WEBSOCKET_LIVE" || _connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "STALE" || _connectionState.value == "SUBSCRIPTION_SENT" || _connectionState.value == "ACKNOWLEDGED" || _connectionState.value == "WAITING_FOR_FIRST_TICK")) {
                     val marketDetail = MarketStatusUtil.getDetailedMarketStatus("NSE")
                     if (!marketDetail.isOpen) {
                         Log.d(TAG, "[FYERS_MARKET_CLOSED] Market closed. Pausing stale reconnect monitor.")
@@ -98,7 +101,7 @@ class FyersMarketDataService(
 
     fun isConnectionLive(): Boolean = isConnected && (_connectionState.value == "LIVE" || _connectionState.value == "WEBSOCKET_LIVE")
     fun hasFirstTickReceived(): Boolean = hasFirstTick
-    fun hasActiveSubscription(): Boolean = subscribedSymbols.isNotEmpty() || isConfigured()
+    fun hasActiveSubscription(): Boolean = isSubscriptionSent && isConnected
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
@@ -124,13 +127,13 @@ class FyersMarketDataService(
     @Synchronized
     private fun connectWebSocket() {
         val currentState = _connectionState.value
-        if (isConnected || currentState == "CONNECTING" || currentState == "AUTHENTICATING" || currentState == "SUBSCRIBING") {
+        if (isConnected || currentState == "WEBSOCKET_CONNECTING" || currentState == "AUTHENTICATING" || currentState == "SUBSCRIBING" || currentState == "SUBSCRIPTION_SENT") {
             Log.d(TAG, "[FYERS_WS_SKIP] WebSocket connection already active or in progress ($currentState)")
             return
         }
 
         Log.i(TAG, "[FYERS_WS_CONNECTING] Initiating single FYERS WebSocket connection...")
-        _connectionState.value = "CONNECTING"
+        _connectionState.value = "WEBSOCKET_CONNECTING"
         healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_FYERS)
 
         val token = sessionManager.fyersAccessToken
@@ -159,8 +162,10 @@ class FyersMarketDataService(
                 hasFirstTick = false
                 isAuthSent = false
                 isSubscribed = false
+                isSubscriptionSent = false
+                isSubscriptionAck = false
 
-                _connectionState.value = "CONNECTED"
+                _connectionState.value = "WEBSOCKET_CONNECTED"
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
                 Log.i(TAG, "[FYERS_WS_CONNECTED] Socket layer connected. Initiating authentication...")
 
@@ -175,7 +180,7 @@ class FyersMarketDataService(
                         val payloadBytes = android.util.Base64.decode(tokenParts[1], android.util.Base64.URL_SAFE)
                         JSONObject(String(payloadBytes)).optString("hsm_key", actualToken)
                     } else actualToken
-
+                    
                     val source = "PythonSDK-1.0.0"
 
                     // Send Auth binary packet (ReqType = 1)
@@ -205,19 +210,19 @@ class FyersMarketDataService(
 
                     webSocket.send(okio.ByteString.of(*buffer.array()))
                     isAuthSent = true
-                    _connectionState.value = "AUTHENTICATING"
+                    _connectionState.value = ProviderHealthManager.STATE_AUTHENTICATING
                     healthManager?.reportAuthenticating(ProviderHealthManager.PROVIDER_FYERS)
                     Log.i(TAG, "[FYERS_AUTHENTICATING] Sent authentication packet. Awaiting server confirmation...")
 
                 } catch (e: Exception) {
                     Log.e(TAG, "[FYERS_AUTH_FAILED] Failed to send FYERS auth packet: ${e.message}")
-                    _connectionState.value = "AUTH_ERROR"
-                    healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, e.message ?: "Auth send failed")
+                    _connectionState.value = ProviderHealthManager.STATE_ERROR
+                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.STATE_AUTH_FAILED, e.message ?: "Auth send failed")
                 }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "FYERS text message received")
+                SecurityLogger.debug(TAG, "FYERS text message received: $text")
                 if (text.trim().equals("Ping", ignoreCase = true)) {
                     webSocket.send("Pong")
                     return
@@ -226,6 +231,7 @@ class FyersMarketDataService(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                SecurityLogger.debug(TAG, "FYERS binary message received: ${bytes.hex()}")
                 handleBinaryMessage(bytes.toByteArray())
             }
 
@@ -355,7 +361,7 @@ class FyersMarketDataService(
     private fun sendSubscription() {
         if (webSocket == null || !isConnected) return
         try {
-            _connectionState.value = "SUBSCRIBING"
+            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
 
             // Send Lite mode message (ReqType = 12)
@@ -533,18 +539,18 @@ class FyersMarketDataService(
 
         if (isAuthSuccess) {
             isSubscribed = true
-            _connectionState.value = "AUTHENTICATED"
+            _connectionState.value = ProviderHealthManager.STATE_AUTHENTICATED
             healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
             Log.i(TAG, "[FYERS_AUTH_SUCCESS] FYERS server confirmed authentication response")
             Log.i(TAG, "[FYERS_AUTHENTICATED] WebSocket authenticated successfully")
 
-            _connectionState.value = "SUBSCRIBING"
+            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
             healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
             Log.i(TAG, "[FYERS_SUBSCRIBING] Requesting subscriptions...")
             sendSubscription()
         } else {
-            _connectionState.value = "AUTH_ERROR"
-            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, failureReason)
+            _connectionState.value = ProviderHealthManager.STATE_ERROR
+            healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.STATE_AUTH_FAILED, failureReason)
             Log.e(TAG, "[FYERS_AUTH_FAILED] Server rejected authentication: $failureReason")
             // DO NOT SEND SUBSCRIPTION!
         }
@@ -770,7 +776,7 @@ class FyersMarketDataService(
             com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "LIVE")
         }
         lastTickReceivedTime = now
-        _connectionState.value = "WEBSOCKET_LIVE"
+        _connectionState.value = ProviderHealthManager.STATE_LIVE
         healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
 
         val exch = detectExchange(rawSymbol)

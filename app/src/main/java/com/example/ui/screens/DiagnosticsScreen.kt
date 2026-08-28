@@ -523,6 +523,8 @@ fun BrokerDiagnosticsSection(
     val providerHealthMap by viewModel.brokerManager.healthManager.providerHealthFlow.collectAsStateWithLifecycle()
     val upstoxHealthState = providerHealthMap["Upstox"]
     val fyersHealthState = providerHealthMap["Fyers"]
+    val angelHealthState = providerHealthMap["Angel One"]
+    val mStockHealthState = providerHealthMap["m.Stock"]
 
     SectionHeader("AUTOMATIC FAILOVER ROUTER")
     Card(
@@ -556,7 +558,8 @@ fun BrokerDiagnosticsSection(
         tickAgeMs = viewModel.brokerManager.upstoxMarketDataService.getTickAgeMs(),
         health = upstoxHealth,
         sourceName = MarketDataSourceNames.UPSTOX,
-        lastError = upstoxHealthState?.lastError ?: ""
+        lastError = upstoxHealthState?.lastError ?: "",
+        subscriptionState = upstoxHealthState?.subscriptionState ?: "UNSUBSCRIBED"
     )
     
     Spacer(modifier = Modifier.height(8.dp))
@@ -577,7 +580,8 @@ fun BrokerDiagnosticsSection(
         tickAgeMs = viewModel.brokerManager.fyersMarketDataService.getTickAgeMs(),
         health = fyersHealth,
         sourceName = MarketDataSourceNames.FYERS,
-        lastError = fyersHealthState?.lastError ?: ""
+        lastError = fyersHealthState?.lastError ?: "",
+        subscriptionState = fyersHealthState?.subscriptionState ?: "UNSUBSCRIBED"
     )
     
     Spacer(modifier = Modifier.height(8.dp))
@@ -592,7 +596,8 @@ fun BrokerDiagnosticsSection(
         lastTickTime = viewModel.brokerManager.angelMarketDataService.getLastUpdatedTime(),
         tickAgeMs = viewModel.brokerManager.angelMarketDataService.getTickAgeMs(),
         health = angelHealth,
-        sourceName = MarketDataSourceNames.ANGEL_ONE
+        sourceName = MarketDataSourceNames.ANGEL_ONE,
+        subscriptionState = angelHealthState?.subscriptionState ?: "UNSUBSCRIBED"
     )
     
     Spacer(modifier = Modifier.height(8.dp))
@@ -607,7 +612,8 @@ fun BrokerDiagnosticsSection(
         lastTickTime = viewModel.brokerManager.mStockMarketDataService.getLastUpdatedTime(),
         tickAgeMs = viewModel.brokerManager.mStockMarketDataService.getTickAgeMs(),
         health = mStockHealth,
-        sourceName = MarketDataSourceNames.MSTOCK
+        sourceName = MarketDataSourceNames.MSTOCK,
+        subscriptionState = mStockHealthState?.subscriptionState ?: "UNSUBSCRIBED"
     )
 }
 
@@ -625,7 +631,8 @@ fun BrokerCard(
     tickAgeMs: Long,
     health: String,
     sourceName: String,
-    lastError: String = ""
+    lastError: String = "",
+    subscriptionState: String = "UNSUBSCRIBED"
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -648,9 +655,9 @@ fun BrokerCard(
             
             DiagnosticItem("  Requested Instruments", if (hasCredentials) "35" else "0")
             DiagnosticItem("  Resolved Instruments", if (hasCredentials) "35" else "0")
-            val isSent = if (wsState == "CONNECTED" || wsState == "SUBSCRIBED" || wsState == "LIVE") "YES" else "NO"
+            val isSent = if (subscriptionState == "SUBSCRIPTION_SENT" || subscriptionState == "ACKNOWLEDGED" || subscriptionState == "SUBSCRIBED" || wsState == "CONNECTED" || wsState == "SUBSCRIBED" || wsState == "LIVE") "YES" else "NO"
             DiagnosticItem("  Sent Subscription", isSent)
-            val isAck = if (isActiveSubscription && (wsState == "SUBSCRIBED" || wsState == "LIVE")) "YES" else "NO"
+            val isAck = if (isActiveSubscription && (subscriptionState == "ACKNOWLEDGED" || subscriptionState == "SUBSCRIBED" || wsState == "SUBSCRIBED" || wsState == "LIVE")) "YES" else "NO"
             DiagnosticItem("  Acknowledged Subscription", isAck)
             DiagnosticItem("  Real Tick Count", MarketDataStore.getBrokerTickCount(sourceName).toString())
             val isStale = if (tickAgeMs > 15000L && hasRealTick) "YES" else "NO"

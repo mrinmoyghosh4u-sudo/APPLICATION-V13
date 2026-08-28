@@ -134,7 +134,7 @@ object DhanAuthHelper {
                 throw Exception("Dhan tokenId missing for token exchange.")
             }
 
-            Log.d(TAG, "Executing Dhan token exchange")
+            Log.i(TAG, "[DHAN_TOKEN_EXCHANGE_STARTED] Executing token exchange...")
 
             val url = okhttp3.HttpUrl.Builder()
                 .scheme("https")
@@ -181,7 +181,7 @@ object DhanAuthHelper {
                     Log.e(TAG, "Dhan token exchange failed: Access token missing in response payload")
                     throw Exception("Access Token missing in Dhan response payload")
                 }
-                Log.d(TAG, "Dhan token exchange completed successfully")
+                Log.i(TAG, "[DHAN_TOKEN_EXCHANGE_SUCCESS] Token exchange completed successfully")
                 accessToken
             } else {
                 val errorJson = runCatching { JSONObject(respBody) }.getOrNull()

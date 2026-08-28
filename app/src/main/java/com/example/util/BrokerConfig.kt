@@ -25,7 +25,7 @@ object BrokerConfig {
         get() = runCatching { BuildConfig.DHAN_REDIRECT_URI }.getOrNull()
             ?.takeIf { it != "DHAN_REDIRECT_URI_DEFAULT_VALUE" && it.isNotBlank() }
             ?: System.getenv("DHAN_REDIRECT_URI")
-            ?: "kingkhan://oauth/callback"
+            ?: "https://application-beige-psi.vercel.app/oauth"
 
     val angelApiKey: String
         get() = runCatching { BuildConfig.ANGEL_ONE_API_KEY }.getOrNull()

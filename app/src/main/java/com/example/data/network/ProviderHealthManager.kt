@@ -267,6 +267,26 @@ class ProviderHealthManager {
         _providerHealthFlow.value = HashMap(healthMap)
     }
 
+    fun reportSubscriptionSent(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            subscriptionState = "SUBSCRIPTION_SENT",
+            status = "SUBSCRIPTION_SENT"
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
+    fun reportSubscriptionAcknowledged(provider: String) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = current.copy(
+            subscriptionState = "ACKNOWLEDGED",
+            status = "ACKNOWLEDGED"
+        )
+        healthMap[provider] = updated
+        _providerHealthFlow.value = HashMap(healthMap)
+    }
+
     fun reportSubscribed(provider: String, activeCount: Int = 0) {
         val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
         val newStatus = if (current.firstTickReceived) STATE_LIVE else STATE_WAITING_FOR_FIRST_TICK
