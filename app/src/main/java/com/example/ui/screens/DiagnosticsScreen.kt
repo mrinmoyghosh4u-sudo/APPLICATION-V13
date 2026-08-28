@@ -395,17 +395,12 @@ fun InstrumentResolutionSection(viewModel: MainViewModel) {
                 targets.forEachIndexed { index, (label, searchKey, defaultExch) ->
                     val cleanSym = searchKey.trim().uppercase(Locale.ENGLISH)
                     val normExch = when (cleanSym) {
-                        "SENSEX", "BANKEX", "BSE TOTAL INDEX" -> "BSE"
-                        "CRUDEOIL", "CRUDEOIL M", "MCX TOTAL INDEX" -> "MCX"
+                        "SENSEX", "BANKEX" -> "BSE"
+                        "CRUDEOIL", "CRUDEOIL M" -> "MCX"
                         else -> defaultExch.uppercase(Locale.ENGLISH)
                     }
 
-                    val canonical = when (cleanSym) {
-                        "NSE TOTAL INDEX" -> "NIFTY"
-                        "BSE TOTAL INDEX" -> "SENSEX"
-                        "MCX TOTAL INDEX" -> "CRUDEOIL"
-                        else -> cleanSym
-                    }
+                    val canonical = cleanSym
 
                     var brokerKeyOrToken = ""
                     var status = "REAL INSTRUMENT UNAVAILABLE"
