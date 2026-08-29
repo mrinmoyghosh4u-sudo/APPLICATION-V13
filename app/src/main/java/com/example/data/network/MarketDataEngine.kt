@@ -285,7 +285,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
                 val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis() - startUpstox)
-                    _unifiedFeedStatus.value = "LIVE • UPSTOX"
                     _internalActiveProvider.value = "UPSTOX"
                     updateLastTickTime()
                     return Result.success(valid)
@@ -302,7 +301,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_FYERS, System.currentTimeMillis() - startFyers)
-                    _unifiedFeedStatus.value = "REST_DATA_AVAILABLE • FYERS"
                     _internalActiveProvider.value = "FYERS"
                     updateLastTickTime()
                     return Result.success(valid)
@@ -319,7 +317,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
                 val valid = angelRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_ANGEL_ONE, System.currentTimeMillis() - startAngel)
-                    _unifiedFeedStatus.value = "LIVE • ANGEL ONE"
                     _internalActiveProvider.value = "ANGEL ONE"
                     updateLastTickTime()
                     return Result.success(valid)
@@ -336,7 +333,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
                 val valid = mStockRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     healthManager?.reportSuccessfulRequest(ProviderHealthManager.PROVIDER_MSTOCK, System.currentTimeMillis() - startMStock)
-                    _unifiedFeedStatus.value = "LIVE • m.STOCK"
                     _internalActiveProvider.value = "m.STOCK"
                     updateLastTickTime()
                     return Result.success(valid)
@@ -345,7 +341,6 @@ suspend fun getMarketBreadth(): Result<MarketBreadth> {
             healthManager?.reportError(ProviderHealthManager.PROVIDER_MSTOCK)
         }
 
-        _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
         return Result.failure(Exception("REAL MARKET DATA UNAVAILABLE"))
     }
 

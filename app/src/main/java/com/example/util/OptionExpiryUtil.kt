@@ -65,34 +65,10 @@ object OptionExpiryUtil {
             }
         }
 
-        // 3. Dynamic Fallback Generation in case liveBrokerExpiries and Instrument Master are empty
-        val symUpper = symbol.uppercase()
-        val targetDayOfWeek = when {
-            symUpper.contains("BANKNIFTY") -> Calendar.WEDNESDAY
-            symUpper.contains("SENSEX") || symUpper.contains("BANKEX") -> Calendar.FRIDAY
-            symUpper.contains("FINNIFTY") -> Calendar.TUESDAY
-            symUpper.contains("MIDCPNIFTY") -> Calendar.MONDAY
-            else -> Calendar.THURSDAY // NIFTY and default on Thursday
-        }
-
-        val fallbacks = mutableListOf<String>()
-        val cal = Calendar.getInstance(istTimeZone)
-        cal.time = activeCutoff
-
-        // Advance to the next target day of week
-        while (cal.get(Calendar.DAY_OF_WEEK) != targetDayOfWeek) {
-            cal.add(Calendar.DAY_OF_MONTH, 1)
-        }
-
-        // Generate next 4 expiries
-        for (i in 1..4) {
-            val date = cal.time
-            val isMonthly = isMonthlyExpiryDate(symbol, date)
-            fallbacks.add(formatDisplayExpiry(date, isMonthly))
-            cal.add(Calendar.DAY_OF_MONTH, 7)
-        }
-
-        return fallbacks
+        // 3. Dynamic Fallback Generation has been strictly REMOVED.
+        // Option Buyer production rule: Never generate expiry using weekday/date calculation.
+        // If official broker instrument master does not provide an expiry, we return a single indicator.
+        return listOf("UNAVAILABLE")
     }
 
     /**

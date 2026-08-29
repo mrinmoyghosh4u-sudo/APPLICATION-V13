@@ -1379,8 +1379,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             launch {
                 brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
-                    val isDhanConnected = _userProfile.value.isDhanConnected || brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-                    _marketDataSource.value = if (isDhanConnected) status else "REAL MARKET DATA UNAVAILABLE"
+                    _marketDataSource.value = status
                 }
             }
             launch {
@@ -1449,6 +1448,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             if (isValidForIndex && strikes != null) {
                 _optionStrikes.value = strikes
+            } else {
+                _optionStrikes.value = emptyList()
             }
 
             // 4. Update last updated timestamp

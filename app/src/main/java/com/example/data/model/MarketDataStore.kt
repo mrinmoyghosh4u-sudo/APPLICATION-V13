@@ -44,18 +44,25 @@ data class MarketDataState(
     val exchange: String,
     val token: String,
     val ltp: Double,
+    val bid: Double = 0.0,
+    val ask: Double = 0.0,
+    val volume: Long = 0L,
+    val oi: Double = 0.0,
+    val oiChange: Double = 0.0,
     val open: Double = 0.0,
     val high: Double = 0.0,
     val low: Double = 0.0,
     val previousClose: Double = 0.0,
     val change: Double = 0.0,
     val changePercent: Double = 0.0,
-    val volume: Long = 0L,
     val exchangeTimestamp: Long = 0L,
     val receivedTimestamp: Long = 0L,
     val state: String = "LIVE", // "LIVE", "STALE", "OFFLINE", "UNAVAILABLE", "STANDBY"
     val sequenceNumber: Long = 0L
-)
+) {
+    val tickAge: Long
+        get() = if (receivedTimestamp > 0) System.currentTimeMillis() - receivedTimestamp else Long.MAX_VALUE
+}
 
 /**
  * Central Unified Market Data Store for KING KHAN AI TRADER
