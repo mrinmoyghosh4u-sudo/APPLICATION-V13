@@ -111,6 +111,10 @@ fun DiagnosticsScreen(
                 providerState = providerState
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            AutoRecoveryLogsSection(viewModel)
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -748,5 +752,54 @@ fun DiagnosticItem(label: String, value: String) {
             else -> Color.White
         }
         Text(text = value, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+fun AutoRecoveryLogsSection(viewModel: MainViewModel) {
+    val logs by viewModel.diagnosticEngine.recoveryLogs.collectAsStateWithLifecycle()
+    
+    SectionHeader("🛠 AUTO-RECOVERY LOGS")
+    
+    if (logs.isEmpty()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = "No recovery actions recorded.",
+                color = Color.Gray,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            logs.take(10).forEach { log ->
+                AutoRecoveryLogCard(log)
+            }
+        }
+    }
+}
+
+@Composable
+fun AutoRecoveryLogCard(log: com.example.util.diagnostic.AutoRecoveryLog) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp)), color = Color.Gray, fontSize = 12.sp)
+                val statusColor = if (log.result == com.example.util.diagnostic.HealthState.RECOVERED) Color(0xFF00E676) else Color(0xFFFF5252)
+                Text(text = log.result.name, color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "${log.component}: ${log.problem}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "Action: ${log.action}", color = Color(0xFF81D4FA), fontSize = 13.sp)
+            Text(text = "Verification: ${log.verification}", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+        }
     }
 }

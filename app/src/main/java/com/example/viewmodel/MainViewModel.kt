@@ -45,6 +45,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val brokerManager = com.example.data.network.BrokerManager(sessionManager, angelOneService, dhanService, instrumentMasterService)
     val telegramService = TelegramService(sessionManager)
     private val repository = TradingRepository(TradingDatabase.getDatabase(application).tradingDao(), brokerManager)
+    val diagnosticEngine = com.example.util.diagnostic.SelfDiagnosticEngine(brokerManager)
     val alertService = com.example.util.alert.AlertService(
         context = application,
         sessionManager = sessionManager,

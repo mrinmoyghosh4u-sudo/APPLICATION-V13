@@ -50,27 +50,22 @@ object MarketIntelligenceService {
             val vixTick = findTick(marketDataMap, listOf("INDIA VIX", "INDIAVIX", "VIX"))
 
             // Base Nifty & BankNifty Reference Values
-            val niftyLtp = if ((niftyTick?.ltp ?: 0.0) > 0.0) niftyTick!!.ltp else 24820.50
-            val niftyPrevClose = if ((niftyTick?.previousClose ?: 0.0) > 0.0) niftyTick!!.previousClose else 24785.00
-            val niftyChange = if ((niftyTick?.change ?: 0.0) != 0.0) niftyTick!!.change else (niftyLtp - niftyPrevClose)
-            val niftyChangePct = if ((niftyTick?.changePercent ?: 0.0) != 0.0) niftyTick!!.changePercent else if (niftyPrevClose > 0) (niftyChange / niftyPrevClose * 100) else 0.0
+            val niftyLtp = niftyTick?.ltp ?: 0.0
+            val niftyPrevClose = niftyTick?.previousClose ?: 0.0
+            val niftyChange = niftyTick?.change ?: 0.0
+            val niftyChangePct = niftyTick?.changePercent ?: 0.0
 
-            val bankNiftyLtp = if ((bankNiftyTick?.ltp ?: 0.0) > 0.0) bankNiftyTick!!.ltp else 51450.00
-            val bankNiftyPrevClose = if ((bankNiftyTick?.previousClose ?: 0.0) > 0.0) bankNiftyTick!!.previousClose else 51320.00
+            val bankNiftyLtp = bankNiftyTick?.ltp ?: 0.0
+            val bankNiftyPrevClose = bankNiftyTick?.previousClose ?: 0.0
 
-            // 2. GIFT NIFTY (GIFT City / SGX Derived from actual benchmark futures & current index delta)
-            val giftNiftyTick = findTick(marketDataMap, listOf("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY"))
-            val giftLtp = if ((giftNiftyTick?.ltp ?: 0.0) > 0.0) {
-                giftNiftyTick!!.ltp
-            } else {
-                // Real-time estimated synthetic based on Nifty 50 close & overnight global momentum
-                val globalBiasDelta = if (niftyChange != 0.0) niftyChange * 0.45 else 48.0
-                (niftyLtp + globalBiasDelta)
-            }
-            val giftChange = giftLtp - niftyPrevClose
-            val giftChangePct = if (niftyPrevClose > 0) (giftChange / niftyPrevClose * 100) else 0.0
-            val gapPoints = giftLtp - niftyPrevClose
+            // 2. GIFT NIFTY (GIFT City / SGX)
+            val giftNiftyTick = findTick(marketDataMap, listOf("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "NSE:GIFTNIFTY", "MCX:GIFTNIFTY"))
+            val giftLtp = giftNiftyTick?.ltp ?: 0.0
+            val giftChange = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
+            val giftChangePct = if (niftyPrevClose > 0.0) (giftChange / niftyPrevClose * 100) else 0.0
+            val gapPoints = if (giftLtp > 0.0) (giftLtp - niftyPrevClose) else 0.0
             val gapStatus = when {
+                giftLtp == 0.0 -> "UNAVAILABLE"
                 gapPoints > 25.0 -> "GAP UP"
                 gapPoints < -25.0 -> "GAP DOWN"
                 else -> "FLAT"
@@ -90,10 +85,11 @@ object MarketIntelligenceService {
             )
 
             // 3. INDIA VIX
-            val vixLtp = if ((vixTick?.ltp ?: 0.0) > 0.0) vixTick!!.ltp else 14.15
-            val vixChange = if ((vixTick?.change ?: 0.0) != 0.0) vixTick!!.change else -0.32
-            val vixChangePct = if ((vixTick?.changePercent ?: 0.0) != 0.0) vixTick!!.changePercent else -2.21
+            val vixLtp = vixTick?.ltp ?: 0.0
+            val vixChange = vixTick?.change ?: 0.0
+            val vixChangePct = vixTick?.changePercent ?: 0.0
             val vixStatus = when {
+                vixLtp == 0.0 -> "UNAVAILABLE"
                 vixLtp < 13.0 -> "LOW"
                 vixLtp <= 18.0 -> "NORMAL"
                 vixLtp <= 24.0 -> "HIGH"
