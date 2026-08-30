@@ -45,6 +45,8 @@ data class ProviderHealthState(
 )
 
 class ProviderHealthManager {
+    private val _providerHealth = MutableStateFlow<Map<String, ProviderHealthState>>(emptyMap())
+    val providerHealth: StateFlow<Map<String, ProviderHealthState>> = _providerHealth.asStateFlow()
     companion object {
         const val PROVIDER_DHAN = "DHAN"
 

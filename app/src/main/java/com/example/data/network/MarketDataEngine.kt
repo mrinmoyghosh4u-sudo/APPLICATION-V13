@@ -38,6 +38,7 @@ import java.util.Locale
  */
 class MarketDataEngine(
     var fyersMarketDataService: FyersMarketDataService? = null,
+    var upstoxMarketDataService: UpstoxMarketDataService? = null,
     val angelMarketDataService: AngelOneMarketDataService,
     private val sessionManager: SessionManager,
     private val healthManager: ProviderHealthManager
@@ -104,7 +105,7 @@ class MarketDataEngine(
         // Priority 1: Fyers
         if (fyersMarketDataService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry)
+            val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry ?: "")
             if (fyersRes.isSuccess) {
                 return Result.failure(Exception("Not implemented"))
             }
@@ -112,7 +113,7 @@ class MarketDataEngine(
 
         // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry)
+        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry ?: "")
         if (angelRes.isSuccess) {
             return Result.failure(Exception("Not implemented"))
         }
@@ -131,7 +132,7 @@ class MarketDataEngine(
         // Priority 1: Fyers
         if (fyersMarketDataService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval)
+            val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval, "", "")
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return Result.failure(Exception("Not implemented"))
             }
@@ -231,10 +232,10 @@ class MarketDataEngine(
                     ltp = item.ltp,
                     change = item.change,
                     changePercent = item.changePercent,
-                    open = state?.open ?: 0.0,
-                    high = state?.high ?: 0.0,
-                    low = state?.low ?: 0.0,
-                    previousClose = state?.previousClose ?: (item.ltp - item.change),
+                    open = 0.0,
+                    high = 0.0,
+                    low = 0.0,
+                    previousClose = (item.ltp - item.change),
                     timestamp = System.currentTimeMillis(),
                     isLive = _unifiedFeedStatus.value.contains("LIVE")
                 )

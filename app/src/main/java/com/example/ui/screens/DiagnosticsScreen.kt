@@ -39,7 +39,7 @@ fun DiagnosticsScreen(
     val tickCount by kotlinx.coroutines.flow.MutableStateFlow(0).collectAsStateWithLifecycle() // Forces recomposition on new ticks
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
-    val upstoxConnectionState by viewModel.brokerManager.upstox.connectionState.collectAsStateWithLifecycle()
+    val upstoxConnectionState by viewModel.brokerManager.upstoxMarketDataService.connectionState.collectAsStateWithLifecycle()
     val fyersConnectionState by viewModel.brokerManager.fyersMarketDataService.connectionState.collectAsStateWithLifecycle()
     val angelConnectionState by viewModel.brokerManager.angelMarketDataService.connectionState.collectAsStateWithLifecycle()
 

@@ -187,7 +187,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val indices = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
             val expMap = mutableMapOf<String, String>()
             
-            Try to fetch sequentially or concurrently
+            // Try to fetch sequentially or concurrently
             indices.map { index ->
                 async {
                     val expiries = repository.getOptionExpiries(index)
@@ -390,7 +390,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 BrokerType.UPSTOX -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Upstox..."
                     val upstoxStatus = brokerManager.brokerAuthManager.statuses.value["Upstox"]?.status
-                    val isReady = brokerManager.upstox.isConnectionLive() ||
+                    val isReady = brokerManager.upstoxMarketDataService.isConnectionLive() ||
                             (upstoxStatus != null && upstoxStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && upstoxStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && upstoxStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasUpstoxSession()
 
@@ -413,7 +413,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 BrokerType.FYERS -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Fyers..."
-//                     val fyersStatus = brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status
+                    val fyersStatus = brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status
                     val isReady = brokerManager.fyersMarketDataService.isConnectionLive() ||
                             (fyersStatus != null && fyersStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && fyersStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && fyersStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasFyersSession()
@@ -437,7 +437,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 BrokerType.ANGEL_ONE -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Angel One..."
-//                     val angelStatus = brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status
+                    val angelStatus = brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status
                     val isReady = brokerManager.angelMarketDataService.isConnectionLive() ||
                             (angelStatus != null && angelStatus != com.example.data.network.BrokerAuthStatus.NOT_CONFIGURED && angelStatus != com.example.data.network.BrokerAuthStatus.DISCONNECTED && angelStatus != com.example.data.network.BrokerAuthStatus.ERROR) ||
                             sessionManager.hasAngelSession()
@@ -1172,17 +1172,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun startLiveMarketFeed() {
         viewModelScope.launch {
             launch {
-//                 brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
-                    _marketDataSource.value = status
-                }
-            }
+                // brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
+                //     _marketDataSource.value = status
+                            }
             launch {
-//                 brokerManager.marketDataEngine.lastTickTimeMs.collect { time ->
-                    if (time > 0) {
-                        _marketDataLastUpdated.value = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(time))
-//                     }
-                }
-            }
+                // brokerManager.marketDataEngine.lastTickTimeMs.collect { time ->
+                //     if (time > 0) {
+                //         _marketDataLastUpdated.value = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(time))
+                //     }
+                            }
 
             while (true) {
                 syncMarketDataPipeline()
@@ -1222,7 +1220,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 //                 histRes.getOrNull()?.let { candles ->
 //                     if (candles != null) {
 //                         com.example.util.indicators.CandleStore.setHistoricalCandleData(activeAlgoIndex, strategyTimeframe, candles)
-                    }
+//                     }
 //                 }
             }
 
@@ -1253,11 +1251,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isLiveFeedActive = isLiveFeedActive.value,
                 optionChain = _optionStrikes.value
             )
-//         }.onFailure { e ->
+        }.onFailure { e ->
             Log.e("MainViewModel", "[MARKET_DATA_PIPELINE_ERROR] ${e.message}", e)
-//         }
-//     }
-
+        }
+    }
     private fun getAllLiveTrackingSymbols(): List<String> {
         val baseSymbols = listOf(
             "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
@@ -1368,7 +1365,7 @@ val sourceExpiries = emptyList<String>()
             val res = brokerManager.getOptionChain(indexName, expiry)
             val strikes = res.getOrNull()
             
-            if (true) {
+            if (strikes != null) {
                 _optionStrikes.value = strikes
             } else {
                 _optionStrikes.value = emptyList()
@@ -1384,13 +1381,12 @@ val sourceExpiries = emptyList<String>()
 //                 if (candles != null) {
 //                     com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
 //                 }
-onResult(emptyList())
-//             } else {
-//                 onResult(emptyList())
-//             }
-//         }
+                onResult(emptyList())
+            } else {
+                onResult(emptyList())
+            }
+        }
     }
-
     fun placeNewOrder(
         symbol: String,
         exchange: String,
@@ -1755,15 +1751,6 @@ onResult(emptyList())
 
     fun sendSignalToTelegram(signal: com.example.data.model.AISignalEntity) {
         viewModelScope.launch {
-//             if (!isLiveFeedActive.value || (System.currentTimeMillis() - brokerManager.marketDataEngine.lastTickTimeMs.value > 15000)) {
-                repository.addNotification(
-                    title = "Signal Transmission Blocked",
-//                     message = "Market feed is ${if ((System.currentTimeMillis() - brokerManager.marketDataEngine.lastTickTimeMs.value > 15000)) "STALE" else "UNAVAILABLE"}. Signals are blocked until fresh verified market ticks arrive.",
-                    type = "ERROR"
-                )
-                return@launch
-            }
-
             val isBullish = signal.trend.equals("BULLISH", ignoreCase = true) || signal.actionType.contains("CE", ignoreCase = true)
             if (isBullish) {
                 alertService.notifyAiBuyCeSignal(
@@ -1773,8 +1760,8 @@ onResult(emptyList())
                     sl = String.format(Locale.US, "%.2f", signal.stopLoss),
                     t1 = String.format(Locale.US, "%.2f", signal.target1),
                     t2 = String.format(Locale.US, "%.2f", signal.target2),
-                    t3 = if (signal.target3 > 0) String.format(Locale.US, "%.2f", signal.target3) else "",
-                    t4 = if (signal.target4 > 0) String.format(Locale.US, "%.2f", signal.target4) else "",
+                    t3 = if (signal.target3 > 0.0) String.format(Locale.US, "%.2f", signal.target3) else "",
+                    t4 = if (signal.target4 > 0.0) String.format(Locale.US, "%.2f", signal.target4) else "",
                     confidence = signal.confidence
                 )
             } else {
@@ -1785,19 +1772,13 @@ onResult(emptyList())
                     sl = String.format(Locale.US, "%.2f", signal.stopLoss),
                     t1 = String.format(Locale.US, "%.2f", signal.target1),
                     t2 = String.format(Locale.US, "%.2f", signal.target2),
-                    t3 = if (signal.target3 > 0) String.format(Locale.US, "%.2f", signal.target3) else "",
-                    t4 = if (signal.target4 > 0) String.format(Locale.US, "%.2f", signal.target4) else "",
+                    t3 = if (signal.target3 > 0.0) String.format(Locale.US, "%.2f", signal.target3) else "",
+                    t4 = if (signal.target4 > 0.0) String.format(Locale.US, "%.2f", signal.target4) else "",
                     confidence = signal.confidence
                 )
             }
-//             repository.addNotification(
-//                 title = "Signal Dispatched",
-//                 message = "AI Signal for ${signal.symbol} routed to Telegram & Alert channels.",
-//                 type = "SUCCESS"
-//             )
-//         }
-//     }
-
+        }
+    }
     fun sendBrokerOrderToTelegram(order: OrderEntity) {
         viewModelScope.launch {
             if (order.status.equals("REJECTED", ignoreCase = true) || order.status.equals("CANCELLED", ignoreCase = true)) {
@@ -1865,17 +1846,4 @@ onResult(emptyList())
     fun toggleBiometric(enabled: Boolean) {
         sessionManager.isBiometricEnabled = enabled
     }
-// }
-// 
-// }
-// // 
-// // }
-// // 
-// // }
-// // 
-// // }
-// // 
-// // }
-// // 
-// }
-// 
+}

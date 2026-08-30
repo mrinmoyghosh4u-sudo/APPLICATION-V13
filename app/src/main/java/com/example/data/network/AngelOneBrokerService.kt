@@ -262,17 +262,14 @@ class AngelOneBrokerService(
 
                     if (ltpVal > 0.0 && sym.isNotBlank()) {
                         MarketDataStore.updateTick(
-                            source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
-                            symbol = sym,
-                            token = q.symbolToken ?: "",
-                            exchange = ex,
-                            ltp = ltpVal,
-                            open = q.open ?: 0.0,
-                            high = q.high ?: 0.0,
-                            low = q.low ?: 0.0,
-                            close = q.close ?: 0.0,
-                            volume = q.tradeVolume ?: 0L,
-                            receivedTimestamp = System.currentTimeMillis()
+                            com.example.data.model.RealTimePriceTick(
+                                symbol = sym,
+                                price = ltpVal,
+                                timestamp = System.currentTimeMillis(),
+                                source = com.example.data.model.MarketDataSourceNames.ANGEL_ONE,
+                                volume = q.tradeVolume ?: 0L,
+                                exchange = ex
+                            )
                         )
                     }
 

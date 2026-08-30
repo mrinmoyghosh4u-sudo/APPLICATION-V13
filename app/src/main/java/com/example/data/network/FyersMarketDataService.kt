@@ -365,7 +365,6 @@ class FyersMarketDataService(
             webSocket?.send(okio.ByteString.of(*liteData.array()))
 
             // Send Subscribe message (ReqType = 4)
-            val resolver = FyersInstrumentResolver(InstrumentMasterService.instance)
             val universe = listOf(
                 Pair("NIFTY 50", "NSE"),
                 Pair("BANKNIFTY", "NSE"),
@@ -402,8 +401,8 @@ class FyersMarketDataService(
                 Pair("TATAMOTORS", "NSE"),
                 Pair("TATASTEEL", "NSE")
             )
-            val universeSymbols = universe.mapNotNull { (sym, exch) ->
-                resolver.resolve(sym, exch)?.token
+            val universeSymbols = universe.map { (sym, exch) ->
+                FyersSymbolMapper.toFyersSymbol(sym, exch)
             }
             
             val symbolsToSub = if (subscribedSymbols.isNotEmpty()) {

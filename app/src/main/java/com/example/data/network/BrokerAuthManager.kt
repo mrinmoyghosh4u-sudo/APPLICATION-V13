@@ -37,6 +37,8 @@ class BrokerAuthManager(
     
     private val _statuses = MutableStateFlow<Map<String, BrokerConnectionState>>(emptyMap())
     val statuses: StateFlow<Map<String, BrokerConnectionState>> = _statuses.asStateFlow()
+    val providerHealth: StateFlow<Map<String, ProviderHealthState>>
+        get() = brokerManager.healthManager.providerHealth
     
     private val _isInitializing = MutableStateFlow(false)
     val isInitializing: StateFlow<Boolean> = _isInitializing.asStateFlow()
@@ -133,12 +135,12 @@ class BrokerAuthManager(
     
     suspend fun connectAngelOne(clientCode: String, pin: String, apiKey: String, totpSecret: String): Result<Boolean> {
         return try {
-            val res = AngelAuthHelper.performLoginAndExtractTokens(clientCode, pin, apiKey, totpSecret)
+            val res = AngelAuthHelper.generateSession(clientCode, pin, totpSecret, apiKey)
             if (res.isSuccess) {
                 val tokens = res.getOrThrow()
-                sessionManager.angelAuthToken = tokens.first
-                sessionManager.angelFeedToken = tokens.second
-                sessionManager.angelRefreshToken = tokens.third
+                sessionManager.angelAuthToken = tokens.jwtToken
+                sessionManager.angelFeedToken = tokens.feedToken
+                sessionManager.angelRefreshToken = tokens.refreshToken
                 sessionManager.angelApiKey = apiKey
                 sessionManager.angelClientCode = clientCode
                 sessionManager.angelClientPin = pin

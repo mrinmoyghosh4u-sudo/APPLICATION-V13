@@ -262,6 +262,39 @@ fun hasValidSession(): Boolean {
         get() = prefs.getString("angel_client_id", "") ?: ""
         set(value) = prefs.edit().putString("angel_client_id", value).apply()
 
+
+    var angelJwtToken: String
+        get() = prefs.getString(KEY_ANGEL_JWT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_JWT, value).apply()
+
+    var angelAuthToken: String
+        get() = prefs.getString(KEY_ANGEL_JWT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_JWT, value).apply()
+        
+    var angelFeedToken: String
+        get() = prefs.getString(KEY_ANGEL_FEED, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_FEED, value).apply()
+        
+    var angelRefreshToken: String
+        get() = prefs.getString(KEY_ANGEL_REFRESH, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_REFRESH, value).apply()
+
+    var angelApiKey: String
+        get() = prefs.getString(KEY_ANGEL_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_API_KEY, value).apply()
+        
+    var angelClientCode: String
+        get() = prefs.getString(KEY_ANGEL_CLIENT_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_CLIENT_ID, value).apply()
+
+    var angelClientPin: String
+        get() = prefs.getString("angel_mpin_enc", "") ?: ""
+        set(value) = prefs.edit().putString("angel_mpin_enc", value).apply()
+
+    var angelTotpSecret: String
+        get() = prefs.getString(KEY_ANGEL_TOTP_SECRET, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ANGEL_TOTP_SECRET, value).apply()
+
     var upstoxRefreshToken: String? = null
     var upstoxTokenTimestamp: Long = 0L
 

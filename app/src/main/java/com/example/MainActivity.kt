@@ -37,6 +37,17 @@ class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        val uri = intent?.data ?: return
+        viewModel.handleOAuthRedirect(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -822,7 +833,7 @@ class MainActivity : FragmentActivity() {
                                 onReconnect = { broker -> viewModel.reconnectBroker(broker) },
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
-                                onDhanLogin = { clientId -> viewModel.connectDhan(clientId) },
+                                onDhanLogin = { clientId, accessToken -> viewModel.connectDhan(clientId, accessToken) },
                                 onUpstoxLogin = { clientId, secret -> viewModel.connectUpstox(clientId, secret) },
                                 onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) }
                             )

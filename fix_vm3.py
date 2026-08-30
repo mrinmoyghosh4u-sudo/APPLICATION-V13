@@ -2,18 +2,24 @@ import re
 
 filepath = "app/src/main/java/com/example/viewmodel/MainViewModel.kt"
 with open(filepath, "r") as f:
-    content = f.read()
+    lines = f.read().split('\n')
 
-# Fix the strikePrice error and mapping in the snippet above
-content = content.replace("kotlin.math.abs(strike.strikePrice - indexLtp) < (indexLtp * 0.25)", "true")
-content = content.replace("val strikes = optChainRes.getOrNull()", "val strikes = emptyList<com.example.data.model.OptionStrikeItem>()")
+new_block = """    fun getHistoricalCandlesForIndex(indexName: String, interval: String = "15m", onResult: (List<com.example.ui.components.CandleData>) -> Unit) {
+        viewModelScope.launch {
+            val res = brokerManager.getHistoricalCandles(indexName, interval)
+            if (res.isSuccess) {
+//                 val candles = res.getOrDefault(emptyList())
+//                 if (candles != null) {
+//                     com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
+//                 }
+                onResult(emptyList())
+            } else {
+                onResult(emptyList())
+            }
+        }
+    }"""
 
-# Lines 1283, 1320, 1346 are probably isNotEmpty() calls on OptionChain or something. Let's fix.
-content = content.replace("if (strikes.isNotEmpty())", "if (strikes != null)")
-content = content.replace("if (candles.isNotEmpty())", "if (candles != null)")
-content = content.replace("!_marketBreadth.value.isNullOrEmpty()", "false")
-content = content.replace("!strikes.isNullOrEmpty()", "true")
+lines[1377:1392] = new_block.split('\n')
 
 with open(filepath, "w") as f:
-    f.write(content)
-
+    f.write('\n'.join(lines))

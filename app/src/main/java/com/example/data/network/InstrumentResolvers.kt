@@ -49,11 +49,47 @@ class UpstoxInstrumentResolver(private val instrumentMaster: InstrumentMasterSer
             exchange = normExch,
             segment = segment,
             symbol = cleanSym,
-            displayName = inst?.name ?: cleanSym,
+            displayName = cleanSym,
             instrumentType = instType,
             instrumentKey = "",
-            id = id,
+            token = mappedKey,
             lotSize = if (lotSize > 0) lotSize else 1
+        )
+    }
+}
+
+class AngelOneInstrumentResolver(private val instrumentMaster: InstrumentMasterService?) {
+    fun resolve(symbol: String, exchange: String = "NSE"): CanonicalInstrument? {
+        val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
+        val inst = instrumentMaster?.resolveIndexToken(cleanSym)
+            ?: instrumentMaster?.searchInstruments(cleanSym)?.firstOrNull()
+        if (inst == null) return null
+        return CanonicalInstrument(
+            exchange = inst.exch_seg.ifBlank { exchange },
+            segment = if (inst.instrumenttype.isNotBlank()) inst.instrumenttype else "EQ",
+            symbol = inst.symbol.ifBlank { cleanSym },
+            displayName = inst.name.ifBlank { cleanSym },
+            instrumentType = inst.instrumenttype,
+            instrumentKey = "",
+            token = inst.token,
+            lotSize = inst.lotsize.toIntOrNull() ?: 1
+        )
+    }
+}
+
+class FyersInstrumentResolver(private val instrumentMaster: InstrumentMasterService?) {
+    fun resolve(symbol: String, exchange: String = "NSE"): CanonicalInstrument? {
+        val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
+        val fyersSym = FyersSymbolMapper.toFyersSymbol(cleanSym, exchange)
+        return CanonicalInstrument(
+            exchange = exchange,
+            segment = if (cleanSym.contains("NIFTY") || cleanSym.contains("SENSEX")) "IDX" else "EQ",
+            symbol = cleanSym,
+            displayName = cleanSym,
+            instrumentType = "EQUITY",
+            instrumentKey = "",
+            token = fyersSym,
+            lotSize = 1
         )
     }
 }

@@ -79,9 +79,7 @@ class FyersAuthManager(
                     ?: throw Exception("FYERS App ID is missing")
                 val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
                     ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
-                val redirectUri = sessionManager.pendingOAuthSession?.redirectUri?.takeIf { it.isNotBlank() }
-                    ?: sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() }
-                    ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
+                val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
                 val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
 
