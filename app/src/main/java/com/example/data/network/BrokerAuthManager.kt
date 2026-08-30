@@ -75,6 +75,8 @@ class BrokerAuthManager(
     )
     val statuses: StateFlow<Map<String, BrokerConnectionState>> = _statuses.asStateFlow()
 
+    val providerHealth: StateFlow<Map<String, ProviderHealthState>> = brokerManager.healthManager.providerHealthFlow
+
     init {
         scope.launch {
             com.example.data.model.MarketDataStore.upstoxHealth.collect { health ->

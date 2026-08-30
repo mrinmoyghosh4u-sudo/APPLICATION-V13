@@ -1,11 +1,12 @@
 import re
-content = open("app/src/main/java/com/example/data/network/DhanBrokerService.kt").read()
-if "override suspend fun getHistoricalCandles" not in content:
-    func = """
-    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> {
-        return Result.success(emptyList())
-    }
-}
-"""
-    content = re.sub(r'\}\s*$', func, content)
-open("app/src/main/java/com/example/data/network/DhanBrokerService.kt", "w").write(content)
+
+with open("app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt", "r") as f:
+    content = f.read()
+
+pattern = r"Spacer\(modifier = Modifier\.height\(16\.dp\)\)\s*BrokerDiagnosticPanel\(selectedBroker, brokerStatuses\[selectedBroker\], providerHealth\[selectedBroker\], \{ onDisconnect\?\.invoke\(selectedBroker\) \}, \{ onReconnect\?\.invoke\(selectedBroker\) \}\)\s*Spacer\(modifier = Modifier\.height\(16\.dp\)\)\s*BrokerDiagnosticPanel\(selectedBroker, brokerStatuses\[selectedBroker\], providerHealth\[selectedBroker\], \{ onDisconnect\?\.invoke\(selectedBroker\) \}, \{ onReconnect\?\.invoke\(selectedBroker\) \}\)\s*Spacer\(modifier = Modifier\.height\(16\.dp\)\)"
+replacement = r"Spacer(modifier = Modifier.height(16.dp))\n                        BrokerDiagnosticPanel(selectedBroker, brokerStatuses[selectedBroker], providerHealth[selectedBroker], { onDisconnect?.invoke(selectedBroker) }, { onReconnect?.invoke(selectedBroker) })\n                        Spacer(modifier = Modifier.height(16.dp))"
+
+content = re.sub(pattern, replacement, content)
+
+with open("app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt", "w") as f:
+    f.write(content)

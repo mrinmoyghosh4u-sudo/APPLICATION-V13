@@ -99,6 +99,9 @@ class MainActivity : FragmentActivity() {
                 val isAuthInProgress by viewModel.isAuthInProgress.collectAsStateWithLifecycle()
                 val authErrorMessage by viewModel.authErrorMessage.collectAsStateWithLifecycle()
                 val authSuccessEvent by viewModel.authSuccessEvent.collectAsStateWithLifecycle()
+                
+                val topLevelBrokerStatuses by viewModel.brokerStatuses.collectAsStateWithLifecycle()
+                val topLevelProviderHealth by viewModel.brokerAuthManager.providerHealth.collectAsStateWithLifecycle()
 
                 val snackbarHostState = remember { SnackbarHostState() }
                 val coroutineScope = rememberCoroutineScope()
@@ -813,6 +816,10 @@ class MainActivity : FragmentActivity() {
                                 initialBroker = connectingBrokerName,
                                 isAuthInProgress = isAuthInProgress,
                                 errorMessage = authErrorMessage,
+                                brokerStatuses = topLevelBrokerStatuses,
+                                providerHealth = topLevelProviderHealth,
+                                onDisconnect = { broker -> viewModel.disconnectBroker(broker) },
+                                onReconnect = { broker -> viewModel.reconnectBroker(broker) },
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
                                 onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },

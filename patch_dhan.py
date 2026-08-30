@@ -1,29 +1,10 @@
 import re
 
-with open('/app/applet/app/src/main/java/com/example/data/network/DhanBrokerService.kt', 'r') as f:
+with open("app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt", "r") as f:
     content = f.read()
 
-# Add import if not present
-if "import com.example.data.model.OptionChainInstrumentMaster" not in content:
-    content = content.replace("import com.example.data.model.OptionStrikeItem", "import com.example.data.model.OptionStrikeItem\nimport com.example.data.model.OptionChainInstrumentMaster")
+content = content.replace('Text(\n                                "Dhan (Primary Order Execution)",\n                                color = TextWhite,\n                                fontSize = 15.sp,\n                                fontWeight = FontWeight.Bold\n                            )\n                        }\n                        Spacer(modifier = Modifier.height(16.dp))',
+'Text(\n                                "Dhan (Primary Order Execution)",\n                                color = TextWhite,\n                                fontSize = 15.sp,\n                                fontWeight = FontWeight.Bold\n                            )\n                        }\n                        Spacer(modifier = Modifier.height(16.dp))\n                        BrokerDiagnosticPanel(selectedBroker, brokerStatuses[selectedBroker], providerHealth[selectedBroker], { onDisconnect?.invoke(selectedBroker) }, { onReconnect?.invoke(selectedBroker) })\n                        Spacer(modifier = Modifier.height(16.dp))')
 
-pattern = r'val request = DhanOptionChainRequest\(\s*underlyingScrip = 13,\s*underlyingSeg = "IDX_I",\s*expiry = expiry\s*\)'
-
-replacement = """val instrument = OptionChainInstrumentMaster.getInstrument(symbol)
-            val scrip = instrument?.underlyingScrip ?: 13
-            val seg = instrument?.underlyingSeg ?: "IDX_I"
-            val request = DhanOptionChainRequest(
-                underlyingScrip = scrip,
-                underlyingSeg = seg,
-                expiry = expiry
-            )"""
-
-new_content = re.sub(pattern, replacement, content)
-
-if new_content != content:
-    with open('/app/applet/app/src/main/java/com/example/data/network/DhanBrokerService.kt', 'w') as f:
-        f.write(new_content)
-    print("DhanBrokerService Patched!")
-else:
-    print("DhanBrokerService Patch failed!")
-
+with open("app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt", "w") as f:
+    f.write(content)
