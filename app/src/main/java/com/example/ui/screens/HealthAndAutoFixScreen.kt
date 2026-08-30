@@ -118,7 +118,7 @@ fun HealthScoreSummary(report: List<AZDiagnosticResult>) {
     val verified = report.count { it.status == HealthState.HEALTHY }
     val warnings = report.count { it.status == HealthState.DEGRADED || it.status == HealthState.STALE }
     val errors = report.count { it.status == HealthState.AUTH_FAILED || it.status == HealthState.OFFLINE || it.status == HealthState.ORDER_BLOCKED }
-    val pending = report.count { it.status == HealthState.PENDING || it.status == HealthState.NO_TICK }
+    val pending = report.count { it.status == HealthState.OFFLINE || it.status == HealthState.NO_TICK }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -144,7 +144,7 @@ fun AZResultCard(result: AZDiagnosticResult) {
     val (icon, color) = when (result.status) {
         HealthState.HEALTHY -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
         HealthState.DEGRADED, HealthState.STALE -> Icons.Default.Warning to Color(0xFFFFC107)
-        HealthState.PENDING, HealthState.NO_TICK -> Icons.Default.Help to Color(0xFF2196F3)
+        HealthState.OFFLINE, HealthState.NO_TICK -> Icons.Default.Help to Color(0xFF2196F3)
         else -> Icons.Default.Error to Color(0xFFF44336)
     }
 
