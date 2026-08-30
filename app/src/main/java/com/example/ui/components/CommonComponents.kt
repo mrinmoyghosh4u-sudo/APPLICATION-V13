@@ -151,9 +151,12 @@ fun GoldCard(
 
 @Composable
 fun CrownLogo(size: Dp = 36.dp) {
-    Box(modifier = Modifier.size(size)) {
-        // Placeholder Crown Logo
-    }
+    Image(
+        painter = painterResource(id = R.drawable.ic_king_khan_logo),
+        contentDescription = "King Khan Logo",
+        modifier = Modifier.size(size),
+        contentScale = ContentScale.Fit
+    )
 }
 
 @Composable

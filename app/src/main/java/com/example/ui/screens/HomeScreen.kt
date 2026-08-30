@@ -406,9 +406,11 @@ private fun MarketOverviewSection(
                 
                 val watchItem = watchlist.find { it.symbol.equals(symbol, ignoreCase = true) }
 
-                val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
-                val pct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
-                val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.change ?: 0.0)
+                val tickPrice = tick?.price ?: 0.0
+                val watchLtp = watchItem?.ltp ?: 0.0
+                val ltp = if (tickPrice > 0.0) tickPrice else watchLtp
+                val pct = if (tickPrice > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
+                val change = if (tickPrice > 0.0) 0.0 else (watchItem?.change ?: 0.0)
                 val isPositive = pct >= 0
 
                 Column(
@@ -731,8 +733,10 @@ private fun AiMarketInsightsSection(
         }
     }
 
-    val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
-    val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.change ?: 0.0)
+    val tickPrice = tick?.price ?: 0.0
+    val watchLtp = watchItem?.ltp ?: 0.0
+    val ltp = if (tickPrice > 0.0) tickPrice else watchLtp
+    val change = if (tickPrice > 0.0) 0.0 else (watchItem?.change ?: 0.0)
     val hasPrice = ltp > 0.0
     val isBullish = change >= 0
 

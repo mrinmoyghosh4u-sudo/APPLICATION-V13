@@ -215,9 +215,10 @@ fun MarketScreen(
                 onAddRecentSearch = onAddRecentSearch,
                 onOpenChart = { item ->
                     val tick = marketDataMap[item.symbol]
-                    val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else item.price
-                    val change = 0.0 ?: 0.0
-                    val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else item.changePct
+                    val tickPrice = tick?.price ?: 0.0
+                    val ltp = if (tickPrice > 0.0) tickPrice else item.price
+                    val change = 0.0
+                    val changePct = if (tickPrice > 0.0) 0.0 else item.changePct
                     chartDialogInstrument = ChartDialogData(item.symbol, item.exchange, ltp, change, changePct, item.lotSize)
                 }
             )
@@ -540,8 +541,10 @@ private fun SearchResultsCard(
                         val tick = marketDataMap[item.symbol]
                             ?: marketDataMap.values.find { it.symbol.equals(item.symbol, ignoreCase = true) }
                         val watchItem = watchlist.find { it.symbol.equals(item.symbol, ignoreCase = true) }
-                        val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
-                        val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
+                        val tickPrice = tick?.price ?: 0.0
+                        val watchLtp = watchItem?.ltp ?: 0.0
+                        val ltp = if (tickPrice > 0.0) tickPrice else watchLtp
+                        val changePct = if (tickPrice > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
                         val hasPrice = ltp > 0.0
                         val isPositive = changePct >= 0
                         val isFav = watchlist.any { it.symbol.equals(item.symbol, ignoreCase = true) }
@@ -755,9 +758,11 @@ private fun ExchangeIndicesSection(
                             ?: marketDataMap.values.find { it.symbol.equals(item.name, ignoreCase = true) }
                         val watchItem = watchlist.find { it.symbol.equals(item.name, ignoreCase = true) }
                         
-                        val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.ltp else item.price
-                        val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.change else item.change
-                        val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.changePercent else item.changePct
+                        val tickPrice = tick?.price ?: 0.0
+                        val watchLtp = watchItem?.ltp ?: 0.0
+                        val ltp = if (tickPrice > 0.0) tickPrice else if (watchLtp > 0.0) watchLtp else item.price
+                        val change = if (tickPrice > 0.0) 0.0 else if (watchLtp > 0.0) (watchItem?.change ?: 0.0) else item.change
+                        val changePct = if (tickPrice > 0.0) 0.0 else if (watchLtp > 0.0) (watchItem?.changePercent ?: 0.0) else item.changePct
 
                         IndexGridCard(
                             name = item.name,

@@ -103,9 +103,10 @@ class MarketDataEngine(
     // =========================================================================
     suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<OptionChain> {
         // Priority 1: Fyers
-        if (fyersMarketDataService?.isConfigured() == true) {
+        val fyersService = fyersMarketDataService
+        if (fyersService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getOptionChain(symbol, expiry ?: "")
+            val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
             if (fyersRes.isSuccess) {
                 return Result.failure(Exception("Not implemented"))
             }
@@ -130,9 +131,10 @@ class MarketDataEngine(
     // =========================================================================
     suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
         // Priority 1: Fyers
-        if (fyersMarketDataService?.isConfigured() == true) {
+        val fyersService = fyersMarketDataService
+        if (fyersService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getHistoricalCandles(symbol, interval, "", "")
+            val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return Result.failure(Exception("Not implemented"))
             }
@@ -186,9 +188,10 @@ class MarketDataEngine(
         if (symbols.isEmpty()) return Result.success(emptyList())
     
         // Priority 1: Fyers
-        if (fyersMarketDataService?.isConfigured() == true) {
+        val fyersService = fyersMarketDataService
+        if (fyersService?.isConfigured() == true) {
             val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersMarketDataService!!.getMarketQuotes(symbols)
+            val fyersRes = fyersService.getMarketQuotes(symbols)
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {

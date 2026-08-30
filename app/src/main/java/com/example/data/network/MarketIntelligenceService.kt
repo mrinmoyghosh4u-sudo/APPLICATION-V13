@@ -140,10 +140,12 @@ object MarketIntelligenceService {
                 preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus))
             }
             if ((finNiftyTick?.price ?: 0.0) > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyTick!!.price, finNiftyTick.price, gapPoints * 0.9, vixStatus))
+                val finPrice = finNiftyTick?.price ?: 0.0
+                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finPrice, finPrice, gapPoints * 0.9, vixStatus))
             }
             if ((sensexTick?.price ?: 0.0) > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexTick!!.price, sensexTick.price, gapPoints * 3.1, vixStatus))
+                val sensexPrice = sensexTick?.price ?: 0.0
+                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexPrice, sensexPrice, gapPoints * 3.1, vixStatus))
             }
 
             // 7. AI OPTION BUYER VIEWS
@@ -161,8 +163,9 @@ object MarketIntelligenceService {
                 aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues))
             }
             if ((crudeTick?.price ?: 0.0) > 0.0) {
-                val crudeGap = if ((crudeTick?.price ?: 0.0) >= 0) "GAP UP" else "GAP DOWN"
-                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeTick!!.price, vixStatus, globalCues))
+                val crudePrice = crudeTick?.price ?: 0.0
+                val crudeGap = if (crudePrice >= 0) "GAP UP" else "GAP DOWN"
+                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudePrice, vixStatus, globalCues))
             }
 
             // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT

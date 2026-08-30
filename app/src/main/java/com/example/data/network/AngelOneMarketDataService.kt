@@ -56,8 +56,9 @@ class AngelOneMarketDataService(
         scope.launch {
             launch {
                 instrumentMaster.isLoadedFlow.collect { loaded ->
-                    if (loaded && webSocket != null && (_connectionState.value == "CONNECTED" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "LIVE")) {
-                        resubscribeAll(webSocket!!)
+                    val ws = webSocket
+                    if (loaded && ws != null && (_connectionState.value == "CONNECTED" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "LIVE")) {
+                        resubscribeAll(ws)
                     }
                 }
             }
