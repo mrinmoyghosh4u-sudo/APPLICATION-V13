@@ -85,6 +85,10 @@ class UpstoxMarketDataService(
             while (true) {
                 delay(5000L)
                 if (isConnected && hasFirstTick && (_connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED")) {
+                    val marketDetail = com.example.util.MarketStatusUtil.getDetailedMarketStatus("NSE")
+                    if (!marketDetail.isOpen) {
+                        continue
+                    }
                     val age = getTickAgeMs()
                     if (age > 0L) {
                         if (age > STALE_THRESHOLD_MS) {
@@ -419,7 +423,9 @@ class UpstoxMarketDataService(
                             Log.w(TAG, "[UPSTOX_WS_CLOSED] Upstox WebSocket closed (code=$code, reason=$reason)")
                             healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
                             com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.UPSTOX, "OFFLINE")
-                            scheduleReconnect()
+                            if (code != 1000 && code != 1008 && code != 1001) {
+                                scheduleReconnect()
+                            }
                         }
 
                         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {

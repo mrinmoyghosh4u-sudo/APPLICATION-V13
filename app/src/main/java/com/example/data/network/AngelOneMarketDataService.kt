@@ -156,7 +156,9 @@ class AngelOneMarketDataService(
                 hasFirstTick = false
                 com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.ANGEL_ONE, "OFFLINE")
                 Log.d("SmartStream", "WebSocket Closed: $reason")
-                scheduleReconnect()
+                if (code != 1000 && code != 1008 && code != 1001) {
+                    scheduleReconnect()
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

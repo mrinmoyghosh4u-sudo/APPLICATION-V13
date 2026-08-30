@@ -18,7 +18,6 @@ import kotlin.math.roundToInt
 
 object MarketIntelligenceService {
     private const val TAG = "MarketIntelligence"
-
     private val _intelligenceState = MutableStateFlow(PreMarketIntelligenceState())
     val intelligenceState: StateFlow<PreMarketIntelligenceState> = _intelligenceState.asStateFlow()
 
@@ -64,6 +63,7 @@ object MarketIntelligenceService {
             val giftChange = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
             val giftChangePct = if (niftyPrevClose > 0.0) (giftChange / niftyPrevClose * 100) else 0.0
             val gapPoints = if (giftLtp > 0.0) (giftLtp - niftyPrevClose) else 0.0
+            
             val gapStatus = when {
                 giftLtp == 0.0 -> "UNAVAILABLE"
                 gapPoints > 25.0 -> "GAP UP"
@@ -81,23 +81,25 @@ object MarketIntelligenceService {
                 gapPoints = gapPoints,
                 source = if (giftNiftyTick != null && giftNiftyTick.ltp > 0) "GIFT City Official Feed" else "NSE IX / Implied Benchmark",
                 timestamp = nowStr,
-                isLive = true
+                isLive = giftLtp > 0.0
             )
 
             // 3. INDIA VIX
             val vixLtp = vixTick?.ltp ?: 0.0
             val vixChange = vixTick?.change ?: 0.0
             val vixChangePct = vixTick?.changePercent ?: 0.0
+
             val vixStatus = when {
                 vixLtp == 0.0 -> "UNAVAILABLE"
-                vixLtp < 13.0 -> "LOW"
-                vixLtp <= 18.0 -> "NORMAL"
-                vixLtp <= 24.0 -> "HIGH"
+                vixLtp < 12.0 -> "LOW"
+                vixLtp in 12.0..18.0 -> "NORMAL"
+                vixLtp in 18.0..25.0 -> "HIGH"
                 else -> "EXTREME"
             }
             val vixAdvice = when (vixStatus) {
-                "LOW" -> "Low IV environment: Premium decay is fast. Prefer quick momentum scalps or waiting for clear breakout confirmations."
-                "NORMAL" -> "Optimal volatility for Option Buyers: Balanced theta decay and clean directional moves on breakouts."
+                "UNAVAILABLE" -> "Data Unavailable."
+                "LOW" -> "Low premium decay risk. Suitable for breakout buying."
+                "NORMAL" -> "Balanced option pricing. Standard sizing applicable."
                 "HIGH" -> "High premium momentum: Strong directional expansions. Expect wider swings; strictly enforce stoplosses."
                 else -> "Extreme volatility: Huge swings & wide bid-ask spreads. Reduce lot size and strictly avoid holding overnight positions."
             }
@@ -108,67 +110,60 @@ object MarketIntelligenceService {
                 changePercent = vixChangePct,
                 status = vixStatus,
                 optionBuyerAdvice = vixAdvice,
-                isLive = true
+                isLive = vixLtp > 0.0
             )
 
             // 4. GLOBAL MARKET CUES
-            val globalCues = listOf(
-                GlobalCueItem("NASDAQ", "US", 18285.40, 142.20, 0.78, "BULLISH"),
-                GlobalCueItem("S&P 500", "US", 5648.75, 24.10, 0.43, "BULLISH"),
-                GlobalCueItem("DOW JONES", "US", 41240.50, 65.80, 0.16, "BULLISH"),
-                GlobalCueItem("NIKKEI 225", "ASIA", 38360.00, 210.50, 0.55, "BULLISH"),
-                GlobalCueItem("HANG SENG", "ASIA", 17720.30, -85.40, -0.48, "BEARISH"),
-                GlobalCueItem("SHANGHAI", "ASIA", 2855.10, -5.20, -0.18, "NEUTRAL"),
-                GlobalCueItem("USD/INR", "FOREX", 83.92, -0.04, -0.05, "BULLISH"),
-                GlobalCueItem("BRENT CRUDE", "COMMODITY", 78.45, 0.85, 1.10, "BULLISH"),
-                GlobalCueItem(
-                    "MCX CRUDE",
-                    "COMMODITY",
-                    if ((crudeTick?.ltp ?: 0.0) > 0.0) crudeTick!!.ltp else 6580.0,
-                    if ((crudeTick?.change ?: 0.0) != 0.0) crudeTick!!.change else 62.0,
-                    if ((crudeTick?.changePercent ?: 0.0) != 0.0) crudeTick!!.changePercent else 0.95,
-                    if ((crudeTick?.change ?: 0.0) >= 0) "BULLISH" else "BEARISH"
-                ),
-                GlobalCueItem(
-                    "MCX GOLD",
-                    "COMMODITY",
-                    if ((goldTick?.ltp ?: 0.0) > 0.0) goldTick!!.ltp else 71850.0,
-                    if ((goldTick?.change ?: 0.0) != 0.0) goldTick!!.change else 180.0,
-                    if ((goldTick?.changePercent ?: 0.0) != 0.0) goldTick!!.changePercent else 0.25,
-                    "BULLISH"
-                )
-            )
+            val globalCues = emptyList<GlobalCueItem>()
 
             // 5. FII / DII INSTITUTIONAL CASH FLOW
             val fiiDiiData = FiiDiiFlowData(
-                fiiBuy = 12480.65,
-                fiiSell = 11120.40,
-                fiiNet = 1360.25,
-                diiBuy = 9840.20,
-                diiSell = 7650.00,
-                diiNet = 2190.20,
-                totalNet = 3550.45,
-                institutionalBias = "BULLISH ACCUMULATION",
-                dateFormatted = "Latest NSE Cash Disclosures",
-                source = "NSE / BSE Daily Institutional Wire"
+                fiiBuy = 0.0,
+                fiiSell = 0.0,
+                fiiNet = 0.0,
+                diiBuy = 0.0,
+                diiSell = 0.0,
+                diiNet = 0.0,
+                totalNet = 0.0,
+                institutionalBias = "DATA UNAVAILABLE",
+                dateFormatted = "Awaiting live data",
+                source = "DATA UNAVAILABLE"
             )
 
             // 6. PRE-MARKET LEVELS & S/R CALCULATION (NIFTY 50, BANKNIFTY, FINNIFTY, SENSEX)
-            val preMarketLevels = listOf(
-                calculateIndexLevels("NIFTY 50", niftyLtp, niftyPrevClose, gapPoints, vixStatus),
-                calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus),
-                calculateIndexLevels("FINNIFTY", if ((finNiftyTick?.ltp ?: 0.0) > 0.0) finNiftyTick!!.ltp else 23150.0, 23080.0, gapPoints * 0.9, vixStatus),
-                calculateIndexLevels("SENSEX", if ((sensexTick?.ltp ?: 0.0) > 0.0) sensexTick!!.ltp else 81350.0, 81180.0, gapPoints * 3.1, vixStatus)
-            )
+            val preMarketLevels = mutableListOf<PreMarketIndexLevels>()
+            
+            if (niftyLtp > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("NIFTY 50", niftyLtp, niftyPrevClose, gapPoints, vixStatus))
+            }
+            if (bankNiftyLtp > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus))
+            }
+            if ((finNiftyTick?.ltp ?: 0.0) > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyTick!!.ltp, finNiftyTick.previousClose, gapPoints * 0.9, vixStatus))
+            }
+            if ((sensexTick?.ltp ?: 0.0) > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexTick!!.ltp, sensexTick.previousClose, gapPoints * 3.1, vixStatus))
+            }
 
             // 7. AI OPTION BUYER VIEWS
-            val aiSignals = listOf(
-                generateAiOptionBuyerSignal("NIFTY 50", gapStatus, gapPoints, vixStatus, globalCues),
-                generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus, globalCues),
-                generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus, globalCues),
-                generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues),
-                generateAiOptionBuyerSignal("CRUDEOIL", if ((crudeTick?.change ?: 0.0) >= 0) "GAP UP" else "GAP DOWN", crudeTick?.change ?: 45.0, vixStatus, globalCues)
-            )
+            val aiSignals = mutableListOf<AiPreMarketOptionBuyerSignal>()
+            if (niftyLtp > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("NIFTY 50", gapStatus, gapPoints, vixStatus, globalCues))
+            }
+            if (bankNiftyLtp > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus, globalCues))
+            }
+            if ((finNiftyTick?.ltp ?: 0.0) > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus, globalCues))
+            }
+            if ((sensexTick?.ltp ?: 0.0) > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues))
+            }
+            if ((crudeTick?.ltp ?: 0.0) > 0.0) {
+                val crudeGap = if ((crudeTick?.change ?: 0.0) >= 0) "GAP UP" else "GAP DOWN"
+                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeTick!!.change, vixStatus, globalCues))
+            }
 
             // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT
             val articles = buildMarketNewsFeed(niftyLtp, bankNiftyLtp)
@@ -192,6 +187,7 @@ object MarketIntelligenceService {
                 error = null,
                 lastUpdatedTime = nowStr
             )
+
         } catch (e: Exception) {
             Log.e(TAG, "Error compiling market intelligence", e)
             _intelligenceState.value = _intelligenceState.value.copy(
@@ -219,7 +215,6 @@ object MarketIntelligenceService {
         val timeInMinutes = hour * 60 + minute
 
         val isWeekday = dayOfWeek in Calendar.MONDAY..Calendar.FRIDAY
-
         val preMarketStart = 9 * 60 // 09:00 AM
         val normalMarketStart = 9 * 60 + 15 // 09:15 AM
         val normalMarketClose = 15 * 60 + 30 // 03:30 PM
@@ -258,6 +253,7 @@ object MarketIntelligenceService {
         val high = refPrice * 1.0065
         val low = refPrice * 0.9935
         val pivot = (high + low + refPrice) / 3.0
+
         val r1 = (2 * pivot) - low
         val s1 = (2 * pivot) - high
         val r2 = pivot + (high - low)
@@ -298,10 +294,9 @@ object MarketIntelligenceService {
         vixStatus: String,
         cues: List<GlobalCueItem>
     ): AiPreMarketOptionBuyerSignal {
-        val usSentimentBullish = cues.filter { it.region == "US" }.all { it.sentiment == "BULLISH" }
-        val isBullish = gapStatus == "GAP UP" && usSentimentBullish
-
+        val isBullish = gapStatus == "GAP UP"
         val preMarketBias = if (isBullish) "BULLISH" else if (gapStatus == "GAP DOWN") "BEARISH" else "NEUTRAL"
+        
         val optionBuyerBias = when (preMarketBias) {
             "BULLISH" -> "CE WATCH"
             "BEARISH" -> "PE WATCH"
@@ -313,13 +308,13 @@ object MarketIntelligenceService {
             preMarketBias == "BULLISH" -> 76
             preMarketBias == "BEARISH" && vixStatus == "HIGH" -> 84
             preMarketBias == "BEARISH" -> 74
-            else -> 65
+            else -> 60
         }
 
-        val reason = when (optionBuyerBias) {
-            "CE WATCH" -> "Positive global momentum + supportive GIFT NIFTY gap (+${String.format("%.0f", abs(gapPoints))} pts) with strong DII cash accumulation favoring bullish call option setups on opening dip defenses."
-            "PE WATCH" -> "Weak global cues and negative opening gap (${String.format("%.0f", gapPoints)} pts) signaling immediate overhead supply at resistance levels; watch for put buying on failure to sustain initial rebounds."
-            else -> "Mixed international market signals and flat opening gap. High risk of choppy morning consolidation; wait for opening 15-minute range breakout with volume confirmation."
+        val reason = when {
+            isBullish -> "Positive opening gap (${String.format("%.0f", gapPoints)} pts) signaling early momentum. Watch for CE buying opportunities on initial 15-minute consolidation breakout above resistance."
+            gapStatus == "GAP DOWN" -> "Negative opening gap (${String.format("%.0f", gapPoints)} pts) signaling immediate overhead supply at resistance levels; watch for put buying on failure to sustain initial rebounds."
+            else -> "Flat opening gap. High risk of choppy morning consolidation; wait for opening 15-minute range breakout with volume confirmation."
         }
 
         return AiPreMarketOptionBuyerSignal(
@@ -332,127 +327,6 @@ object MarketIntelligenceService {
     }
 
     private fun buildMarketNewsFeed(niftyLtp: Double, bankNiftyLtp: Double): List<OptionBuyerNewsArticle> {
-        return listOf(
-            OptionBuyerNewsArticle(
-                id = "news_1",
-                headline = "RBI MPC Meeting Update: Repo Rate Held Steady at 6.50%, Growth Stance Optimistic",
-                source = "Reserve Bank of India (RBI Bulletin)",
-                publishedTime = "15m ago",
-                summary = "The Monetary Policy Committee unanimously decided to keep the policy repo rate unchanged while projecting steady FY25 GDP growth at 7.2%. Liquidity conditions remain supportive for banking counters.",
-                category = "RBI / INDIA",
-                isBreaking = true,
-                affectedMarket = "BANKNIFTY",
-                impact = "BULLISH",
-                impactStrength = "HIGH",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 86,
-                impactReason = "Banking and NBFC index heavyweights (HDFCBANK, ICICIBANK, SBIN) likely to see strong opening buying traction. Favorable for BANKNIFTY ATM CE momentum."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_2",
-                headline = "US Federal Reserve Signals Measured Rate Cut Trajectory Following Benign Inflation Data",
-                source = "Dow Jones / US FOMC Wire",
-                publishedTime = "35m ago",
-                summary = "US Fed officials confirmed that cooler core inflation and steady employment metrics provide confidence for gradual monetary easing, driving US Nasdaq and S&P 500 benchmarks higher.",
-                category = "GLOBAL",
-                isBreaking = true,
-                affectedMarket = "NIFTY 50",
-                impact = "BULLISH",
-                impactStrength = "HIGH",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 82,
-                impactReason = "Global risk-on sentiment supports tech and large-cap inflows. Positive GIFT NIFTY tailwind supports opening momentum in NIFTY 50."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_3",
-                headline = "FII & DII Cash Market Activity: Institutional Inflow Accelerates to ₹3,550 Cr Net",
-                source = "NSE Daily Institutional Feed",
-                publishedTime = "1h ago",
-                summary = "Domestic institutional investors (DIIs) purchased ₹2,190 Cr in cash while FIIs turned net buyers with ₹1,360 Cr across frontline index components.",
-                category = "FII / DII",
-                isBreaking = false,
-                affectedMarket = "NIFTY 50",
-                impact = "BULLISH",
-                impactStrength = "MEDIUM",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 78,
-                impactReason = "Dual institutional buying provides strong underlying price floor at Key Support S1 (₹${(niftyLtp * 0.994).toInt()}). Low probability of deep intraday sell-offs."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_4",
-                headline = "Crude Oil Surges Above \$78.50 on Middle East Supply Concerns & OPEC+ Quota Discipline",
-                source = "MCX Energy / Reuters Commodity",
-                publishedTime = "1h 20m ago",
-                summary = "Brent and WTI crude contracts surged over 1.2% as geopolitical transit risk premiums rose and OPEC+ members reaffirmed commitment to existing production quotas.",
-                category = "CRUDEOIL",
-                isBreaking = true,
-                affectedMarket = "CRUDEOIL",
-                impact = "BULLISH",
-                impactStrength = "HIGH",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 88,
-                impactReason = "MCX Crude Oil contracts exhibit clear bullish momentum with rising open interest. Favorable setup for MCX Crude CE buying on intraday pullbacks."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_5",
-                headline = "India VIX Cools Down to 14.15; Volatility Index Signals Stable Option Pricing Regime",
-                source = "NSE Derivatives Bulletin",
-                publishedTime = "2h ago",
-                summary = "India VIX retreated by 2.2% indicating minimal systemic anxiety. Option implied volatilities stabilized across near-month weekly and monthly contracts.",
-                category = "VOLATILITY",
-                isBreaking = false,
-                affectedMarket = "NIFTY 50",
-                impact = "NEUTRAL",
-                impactStrength = "MEDIUM",
-                optionBuyerBias = "WAIT",
-                confidencePercent = 75,
-                impactReason = "Low IV prevents excessive option premium decay on sideways movements. Option buyers must focus on volume breakouts rather than chasing extended candles."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_6",
-                headline = "Nifty IT Index Recovers Key Moving Averages on Robust Cloud & AI Deal Wins",
-                source = "BSE Corporate Announcements",
-                publishedTime = "2h 45m ago",
-                summary = "Frontline IT majors (TCS, Infosys, Wipro) reported sequential expansion in North American deal pipelines and multi-year generative AI implementations.",
-                category = "NIFTY 50",
-                isBreaking = false,
-                affectedMarket = "NIFTY 50",
-                impact = "BULLISH",
-                impactStrength = "MEDIUM",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 79,
-                impactReason = "IT sector strength provides critical index weightage support to NIFTY 50, limiting downside risks during intraday consolidations."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_7",
-                headline = "Auto Sector Dispatches Surge 14% YoY Led by Premium Utility Vehicles & EV Segments",
-                source = "SIAM Industry Release",
-                publishedTime = "3h 15m ago",
-                summary = "Society of Indian Automobile Manufacturers noted resilient demand in passenger vehicles and commercial fleet additions entering the festive quarter.",
-                category = "STOCK NEWS",
-                isBreaking = false,
-                affectedMarket = "NIFTY 50",
-                impact = "BULLISH",
-                impactStrength = "MEDIUM",
-                optionBuyerBias = "CE WATCH",
-                confidencePercent = 76,
-                impactReason = "M&M, Tata Motors, and Maruti see positive institutional sentiment, bolstering broader market breadth."
-            ),
-            OptionBuyerNewsArticle(
-                id = "news_8",
-                headline = "Asian Markets Mixed as Hang Seng Consolidates; Nikkei Rallies 210 Points on Tech Strength",
-                source = "Tokyo Stock Exchange / Global Desk",
-                publishedTime = "4h ago",
-                summary = "Japan's Nikkei 225 advanced on semiconductor export strength while Hong Kong markets faced minor profit booking ahead of upcoming China industrial production prints.",
-                category = "GLOBAL",
-                isBreaking = false,
-                affectedMarket = "NIFTY 50",
-                impact = "NEUTRAL",
-                impactStrength = "LOW",
-                optionBuyerBias = "WAIT",
-                confidencePercent = 70,
-                impactReason = "Mixed Asian cues suggest waiting for initial 15-minute price action before committing to aggressive directional positions."
-            )
-        )
+        return emptyList()
     }
 }

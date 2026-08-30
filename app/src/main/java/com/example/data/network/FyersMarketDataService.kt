@@ -243,7 +243,9 @@ class FyersMarketDataService(
                 healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
                 com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
                 Log.i(TAG, "[FYERS_DISCONNECTED] Socket closed ($code: $reason)")
-                scheduleReconnect()
+                if (code != 1000 && code != 1008 && code != 1001) {
+                    scheduleReconnect()
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
