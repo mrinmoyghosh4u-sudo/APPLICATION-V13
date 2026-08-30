@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -63,6 +64,7 @@ fun ProfileScreen(
     onToggleBiometric: (Boolean) -> Unit,
     onNavigateToTelegramSettings: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToHealthAutoFix: () -> Unit = {},
     onOpenNotificationCenter: () -> Unit = {},
     onLogout: () -> Unit,
     isRefreshing: Boolean = false,
@@ -877,29 +879,22 @@ fun ProfileScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
-                            icon = Icons.Default.Fingerprint,
-                            title = "BIOMETRIC & PIN LOCK",
-                            subtitle = "Secure local access",
-                            onClick = { showSecurityDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                        SettingMenuGridCard(
                             icon = Icons.Default.VolumeUp,
                             title = "SOUND & NOTIFICATIONS",
                             subtitle = "Push and sound alerts",
                             onClick = { showNotifPrefDialog = true },
                             modifier = Modifier.weight(1f)
                         )
+                        SettingMenuGridCard(
+                            icon = Icons.Default.MedicalServices,
+                            title = "HEALTH & AUTO-FIX",
+                            subtitle = "Run A-Z Check & Repair",
+                            onClick = onNavigateToHealthAutoFix,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingMenuGridCard(
-                            icon = Icons.Default.Assessment,
-                            title = "PERFORMANCE REPORT",
-                            subtitle = "P&L analytics & win rate",
-                            onClick = { showReportDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
                         SettingMenuGridCard(
                             icon = Icons.Default.Speed,
                             title = "LIVE DIAGNOSTICS",
@@ -907,9 +902,6 @@ fun ProfileScreen(
                             onClick = onNavigateToDiagnostics,
                             modifier = Modifier.weight(1f)
                         )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
                             icon = Icons.Default.CleaningServices,
                             title = "CLEAR APP CACHE",
@@ -917,21 +909,14 @@ fun ProfileScreen(
                             onClick = { showClearCacheConfirmDialog = true },
                             modifier = Modifier.weight(1f)
                         )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingMenuGridCard(
                             icon = Icons.Default.Gavel,
                             title = "TERMS & DISCLAIMER",
                             subtitle = "SEBI risk compliance",
                             onClick = { showTermsDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingMenuGridCard(
-                            icon = Icons.Default.SystemUpdate,
-                            title = "CHECK FOR UPDATES",
-                            subtitle = "Latest stable version",
-                            onClick = { showUpdateDialog = true },
                             modifier = Modifier.weight(1f)
                         )
                         SettingMenuGridCard(

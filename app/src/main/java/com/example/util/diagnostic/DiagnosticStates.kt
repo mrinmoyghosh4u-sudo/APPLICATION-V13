@@ -42,6 +42,28 @@ data class AutoRecoveryLog(
     val result: HealthState
 )
 
+enum class DiagnosticCategory {
+    SYSTEM,
+    UI_NAVIGATION,
+    BROKER,
+    MARKET_DATA,
+    OPTION_CHAIN,
+    AI_SIGNAL,
+    ORDER_ENGINE,
+    NEWS,
+    PREMARKET,
+    SECURITY,
+    PERFORMANCE
+}
+
+data class AZDiagnosticResult(
+    val category: DiagnosticCategory,
+    val name: String,
+    val status: HealthState,
+    val message: String,
+    val details: Map<String, String> = emptyMap()
+)
+
 data class ComponentHealth(
     val name: String,
     val status: HealthState,

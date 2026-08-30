@@ -605,6 +605,7 @@ class MainActivity : FragmentActivity() {
                                                 onToggleBiometric = { enabled -> viewModel.toggleBiometric(enabled) },
                                                 onRemoveAccountBroker = { broker -> viewModel.removeAccountBroker(broker) },
                                                 onNavigateToTelegramSettings = { navController.navigate("telegram_settings") },
+                                                onNavigateToHealthAutoFix = { navController.navigate("health_autofix") },
                                                 onNavigateToDiagnostics = { navController.navigate("diagnostics") },
                                                 onOpenNotificationCenter = { showNotificationCenter = true },
                                                 onLogout = {
@@ -646,6 +647,13 @@ class MainActivity : FragmentActivity() {
                                     navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                 }
                             }
+                            composable("health_autofix") {
+                                HealthAndAutoFixScreen(
+                                    viewModel = viewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+
                             composable("profile") {
                                 LaunchedEffect(Unit) {
                                     pagerState.scrollToPage(5)
