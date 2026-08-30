@@ -168,3 +168,14 @@ data class InstrumentIdentity(
             }
         }
 }
+
+
+data class MarketDataProviderState(
+    val provider: String = "UNKNOWN",
+    val status: String = "DISCONNECTED",
+    val live: Boolean = false,
+    val stale: Boolean = false,
+    val error: String? = null,
+    val lastUpdate: Long = 0L,
+    val ping: Long = 0L
+)

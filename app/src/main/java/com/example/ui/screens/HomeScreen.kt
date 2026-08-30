@@ -62,7 +62,7 @@ fun HomeScreen(
     var isPortfolioVisible by rememberSaveable { mutableStateOf(true) }
     var showMarketNewsDialog by remember { mutableStateOf(false) }
 
-    val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
+    val marketDataMap by MarketDataStore.ticks.collectAsStateWithLifecycle()
 
     val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")
     val bseStatus = MarketStatusUtil.getDetailedMarketStatus("BSE")
@@ -309,7 +309,7 @@ private fun MarketStatusBarSection(
 // ==========================================
 @Composable
 private fun MarketOverviewSection(
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    marketDataMap: Map<String, com.example.data.model.RealTimePriceTick>,
     watchlist: List<WatchlistItem>,
     onNavigateToIndexDetails: (String, String) -> Unit,
     onNavigateToMarket: () -> Unit
@@ -406,9 +406,9 @@ private fun MarketOverviewSection(
                 
                 val watchItem = watchlist.find { it.symbol.equals(symbol, ignoreCase = true) }
 
-                val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
-                val pct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else (watchItem?.changePercent ?: 0.0)
-                val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else (watchItem?.change ?: 0.0)
+                val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
+                val pct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
+                val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.change ?: 0.0)
                 val isPositive = pct >= 0
 
                 Column(
@@ -711,7 +711,7 @@ private fun QuickActionButton(
 // ==========================================
 @Composable
 private fun AiMarketInsightsSection(
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    marketDataMap: Map<String, com.example.data.model.RealTimePriceTick>,
     watchlist: List<WatchlistItem>,
     viewModel: MainViewModel? = null,
     onNavigateToAISignals: () -> Unit
@@ -731,8 +731,8 @@ private fun AiMarketInsightsSection(
         }
     }
 
-    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
-    val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else (watchItem?.change ?: 0.0)
+    val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
+    val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.change ?: 0.0)
     val hasPrice = ltp > 0.0
     val isBullish = change >= 0
 

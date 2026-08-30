@@ -1,46 +1,65 @@
-import os
+import re
 
-filepath = "/app/applet/app/src/main/java/com/example/ui/screens/MarketScreen.kt"
-with open(filepath, "r") as f:
-    content = f.read()
+def clean_trailing(path):
+    with open(path, "r") as f:
+        content = f.read()
+    if content.count('{') > content.count('}'):
+        content += "\n}\n"
+    elif content.count('{') < content.count('}'):
+        content = content[:content.rfind('}')]
+    with open(path, "w") as f:
+        f.write(content)
 
-# First, let's remove the broken `data class MarketMoverCardData` that was injected
-content = content.replace("""data class MarketMoverCardData(
-    val symbol: String,
-    val exchange: String,
-    val price: Double,
-    val changePct: Double,
-    val lotSize: Int,
-    val expiry: String = "",
-    val volume: Long = 0L,
-    val oiChangePct: Double = 0.0
-)""", "")
 
-# Find where the broken function signature is:
-# We know `val results = mutableListOf<SearchInstrumentItem>()` is the start of the body.
-# Let's add the signature right before it.
-sig = """
-private fun searchInstruments(query: String, pool: List<SearchInstrumentItem>): List<SearchInstrumentItem> {
-    val q = query.trim().uppercase()
-    if (q.isBlank()) return emptyList()
-    val tokens = q.split(" ").filter { it.isNotBlank() }
-"""
+def fix_main_activity():
+    path = "app/src/main/java/com/example/MainActivity.kt"
+    with open(path, "r") as f:
+        content = f.read()
+    
+    # MainActivity line 824 issue
+    content = re.sub(r'onFyersLogin = \{ app, secret, codeOrToken -> viewModel\.connectFyers\(app, secret, codeOrToken\) \},\s*\n\s*\)', 'onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) }\n)', content)
+    with open(path, "w") as f:
+        f.write(content)
 
-content = content.replace("    val results = mutableListOf<SearchInstrumentItem>()", sig + "    val results = mutableListOf<SearchInstrumentItem>()")
+def fix_market_data_store():
+    path = "app/src/main/java/com/example/data/model/MarketDataStore.kt"
+    with open(path, "r") as f:
+        content = f.read()
+    content = re.sub(r'const val.*?=\s*\n', '', content)
+    with open(path, "w") as f:
+        f.write(content)
 
-content += """
-data class MarketMoverCardData(
-    val symbol: String,
-    val exchange: String,
-    val price: Double,
-    val changePct: Double,
-    val lotSize: Int,
-    val expiry: String = "",
-    val volume: Long = 0L,
-    val oiChangePct: Double = 0.0
-)
-"""
+def fix_broker_manager():
+    path = "app/src/main/java/com/example/data/network/BrokerManager.kt"
+    with open(path, "r") as f:
+        content = f.read()
+    if content.count('{') > content.count('}'):
+        content += "\n}\n"
+    with open(path, "w") as f:
+        f.write(content)
 
-with open(filepath, "w") as f:
-    f.write(content)
+def fix_market_data_engine():
+    path = "app/src/main/java/com/example/data/network/MarketDataEngine.kt"
+    with open(path, "r") as f:
+        content = f.read()
+    content = re.sub(r'val angelMarketDataService: AngelOneMarketDataService\? = null,\n\)', 'val angelMarketDataService: AngelOneMarketDataService? = null\n)', content)
+    with open(path, "w") as f:
+        f.write(content)
 
+def fix_broker_connect_dialog():
+    path = "app/src/main/java/com/example/ui/components/BrokerConnectDialog.kt"
+    with open(path, "r") as f:
+        content = f.read()
+    content = re.sub(r'onAngelLogin: \(\(String, String, String, String\) -> Unit\)\? = null,\n\)', 'onAngelLogin: ((String, String, String, String) -> Unit)? = null\n)', content)
+    with open(path, "w") as f:
+        f.write(content)
+
+
+fix_main_activity()
+fix_market_data_store()
+fix_broker_manager()
+fix_market_data_engine()
+fix_broker_connect_dialog()
+clean_trailing("app/src/main/java/com/example/data/network/ProviderHealthManager.kt")
+clean_trailing("app/src/main/java/com/example/ui/components/CommonComponents.kt")
+print("Syntax fixed 2.")

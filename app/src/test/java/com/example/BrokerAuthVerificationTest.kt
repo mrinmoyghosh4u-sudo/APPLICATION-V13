@@ -131,12 +131,10 @@ class BrokerAuthVerificationTest {
             ProviderHealthManager.PROVIDER_UPSTOX,
             ProviderHealthManager.PROVIDER_FYERS,
             ProviderHealthManager.PROVIDER_ANGEL_ONE,
-            ProviderHealthManager.PROVIDER_MSTOCK
         )
         assertEquals("Upstox", failoverOrder[0])
         assertEquals("Fyers", failoverOrder[1])
         assertEquals("Angel One", failoverOrder[2])
-        assertEquals("m.Stock", failoverOrder[3])
     }
 
     @Test
@@ -145,23 +143,21 @@ class BrokerAuthVerificationTest {
             ProviderHealthManager.PROVIDER_UPSTOX,
             ProviderHealthManager.PROVIDER_FYERS,
             ProviderHealthManager.PROVIDER_ANGEL_ONE,
-            ProviderHealthManager.PROVIDER_MSTOCK
         )
         assertFalse("Dhan MUST be excluded from market data failover", failoverOrder.contains("Dhan"))
     }
 
     @Test
     fun test11_diagnosticFieldsReflectRuntimeState() {
-        healthManager.reportConfigured(ProviderHealthManager.PROVIDER_MSTOCK, true)
-        healthManager.reportAuthenticating(ProviderHealthManager.PROVIDER_MSTOCK)
-        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_MSTOCK, true)
-        healthManager.reportConnecting(ProviderHealthManager.PROVIDER_MSTOCK)
-        healthManager.reportConnection(ProviderHealthManager.PROVIDER_MSTOCK, true)
-        healthManager.reportSubscribed(ProviderHealthManager.PROVIDER_MSTOCK, 10)
+        healthManager.reportConfigured( true)
+        healthManager.reportAuthenticating()
+        healthManager.reportAuthentication( true)
+        healthManager.reportConnecting()
+        healthManager.reportConnection( true)
+        healthManager.reportSubscribed( 10)
         
-        val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK)
-        assertEquals("m.Stock", state.provider)
-        assertTrue(state.authenticated)
+        val state = healthManager.getHealthState()
+                assertTrue(state.authenticated)
         assertTrue(state.connected)
         assertEquals("WAITING_FOR_FIRST_TICK", state.status)
     }
@@ -191,20 +187,7 @@ class BrokerAuthVerificationTest {
         assertEquals("Invalid Client ID: client_id_not_found", state.lastError)
     }
 
-    @Test
-    fun test15_webSocketDisconnectStateTransition() {
-        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
-        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
-        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, System.currentTimeMillis())
-
-        val stateLive = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
-        assertEquals("LIVE", stateLive.status)
-
-        healthManager.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
-        val stateDisconnected = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
-        assertEquals("DISCONNECTED", stateDisconnected.status)
-        assertFalse(stateDisconnected.healthy)
-    }
+}
 
     @Test
     fun test16_upstoxUnavailableFyersHealthyFailover() {

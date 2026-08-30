@@ -74,7 +74,6 @@ class FyersMarketDataService(
                     if (age > 15000L && _connectionState.value != "STALE" && hasFirstTick) {
                         Log.w(TAG, "[FYERS_STALE] No market ticks received for over 15s (age: ${age}ms)")
                         _connectionState.value = "STALE"
-                        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "STALE")
                     }
                     if (age > 30000L && _connectionState.value == "STALE") {
                         Log.e(TAG, "[FYERS_STALE_TIMEOUT] Market data stale for >30s during open market. Triggering automatic reconnect.")
@@ -114,7 +113,6 @@ class FyersMarketDataService(
     suspend fun connect() {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
-            healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, false)
             Log.e(TAG, "[FYERS_AUTH_FAILED] Cannot connect: FYERS credentials missing")
             return
         }
@@ -134,13 +132,11 @@ class FyersMarketDataService(
 
         Log.i(TAG, "[FYERS_WS_CONNECTING] Initiating single FYERS WebSocket connection...")
         _connectionState.value = "WEBSOCKET_CONNECTING"
-        healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_FYERS)
 
         val token = sessionManager.fyersAccessToken
 
         if (token.isNullOrBlank()) {
             _connectionState.value = "AUTH_FAILED"
-            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, false, "Missing credentials")
             return
         }
 
@@ -166,7 +162,6 @@ class FyersMarketDataService(
                 isSubscriptionAck = false
 
                 _connectionState.value = "WEBSOCKET_CONNECTED"
-                healthManager?.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
                 Log.i(TAG, "[FYERS_WS_CONNECTED] Socket layer connected. Initiating authentication...")
 
                 try {
@@ -210,14 +205,10 @@ class FyersMarketDataService(
 
                     webSocket.send(okio.ByteString.of(*buffer.array()))
                     isAuthSent = true
-                    _connectionState.value = ProviderHealthManager.STATE_AUTHENTICATING
-                    healthManager?.reportAuthenticating(ProviderHealthManager.PROVIDER_FYERS)
                     Log.i(TAG, "[FYERS_AUTHENTICATING] Sent authentication packet. Awaiting server confirmation...")
 
                 } catch (e: Exception) {
                     Log.e(TAG, "[FYERS_AUTH_FAILED] Failed to send FYERS auth packet: ${e.message}")
-                    _connectionState.value = ProviderHealthManager.STATE_ERROR
-                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.STATE_AUTH_FAILED, e.message ?: "Auth send failed")
                 }
             }
 
@@ -240,8 +231,6 @@ class FyersMarketDataService(
                 isSubscribed = false
                 isAuthSent = false
                 _connectionState.value = "DISCONNECTED"
-                healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_FYERS)
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
                 Log.i(TAG, "[FYERS_DISCONNECTED] Socket closed ($code: $reason)")
                 if (code != 1000 && code != 1008 && code != 1001) {
                     scheduleReconnect()
@@ -253,8 +242,6 @@ class FyersMarketDataService(
                 isSubscribed = false
                 isAuthSent = false
                 _connectionState.value = "ERROR"
-                healthManager?.reportError(ProviderHealthManager.PROVIDER_FYERS, t.message ?: "WebSocket failure")
-                com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "ERROR")
                 Log.e(TAG, "[FYERS_ERROR] Socket failure: ${t.message}")
                 scheduleReconnect()
             }
@@ -284,7 +271,6 @@ class FyersMarketDataService(
         isSubscribed = false
         isAuthSent = false
         _connectionState.value = "DISCONNECTED"
-        com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "OFFLINE")
         subscribedSymbols.clear()
         Log.i(TAG, "[FYERS_DISCONNECTED] Disconnected cleanly")
     }
@@ -302,7 +288,6 @@ class FyersMarketDataService(
         if (isConnected && isSubscribed && webSocket != null) {
             sendSubscription()
         }
-        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
     }
 
     fun unsubscribeSymbols(symbols: List<String>) {
@@ -320,7 +305,6 @@ class FyersMarketDataService(
                 Log.e(TAG, "Error sending FYERS unsubscribe: ${e.message}")
             }
         }
-        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
     }
 
     suspend fun unsubscribeMarketData(symbols: List<String>) {
@@ -346,7 +330,6 @@ class FyersMarketDataService(
                 val json = JSONObject(text)
                 if (json.optString("s") == "ok" && _connectionState.value == "SUBSCRIBING") {
                     _connectionState.value = "SUBSCRIBED"
-                    healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
                     Log.i(TAG, "[FYERS_SUB_CONFIRMED] FYERS server confirmed subscription ACK")
                     Log.i(TAG, "[FYERS_SUBSCRIBED] Subscription active")
                 }
@@ -363,8 +346,6 @@ class FyersMarketDataService(
     private fun sendSubscription() {
         if (webSocket == null || !isConnected) return
         try {
-            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
-            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
 
             // Send Lite mode message (ReqType = 12)
             val liteData = ByteBuffer.allocate(19)
@@ -465,7 +446,6 @@ class FyersMarketDataService(
             webSocket?.send(okio.ByteString.of(*subBytes))
             isSubscriptionSent = true
             _connectionState.value = "SUBSCRIPTION_SENT"
-            healthManager?.reportSubscriptionSent(ProviderHealthManager.PROVIDER_FYERS)
             Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send FYERS subscription: ${e.message}")
@@ -487,10 +467,8 @@ class FyersMarketDataService(
             when (respType) {
                 6 -> {
                     isSubscriptionAck = true
-                    healthManager?.reportSubscriptionAcknowledged(ProviderHealthManager.PROVIDER_FYERS)
                     if (_connectionState.value == "SUBSCRIBING" || _connectionState.value == "SUBSCRIPTION_SENT") {
                         _connectionState.value = "SUBSCRIBED"
-                        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
                         Log.i(TAG, "[FYERS_SUB_CONFIRMED] FYERS Topic Init confirmed by server")
                         Log.i(TAG, "[FYERS_SUBSCRIBED] Subscription confirmed")
                     }
@@ -546,18 +524,12 @@ class FyersMarketDataService(
 
         if (isAuthSuccess) {
             isSubscribed = true
-            _connectionState.value = ProviderHealthManager.STATE_AUTHENTICATED
-            healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
             Log.i(TAG, "[FYERS_AUTH_SUCCESS] FYERS server confirmed authentication response")
             Log.i(TAG, "[FYERS_AUTHENTICATED] WebSocket authenticated successfully")
 
-            _connectionState.value = ProviderHealthManager.STATE_SUBSCRIBING
-            healthManager?.reportSubscribing(ProviderHealthManager.PROVIDER_FYERS)
             Log.i(TAG, "[FYERS_SUBSCRIBING] Requesting subscriptions...")
             sendSubscription()
         } else {
-            _connectionState.value = ProviderHealthManager.STATE_ERROR
-            healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_FYERS, ProviderHealthManager.STATE_AUTH_FAILED, failureReason)
             Log.e(TAG, "[FYERS_AUTH_FAILED] Server rejected authentication: $failureReason")
             // DO NOT SEND SUBSCRIPTION!
         }
@@ -780,11 +752,8 @@ class FyersMarketDataService(
         if (!hasFirstTick) {
             Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received: $rawSymbol = $ltp")
             hasFirstTick = true
-            com.example.data.model.MarketDataStore.setSourceHealth(com.example.data.model.MarketDataSourceNames.FYERS, "LIVE")
         }
         lastTickReceivedTime = now
-        _connectionState.value = ProviderHealthManager.STATE_LIVE
-        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, now)
 
         val exch = detectExchange(rawSymbol)
         val standardSym = FyersSymbolMapper.fromFyersSymbol(rawSymbol)

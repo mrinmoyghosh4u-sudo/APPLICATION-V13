@@ -26,7 +26,7 @@ object MarketIntelligenceService {
     }
 
     suspend fun refreshIntelligence(
-        marketDataMap: Map<String, MarketDataState> = emptyMap(),
+        marketDataMap: Map<String, RealTimePriceTick> = emptyMap(),
         forceReload: Boolean = false
     ) = withContext(Dispatchers.IO) {
         try {
@@ -49,17 +49,17 @@ object MarketIntelligenceService {
             val vixTick = findTick(marketDataMap, listOf("INDIA VIX", "INDIAVIX", "VIX"))
 
             // Base Nifty & BankNifty Reference Values
-            val niftyLtp = niftyTick?.ltp ?: 0.0
-            val niftyPrevClose = niftyTick?.previousClose ?: 0.0
-            val niftyChange = niftyTick?.change ?: 0.0
-            val niftyChangePct = niftyTick?.changePercent ?: 0.0
+            val niftyLtp = niftyTick?.price ?: 0.0
+            val niftyPrevClose = niftyTick?.price ?: 0.0
+            val niftyChange = niftyTick?.price ?: 0.0
+            val niftyChangePct = niftyTick?.price ?: 0.0
 
-            val bankNiftyLtp = bankNiftyTick?.ltp ?: 0.0
-            val bankNiftyPrevClose = bankNiftyTick?.previousClose ?: 0.0
+            val bankNiftyLtp = bankNiftyTick?.price ?: 0.0
+            val bankNiftyPrevClose = bankNiftyTick?.price ?: 0.0
 
             // 2. GIFT NIFTY (GIFT City / SGX)
             val giftNiftyTick = findTick(marketDataMap, listOf("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "NSE:GIFTNIFTY", "MCX:GIFTNIFTY"))
-            val giftLtp = giftNiftyTick?.ltp ?: 0.0
+            val giftLtp = giftNiftyTick?.price ?: 0.0
             val giftChange = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
             val giftChangePct = if (niftyPrevClose > 0.0) (giftChange / niftyPrevClose * 100) else 0.0
             val gapPoints = if (giftLtp > 0.0) (giftLtp - niftyPrevClose) else 0.0
@@ -79,15 +79,15 @@ object MarketIntelligenceService {
                 impliedNiftyOpen = niftyPrevClose + gapPoints,
                 gapStatus = gapStatus,
                 gapPoints = gapPoints,
-                source = if (giftNiftyTick != null && giftNiftyTick.ltp > 0) "GIFT City Official Feed" else "NSE IX / Implied Benchmark",
+                source = if (giftNiftyTick != null && giftNiftyTick.price > 0) "GIFT City Official Feed" else "NSE IX / Implied Benchmark",
                 timestamp = nowStr,
                 isLive = giftLtp > 0.0
             )
 
             // 3. INDIA VIX
-            val vixLtp = vixTick?.ltp ?: 0.0
-            val vixChange = vixTick?.change ?: 0.0
-            val vixChangePct = vixTick?.changePercent ?: 0.0
+            val vixLtp = vixTick?.price ?: 0.0
+            val vixChange = vixTick?.price ?: 0.0
+            val vixChangePct = vixTick?.price ?: 0.0
 
             val vixStatus = when {
                 vixLtp == 0.0 -> "UNAVAILABLE"
@@ -139,11 +139,11 @@ object MarketIntelligenceService {
             if (bankNiftyLtp > 0.0) {
                 preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus))
             }
-            if ((finNiftyTick?.ltp ?: 0.0) > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyTick!!.ltp, finNiftyTick.previousClose, gapPoints * 0.9, vixStatus))
+            if ((finNiftyTick?.price ?: 0.0) > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyTick!!.price, finNiftyTick.price, gapPoints * 0.9, vixStatus))
             }
-            if ((sensexTick?.ltp ?: 0.0) > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexTick!!.ltp, sensexTick.previousClose, gapPoints * 3.1, vixStatus))
+            if ((sensexTick?.price ?: 0.0) > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexTick!!.price, sensexTick.price, gapPoints * 3.1, vixStatus))
             }
 
             // 7. AI OPTION BUYER VIEWS
@@ -154,15 +154,15 @@ object MarketIntelligenceService {
             if (bankNiftyLtp > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus, globalCues))
             }
-            if ((finNiftyTick?.ltp ?: 0.0) > 0.0) {
+            if ((finNiftyTick?.price ?: 0.0) > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus, globalCues))
             }
-            if ((sensexTick?.ltp ?: 0.0) > 0.0) {
+            if ((sensexTick?.price ?: 0.0) > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues))
             }
-            if ((crudeTick?.ltp ?: 0.0) > 0.0) {
-                val crudeGap = if ((crudeTick?.change ?: 0.0) >= 0) "GAP UP" else "GAP DOWN"
-                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeTick!!.change, vixStatus, globalCues))
+            if ((crudeTick?.price ?: 0.0) > 0.0) {
+                val crudeGap = if ((crudeTick?.price ?: 0.0) >= 0) "GAP UP" else "GAP DOWN"
+                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeTick!!.price, vixStatus, globalCues))
             }
 
             // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT
@@ -198,7 +198,7 @@ object MarketIntelligenceService {
         }
     }
 
-    private fun findTick(map: Map<String, MarketDataState>, candidates: List<String>): MarketDataState? {
+    private fun findTick(map: Map<String, RealTimePriceTick>, candidates: List<String>): RealTimePriceTick? {
         for (c in candidates) {
             map[c]?.let { return it }
             val match = map.values.find { it.symbol.equals(c, ignoreCase = true) || it.symbol.contains(c, ignoreCase = true) }

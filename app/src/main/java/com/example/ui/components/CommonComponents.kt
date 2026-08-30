@@ -110,296 +110,53 @@ fun LiveStatusBadge(
         dataSource.contains("UPSTOX", ignoreCase = true) -> "UPSTOX"
         dataSource.contains("FYERS", ignoreCase = true) -> "FYERS"
         dataSource.contains("ANGEL", ignoreCase = true) -> "ANGEL ONE"
-        dataSource.contains("M.STOCK", ignoreCase = true) || dataSource.contains("MSTOCK", ignoreCase = true) -> "m.STOCK"
-        else -> ""
+        else -> dataSource
     }
-    val isStale = dataSource.contains("STALE", ignoreCase = true)
-    val badgeText = when {
-        isLive && cleanSource.isNotBlank() -> "LIVE • $cleanSource"
-        isLive -> "LIVE"
-        isStale -> "STALE DATA"
-        dataSource.contains("CONNECTING", ignoreCase = true) -> "CONNECTING"
-        else -> "REAL MARKET DATA UNAVAILABLE"
-    }
-    val activeColor = when {
-        isLive -> ProfitGreen
-        isStale -> SecondaryGold
-        else -> TextGray
-    }
-
-    Surface(
-        onClick = { onClick?.invoke() },
-        enabled = onClick != null,
-        shape = RoundedCornerShape(16.dp),
-        color = if (isLive) activeColor.copy(alpha = 0.15f) else DarkCardSecondary,
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = if (isLive) activeColor.copy(alpha = 0.6f) else DarkCardBorder
-        ),
+    val badgeColor = if (isLive) ProfitGreen else Color.Gray
+    val badgeText = if (isLive) "LIVE $cleanSource" else "OFFLINE"
+    Row(
         modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(badgeColor.copy(alpha = 0.2f))
+            .border(1.dp, badgeColor, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(
-                        color = activeColor,
-                        shape = CircleShape
-                    )
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = badgeText,
-                color = activeColor,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.5.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun CrownLogo(
-    modifier: Modifier = Modifier,
-    size: Dp = 32.dp
-) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(GoldGlow.copy(alpha = 0.5f), Color.Transparent)
-                ),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_king_khan_logo),
-            contentDescription = "King Khan AI Trade Logo",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize()
-        )
+        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(badgeColor))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text = badgeText, color = badgeColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun GoldCard(
     modifier: Modifier = Modifier,
-    borderColor: Color = DarkCardBorder,
-    borderWidth: Dp = 1.dp,
-    shape: RoundedCornerShape = RoundedCornerShape(12.dp),
-    backgroundColor: Color = DarkCard,
-    content: @Composable ColumnScope.() -> Unit
+    borderColor: Color = PrimaryGold,
+    backgroundColor: Color = Color(0xFF1E1E1E),
+    content: @Composable () -> Unit
 ) {
-    Surface(
+    Card(
         modifier = modifier
             .fillMaxWidth()
-            .border(borderWidth, borderColor, shape)
-            .clip(shape),
-        color = backgroundColor,
-        shape = shape
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
-        ) {
+        Box(modifier = Modifier.padding(16.dp)) {
             content()
         }
     }
 }
 
 @Composable
-fun GoldButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    trailingIcon: @Composable (() -> Unit)? = null
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = PrimaryGold),
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = PrimaryGold,
-            contentColor = Color.Black
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = text,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
-            if (trailingIcon != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                trailingIcon()
-            }
-        }
+fun CrownLogo(size: Dp = 36.dp) {
+    Box(modifier = Modifier.size(size)) {
+        // Placeholder Crown Logo
     }
 }
 
 @Composable
-fun SparklineChart(
-    isPositive: Boolean,
-    modifier: Modifier = Modifier.size(width = 60.dp, height = 24.dp)
-) {
-    val color = if (isPositive) ProfitGreen else LossRed
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val points = if (isPositive) {
-            listOf(0.8f, 0.7f, 0.75f, 0.5f, 0.6f, 0.3f, 0.1f)
-        } else {
-            listOf(0.2f, 0.3f, 0.25f, 0.5f, 0.4f, 0.7f, 0.9f)
-        }
-
-        val path = Path()
-        points.forEachIndexed { index, yRatio ->
-            val x = (index.toFloat() / (points.size - 1)) * w
-            val y = yRatio * h
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = 2.dp.toPx())
-        )
-    }
-}
-
-@Composable
-fun DonutChart(
-    equity: Float = 72.35f,
-    derivatives: Float = 18.42f,
-    commodity: Float = 7.85f,
-    cash: Float = 1.38f,
-    modifier: Modifier = Modifier.size(130.dp)
-) {
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 22.dp.toPx()
-            val diameter = size.minDimension - strokeWidth
-            val topLeft = Offset((size.width - diameter) / 2, (size.height - diameter) / 2)
-            val arcSize = Size(diameter, diameter)
-
-            var startAngle = -90f
-
-            // Equity (Gold/Yellow)
-            val equityAngle = (equity / 100f) * 360f
-            drawArc(
-                color = SecondaryGold,
-                startAngle = startAngle,
-                sweepAngle = equityAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-            startAngle += equityAngle
-
-            // Derivatives (Green)
-            val derivAngle = (derivatives / 100f) * 360f
-            drawArc(
-                color = ProfitGreen,
-                startAngle = startAngle,
-                sweepAngle = derivAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-            startAngle += derivAngle
-
-            // Commodity (Blue)
-            val commAngle = (commodity / 100f) * 360f
-            drawArc(
-                color = Color(0xFF29B6F6),
-                startAngle = startAngle,
-                sweepAngle = commAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-            startAngle += commAngle
-
-            // Cash (Purple)
-            val cashAngle = (cash / 100f) * 360f
-            drawArc(
-                color = Color(0xFFAB47BC),
-                startAngle = startAngle,
-                sweepAngle = cashAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("TOTAL", fontSize = 10.sp, color = TextGray)
-            Text("₹2.48L", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-        }
-    }
-}
-
-@Composable
-fun CircularGauge(
-    percentage: Int = 87,
-    modifier: Modifier = Modifier.size(72.dp)
-) {
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 6.dp.toPx()
-            val diameter = size.minDimension - strokeWidth
-            val topLeft = Offset((size.width - diameter) / 2, (size.height - diameter) / 2)
-            val arcSize = Size(diameter, diameter)
-
-            // Background arc
-            drawArc(
-                color = DarkCardBorder,
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-
-            // Active green arc
-            val sweep = (percentage / 100f) * 360f
-            drawArc(
-                color = ProfitGreen,
-                startAngle = -90f,
-                sweepAngle = sweep,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(strokeWidth)
-            )
-        }
-
-        Text(
-            text = "$percentage%",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = ProfitGreen
-        )
-    }
+fun SparklineChart(isPositive: Boolean, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.background(if (isPositive) ProfitGreen.copy(alpha = 0.2f) else LossRed.copy(alpha = 0.2f)))
 }

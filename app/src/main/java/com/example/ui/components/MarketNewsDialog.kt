@@ -52,7 +52,7 @@ fun MarketNewsDialog(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
+    val marketDataMap by MarketDataStore.ticks.collectAsStateWithLifecycle()
     val intelligenceState by MarketIntelligenceService.intelligenceState.collectAsStateWithLifecycle()
 
     var selectedCategory by remember { mutableStateOf("ALL") }

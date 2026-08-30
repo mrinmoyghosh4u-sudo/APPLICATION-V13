@@ -1,13 +1,11 @@
-import os
-
-filepath = "app/src/main/java/com/example/ui/components/CommonComponents.kt"
-with open(filepath, 'r') as f:
-    lines = f.readlines()
-
-for i, line in enumerate(lines):
-    if "isDhanConnected" in line and "ProfitGreen else TextGray" in line:
-        if i != 127 and i != 134: # 127 is background, 134 is text color in DhanLiveStatusBadge
-            lines[i] = line.replace("if (isDhanConnected) ProfitGreen else TextGray", "ProfitGreen")
-
-with open(filepath, 'w') as f:
-    f.writelines(lines)
+import re
+import glob
+for file in glob.glob("app/src/main/java/com/example/ui/**/*.kt", recursive=True):
+    try:
+        with open(file, "r") as f:
+            content = f.read()
+        content = content.replace("DarkCardBackground", "androidx.compose.ui.graphics.Color(0xFF1E1E1E)")
+        with open(file, "w") as f:
+            f.write(content)
+    except Exception:
+        pass

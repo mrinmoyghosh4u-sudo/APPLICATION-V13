@@ -1,28 +1,23 @@
 import re
 
-with open("app/src/main/java/com/example/data/network/FyersMarketDataService.kt", "r") as f:
+filepath = "app/src/main/java/com/example/data/network/SessionManager.kt"
+with open(filepath, "r") as f:
     content = f.read()
 
-# Remove restPollingJob and its calls
-content = re.sub(r'private var restPollingJob: Job\? = null', '', content)
-content = re.sub(r'startRestPolling\(\)', '', content)
-content = re.sub(r'private fun startRestPolling\(\) \{.*?(?=\n    private fun connectWebSocket)', '', content, flags=re.DOTALL)
+content = content[:content.rfind("}")] + """
+    var lastProcessedOAuthCode: String? = null
+    var lastProcessedOAuthTime: Long = 0L
+    var fyersRefreshToken: String? = null
+    var fyersTokenTimestamp: Long = 0L
+    var fyersPin: String? = null
 
-# Fix connect()
-new_connect = """    suspend fun connect() {
-        if (!isConfigured()) {
-            _connectionState.value = "NOT_CONFIGURED"
-            healthManager?.reportConfigured(ProviderHealthManager.PROVIDER_FYERS, false)
-            Log.e(TAG, "[FYERS_AUTH_FAILED] Cannot connect: Fyers credentials missing")
-            return
-        }
-        _connectionState.value = "CONNECTING"
-        reconnectJob?.cancel()
-        backoffDelayMs = 2000L
-        connectWebSocket()
-    }"""
-content = re.sub(r'suspend fun connect\(\) \{.*?(?=\n    private fun connectWebSocket)', new_connect, content, flags=re.DOTALL)
-
-with open("app/src/main/java/com/example/data/network/FyersMarketDataService.kt", "w") as f:
+    fun clearFyersSession() {
+        fyersAccessToken = null
+        fyersRefreshToken = null
+        isFyersConnected = false
+        fyersTokenTimestamp = 0L
+    }
+""" + "}"
+with open(filepath, "w") as f:
     f.write(content)
 

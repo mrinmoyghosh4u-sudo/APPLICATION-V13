@@ -1192,7 +1192,7 @@ private fun EmptySignalsCard(
 
             Text(
                 text = if (!isLiveFeedActive) {
-                    "AI option signals are strictly gated by verified market data ticks. Waiting for active feed from FYERS (Primary), ANGEL ONE (Fallback #1), or m.STOCK (Fallback #2)."
+                    "AI option signals are strictly gated by verified market data ticks. Waiting for active feed from FYERS (Primary), ANGEL ONE (Fallback #1)."
                 } else if (selectedIndexFilter != "ALL" || selectedDirectionFilter != "ALL") {
                     "Try resetting your filter parameters to view all active quantitative setups across Nifty, BankNifty and FinNifty."
                 } else {

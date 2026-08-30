@@ -350,8 +350,8 @@ object AlgoEngine {
 
         // Validate MarketDataStore status for target symbol
         val storeTick = com.example.data.model.MarketDataStore.getTick(targetQuote.symbol)
-        if (storeTick != null && (storeTick.state == "STALE" || storeTick.state == "OFFLINE")) {
-            _engineStatusMessage.value = "SIGNAL PAUSED — LIVE FEED ${storeTick.state}"
+        if (storeTick != null && (providerState.stale || !providerState.live)) {
+            _engineStatusMessage.value = "SIGNAL PAUSED — LIVE FEED ${if(providerState.stale) "STALE" else "OFFLINE"}"
             _currentSignal.value = null
             return
         }

@@ -69,7 +69,7 @@ fun MarketScreen(
     var chartDialogInstrument by remember { mutableStateOf<ChartDialogData?>(null) }
 
     val unreadCount = remember(notifications) { notifications.count { !it.isRead } }
-    val marketDataMap by MarketDataStore.marketData.collectAsStateWithLifecycle()
+    val marketDataMap by MarketDataStore.ticks.collectAsStateWithLifecycle()
 
     val exchangeStatus = MarketStatusUtil.getDetailedMarketStatus(selectedExchange)
     val nseStatus = MarketStatusUtil.getDetailedMarketStatus("NSE")
@@ -215,9 +215,9 @@ fun MarketScreen(
                 onAddRecentSearch = onAddRecentSearch,
                 onOpenChart = { item ->
                     val tick = marketDataMap[item.symbol]
-                    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.price
-                    val change = tick?.change ?: 0.0
-                    val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePct
+                    val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else item.price
+                    val change = 0.0 ?: 0.0
+                    val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else item.changePct
                     chartDialogInstrument = ChartDialogData(item.symbol, item.exchange, ltp, change, changePct, item.lotSize)
                 }
             )
@@ -483,7 +483,7 @@ private fun SearchBarSection(
 private fun SearchResultsCard(
     query: String,
     results: List<SearchInstrumentItem>,
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    marketDataMap: Map<String, com.example.data.model.RealTimePriceTick>,
     watchlist: List<WatchlistItem>,
     onItemClick: (SearchInstrumentItem) -> Unit,
     onTradeClick: (SearchInstrumentItem, Double?) -> Unit,
@@ -540,8 +540,8 @@ private fun SearchResultsCard(
                         val tick = marketDataMap[item.symbol]
                             ?: marketDataMap.values.find { it.symbol.equals(item.symbol, ignoreCase = true) }
                         val watchItem = watchlist.find { it.symbol.equals(item.symbol, ignoreCase = true) }
-                        val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else (watchItem?.ltp ?: 0.0)
-                        val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else (watchItem?.changePercent ?: 0.0)
+                        val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else (watchItem?.ltp ?: 0.0)
+                        val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else (watchItem?.changePercent ?: 0.0)
                         val hasPrice = ltp > 0.0
                         val isPositive = changePct >= 0
                         val isFav = watchlist.any { it.symbol.equals(item.symbol, ignoreCase = true) }
@@ -691,7 +691,7 @@ private fun ExchangeSegmentTabs(
 @Composable
 private fun ExchangeIndicesSection(
     exchange: String,
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    marketDataMap: Map<String, com.example.data.model.RealTimePriceTick>,
     watchlist: List<com.example.data.model.WatchlistItem> = emptyList(),
     onNavigateToIndexDetails: (exchange: String, indexName: String) -> Unit,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
@@ -755,9 +755,9 @@ private fun ExchangeIndicesSection(
                             ?: marketDataMap.values.find { it.symbol.equals(item.name, ignoreCase = true) }
                         val watchItem = watchlist.find { it.symbol.equals(item.name, ignoreCase = true) }
                         
-                        val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.ltp else item.price
-                        val change = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.change else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.change else item.change
-                        val changePct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.changePercent else item.changePct
+                        val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.ltp else item.price
+                        val change = if ((tick?.price ?: 0.0) > 0.0) 0.0 else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.change else item.change
+                        val changePct = if ((tick?.price ?: 0.0) > 0.0) 0.0 else if ((watchItem?.ltp ?: 0.0) > 0.0) watchItem!!.changePercent else item.changePct
 
                         IndexGridCard(
                             name = item.name,
@@ -923,7 +923,7 @@ private fun MarketMoversSection(
     selectedExchange: String,
     selectedCategory: String,
     onCategorySelected: (String) -> Unit,
-    marketDataMap: Map<String, com.example.data.model.MarketDataState>,
+    marketDataMap: Map<String, com.example.data.model.RealTimePriceTick>,
     watchlist: List<WatchlistItem>,
     onOpenOrderDialog: (symbol: String, side: String, price: Double?, lotSize: Int?) -> Unit,
     onToggleFavorite: (symbol: String, currentStatus: Boolean) -> Unit,
@@ -935,15 +935,15 @@ private fun MarketMoversSection(
     // Pool of Comprehensive Exchange Option Contracts ONLY (CE and PE)
     
     // We only use REAL live market data from the map, no synthetic pools.
-    val combinedItems = remember(marketDataMap, selectedExchange) {
+    val combinedItems: List<MarketMoverCardData> = remember(marketDataMap, selectedExchange) {
         marketDataMap.values.filter { 
             it.exchange.equals(selectedExchange, ignoreCase = true) 
         }.map { tick ->
             MarketMoverCardData(
                 symbol = tick.symbol,
                 exchange = tick.exchange,
-                price = tick.ltp,
-                changePct = tick.changePercent,
+                price = tick.price,
+                changePct = 0.0,
                 lotSize = 1, // Need real lot size mapping if available
                 expiry = "",
                 volume = tick.volume,
@@ -952,7 +952,7 @@ private fun MarketMoversSection(
         }
     }
 
-    val moverItems = remember(combinedItems, selectedCategory) {
+    val moverItems: List<MarketMoverCardData> = remember(combinedItems, selectedCategory) {
         when (selectedCategory) {
 
             "Top Gainers" -> combinedItems.filter { it.changePct >= 0 }.sortedByDescending { it.changePct }
@@ -1038,8 +1038,8 @@ private fun MarketMoversSection(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 moverItems.forEach { item ->
                     val tick = marketDataMap[item.symbol]
-                    val ltp = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.ltp else item.price
-                    val pct = if ((tick?.ltp ?: 0.0) > 0.0) tick!!.changePercent else item.changePct
+                    val ltp = if ((tick?.price ?: 0.0) > 0.0) tick!!.price else item.price
+                    val pct = item.changePct
                     val hasPrice = ltp > 0.0
                     val isPositive = pct >= 0
                     val isFav = watchlist.any { it.symbol.equals(item.symbol, ignoreCase = true) }

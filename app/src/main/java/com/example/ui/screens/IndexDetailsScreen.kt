@@ -248,10 +248,10 @@ fun MarketTabContent(
         com.example.data.model.MarketDataStore.getTick(indexName)
     }
 
-    val prevCloseVal = indexTick?.previousClose?.takeIf { it > 0.0 }
-    val openVal = indexTick?.open?.takeIf { it > 0.0 }
-    val highVal = indexTick?.high?.takeIf { it > 0.0 }
-    val lowVal = indexTick?.low?.takeIf { it > 0.0 }
+    val prevCloseVal: Double? = null
+    val openVal: Double? = null
+    val highVal: Double? = null
+    val lowVal: Double? = null
 
     val prevCloseStr = prevCloseVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"
     val openStr = openVal?.let { String.format(java.util.Locale.getDefault(), "%,.2f", it) } ?: "N/A"

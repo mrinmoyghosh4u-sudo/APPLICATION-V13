@@ -50,8 +50,8 @@ class UpstoxAuthManager(
                     ?: throw Exception("Upstox API Key (client_id) is missing")
                 val secret = sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
                     ?: com.example.util.BrokerConfig.upstoxApiSecret.takeIf { it.isNotBlank() }
-                val redirectUri = sessionManager.pendingOAuthSession?.redirectUri?.takeIf { it.isNotBlank() }
-                    ?: sessionManager.upstoxRedirectUri.takeIf { it.isNotBlank() }
+                val redirectUri = "https://application-beige-psi.vercel.app/oauth".takeIf { it.isNotBlank() }
+                    ?: "https://application-beige-psi.vercel.app/oauth".takeIf { it.isNotBlank() }
                     ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
 
                 if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {

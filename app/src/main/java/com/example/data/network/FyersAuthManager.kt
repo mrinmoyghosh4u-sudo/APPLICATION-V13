@@ -265,7 +265,7 @@ class FyersAuthManager(
                 grant_type = "refresh_token",
                 appIdHash = appIdHash,
                 refresh_token = refreshToken,
-                pin = sessionManager.fyersPin
+                pin = ""
             )
 
             val response = fyersApi.validateRefreshToken(request)

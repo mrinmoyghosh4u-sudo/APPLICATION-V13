@@ -210,26 +210,6 @@ fun LoginScreen(
                             onClick = { onConnectBroker("Angel One") }
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // --- M.STOCK LOGIN BUTTON (SECONDARY DATA) ---
-                        BrokerLoginCard(
-                            title = "LOGIN WITH m.STOCK",
-                            subtitle = "📈 Secondary Data & Portfolio (Mirae Asset)",
-                            containerColor = Color(0xFF8C1B1B),
-                            borderColor = Color(0xFFE53935),
-                            testTag = "mstock_login_button",
-                            iconContent = {
-                                Text(
-                                    "m",
-                                    color = Color(0xFFD32F2F),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            },
-                            onClick = { onConnectBroker("m.Stock") }
-                        )
-
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Features 4-in-a-row

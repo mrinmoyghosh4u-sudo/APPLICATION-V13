@@ -1,25 +1,11 @@
 import re
 
-with open('app/src/main/java/com/example/util/AlgoEngine.kt', 'r') as f:
+filepath = "app/src/main/java/com/example/util/AlgoEngine.kt"
+with open(filepath, "r") as f:
     content = f.read()
 
-# Let's fix the specific lines
-old_text = '''    fun setTradingMode(mode: String) {
-        _tradingMode.value = mode
-    } else {
-            _tradingMode.value = "PAPER TRADING"
-        }
-    }
+content = content.replace('storeTick.state == "STALE" || storeTick.state == "OFFLINE"', 'providerState.stale || !providerState.live')
+content = content.replace('storeTick.state', 'if(providerState.stale) "STALE" else "OFFLINE"')
 
-    fun updateRiskSettings(riskPerTrade: Double, maxLossPct: Double, maxTrades: Int, onePos: Boolean) {'''
-
-new_text = '''    fun setTradingMode(mode: String) {
-        _tradingMode.value = mode
-    }
-
-    fun updateRiskSettings(riskPerTrade: Double, maxLossPct: Double, maxTrades: Int, onePos: Boolean) {'''
-
-content = content.replace(old_text, new_text)
-
-with open('app/src/main/java/com/example/util/AlgoEngine.kt', 'w') as f:
+with open(filepath, "w") as f:
     f.write(content)

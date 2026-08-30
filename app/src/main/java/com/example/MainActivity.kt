@@ -822,59 +822,9 @@ class MainActivity : FragmentActivity() {
                                 onReconnect = { broker -> viewModel.reconnectBroker(broker) },
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
-                                onMStockLogin = { clientCode, apiKey, totpSecret -> viewModel.connectMStock(clientCode, apiKey, totpSecret) },
-                                onFyersLogin = { appId, secretId, authCode -> viewModel.connectFyers(appId, secretId, authCode) },
-                                onUpstoxLogin = { apiKey, apiSecret, authCode -> viewModel.connectUpstox(apiKey, apiSecret, authCode) },
-                                onDhanLogin = { clientId, accessToken -> viewModel.connectDhan(clientId, accessToken) },
-                                onStartUpstoxOAuth = { apiKey, apiSecret ->
-                                    viewModel.startUpstoxOAuth(apiKey, apiSecret,
-                                        onUrlGenerated = { loginUrl ->
-                                            android.util.Log.i("UpstoxAuth", "[BROWSER_OPENED] Browser opened for Upstox authorization")
-                                            openAuthBrowser(loginUrl)
-                                            viewModel.closeConnectDialog()
-                                        },
-                                        onError = { /* error reported via live data/diagnostics */ }
-                                    )
-                                },
-                                onStartFyersOAuth = { appId, secretId ->
-                                    viewModel.startFyersOAuth(appId, secretId,
-                                        onUrlGenerated = { loginUrl ->
-                                            android.util.Log.i("FyersAuth", "[BROWSER_OPENED] Browser opened for Fyers authorization")
-                                            openAuthBrowser(loginUrl)
-                                            viewModel.closeConnectDialog()
-                                        },
-                                        onError = { /* error reported via live data/diagnostics */ }
-                                    )
-                                },
-                                onStartDhanOAuth = { clientId, apiKey, clientSecret ->
-                                    viewModel.startDhanOAuth(clientId = clientId, apiKey = apiKey, clientSecret = clientSecret, 
-                                        onUrlGenerated = { loginUrl ->
-                                            android.util.Log.i("DhanAuth", "[BROWSER_OPENED] Browser opened for Dhan authorization")
-                                            openAuthBrowser(loginUrl)
-                                            viewModel.closeConnectDialog()
-                                        },
-                                        onError = { /* error reported via live data/diagnostics */ }
-                                    )
-                                }
-                            )
-                        }
-
-                        // Global Order Dialog Overlay
-                        orderDialogState?.let { (symbol, side, extra) ->
-                            OrderDialog(
-                                symbol = symbol,
-                                initialSide = side,
-                                initialPrice = extra?.first,
-                                lotSize = extra?.second,
-                                appPreferences = appPreferences,
-                                onDismiss = { orderDialogState = null },
-                                onConfirmOrder = { newSide, orderType, qty, price ->
-                                    viewModel.placeNewOrder(symbol, "NSE", newSide, orderType, qty, price)
-                                    orderDialogState = null
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Order Placed: $newSide $qty x $symbol @ ₹$price")
-                                    }
-                                }
+                                onDhanLogin = { clientId -> viewModel.connectDhan(clientId) },
+                                onUpstoxLogin = { clientId, secret -> viewModel.connectUpstox(clientId, secret) },
+                                onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) }
                             )
                         }
                     }
@@ -883,46 +833,4 @@ class MainActivity : FragmentActivity() {
         }
     }
 }
-
-    override fun onResume() {
-        super.onResume()
-        viewModel.onAppResume()
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleIntent(intent)
-    }
-
-    private fun openAuthBrowser(url: String) {
-        try {
-            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
-                .setShowTitle(true)
-                .build()
-            customTabsIntent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NO_HISTORY)
-            customTabsIntent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            customTabsIntent.launchUrl(this, android.net.Uri.parse(url))
-        } catch (e: Exception) {
-            try {
-                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-            } catch (err: Exception) {
-                android.util.Log.e("Auth", "Failed to open auth browser: ${err.message}")
-            }
-        }
-    }
-
-    private fun handleIntent(intent: android.content.Intent?) {
-        val uri = intent?.data
-        if (uri != null) {
-            val scheme = uri.scheme ?: ""
-            val host = uri.host ?: ""
-            if (scheme == "kingkhan" || host.contains("kingkhan") || host.contains("application-beige-psi.vercel.app") || host.contains("vercel.app")) {
-                intent.data = null
-                viewModel.handleOAuthRedirect(uri)
-            }
-        }
-    }
 }

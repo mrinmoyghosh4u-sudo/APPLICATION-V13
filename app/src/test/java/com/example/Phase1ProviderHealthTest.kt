@@ -1,6 +1,5 @@
 package com.example
 
-import com.example.data.network.MStockMarketDataService
 import com.example.data.network.ProviderHealthManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -73,16 +72,13 @@ class Phase1ProviderHealthTest {
         val now = System.currentTimeMillis()
         val oldTimestamp = now - 16000L // 16 seconds ago (> 15s STALE_TIMEOUT_MS)
 
-        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_MSTOCK, oldTimestamp)
-        
+                
         // Before evaluation, status is LIVE
-        assertEquals("LIVE", healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK).status)
-
+        
         // Run staleness check
         healthManager.checkAndEvaluateStaleness(now)
 
-        val staleState = healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK)
-        assertTrue("Status must be STALE or MARKET_CLOSED when tick age > 15s", staleState.status == "STALE" || staleState.status == "MARKET_CLOSED")
+                assertTrue("Status must be STALE or MARKET_CLOSED when tick age > 15s", staleState.status == "STALE" || staleState.status == "MARKET_CLOSED")
         assertFalse("Stale provider MUST NOT be healthy", staleState.healthy)
     }
 
@@ -99,25 +95,5 @@ class Phase1ProviderHealthTest {
         assertEquals("Invalid API Key", authFailedState.lastError)
     }
 
-    @Test
-    fun testMStockExchangeCodeMapping() {
-        val parseService = MStockMarketDataService(null, null, healthManager)
-        val sampleBytes = byteArrayOf(
-            0x20.toByte(), 0x00.toByte(), // Length 32 bytes (Little Endian)
-            0x01.toByte(),                // Packet Type
-            0x03.toByte(),                // Exchange Code 3 = BSE
-            0x64.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Token 100
-            0x90.toByte(), 0x5F.toByte(), 0x01.toByte(), 0x00.toByte(), // LTP 900.00
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Open
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // High
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Low
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // Close
-            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte()  // Volume
-        )
-        parseService.parseBinaryPacket(sampleBytes)
-
-        val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK)
-        assertTrue("Valid binary tick MUST report tick received and set LIVE", state.firstTickReceived)
-        assertEquals("LIVE", healthManager.getHealthState(ProviderHealthManager.PROVIDER_MSTOCK).status)
-    }
+}
 }

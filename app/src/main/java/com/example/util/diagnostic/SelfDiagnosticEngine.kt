@@ -56,9 +56,6 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
         val angelHealth = checkBrokerHealth("ANGEL ONE")
         newHealthMap["ANGEL_ONE"] = angelHealth
 
-        // 4. Monitor m.Stock (Market Data Priority 4)
-        val mStockHealth = checkBrokerHealth("m.STOCK")
-        newHealthMap["MSTOCK"] = mStockHealth
 
         // 5. Monitor Dhan (Order Execution Only)
         val dhanHealth = checkDhanHealth()
@@ -96,13 +93,13 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
         if (providerState.provider == broker) {
             if (providerState.stale) {
                 return ComponentHealth(broker, HealthState.STALE, details = mapOf(
-                    "tickAge" to providerState.lastTickTimestamp,
+                    "tickAge" to providerState.lastUpdate,
                     "error" to "Stale market data (> 15s)"
                 ))
             }
             if (providerState.live) {
                 return ComponentHealth(broker, HealthState.HEALTHY, details = mapOf(
-                    "lastTick" to providerState.lastTickTimestamp,
+                    "lastTick" to providerState.lastUpdate,
                     "connected" to true
                 ))
             }
@@ -199,7 +196,7 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             // 4. MARKET DATA
             val providerState = MarketDataStore.providerState.value
             val mdHealth = if (providerState.live && !providerState.stale) HealthState.HEALTHY else HealthState.STALE
-            results.add(AZDiagnosticResult(DiagnosticCategory.MARKET_DATA, "Active Feed: ${providerState.provider}", mdHealth, "Checked", mapOf("TickAgeMs" to providerState.lastTickTimestamp.toString(), "Live" to providerState.live.toString())))
+            results.add(AZDiagnosticResult(DiagnosticCategory.MARKET_DATA, "Active Feed: ${providerState.provider}", mdHealth, "Checked", mapOf("TickAgeMs" to providerState.lastUpdate.toString(), "Live" to providerState.live.toString())))
             
             // 5. OPTION CHAIN
             results.add(AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.OFFLINE, "Runtime Verification Required", mapOf("Source" to "Broker mapped")))

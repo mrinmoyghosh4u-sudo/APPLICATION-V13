@@ -31,7 +31,6 @@ import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
 import com.example.ui.components.CrownLogo
-import com.example.ui.components.GoldButton
 import com.example.ui.components.GoldCard
 import com.example.ui.components.PullToRefreshLayout
 import com.example.ui.theme.*
@@ -1279,8 +1278,7 @@ private fun FullModifyOrderDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                GoldButton(
-                    text = "Confirm Order Modification",
+                Button(
                     onClick = {
                         val p = priceText.toDoubleOrNull() ?: order.price
                         val q = qtyText.toIntOrNull() ?: order.qty
@@ -1289,7 +1287,7 @@ private fun FullModifyOrderDialog(
                         onConfirm(p, q, orderType, sl, tg)
                     },
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) { Text("Confirm Order Modification", color = androidx.compose.ui.graphics.Color.White) }
             }
         }
     }
@@ -1601,11 +1599,10 @@ private fun FilterAndSortDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                GoldButton(
-                    text = "Apply Filters",
+                Button(
                     onClick = { onApply(selectedEx, selectedSide, selectedSort) },
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) { androidx.compose.material3.Text("Apply Filters", color = androidx.compose.ui.graphics.Color.White) }
             }
         }
     }
