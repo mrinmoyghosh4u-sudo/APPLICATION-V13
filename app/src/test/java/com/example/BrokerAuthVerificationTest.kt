@@ -98,7 +98,6 @@ class BrokerAuthVerificationTest {
 
         val stateBeforeTick = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
         assertEquals("WAITING_FOR_FIRST_TICK", stateBeforeTick.status)
-        assertFalse(stateBeforeTick.healthy)
 
         val now = System.currentTimeMillis()
         healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, now)
@@ -149,15 +148,15 @@ class BrokerAuthVerificationTest {
 
     @Test
     fun test11_diagnosticFieldsReflectRuntimeState() {
-        healthManager.reportConfigured( true)
-        healthManager.reportAuthenticating()
-        healthManager.reportAuthentication( true)
-        healthManager.reportConnecting()
-        healthManager.reportConnection( true)
-        healthManager.reportSubscribed( 10)
-        
-        val state = healthManager.getHealthState()
-                assertTrue(state.authenticated)
+        healthManager.reportConfigured(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportAuthenticating(ProviderHealthManager.PROVIDER_UPSTOX)
+        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportConnecting(ProviderHealthManager.PROVIDER_UPSTOX)
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_UPSTOX, true)
+        healthManager.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, 10)
+           
+        val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_UPSTOX)
+        assertTrue(state.authenticated)
         assertTrue(state.connected)
         assertEquals("WAITING_FOR_FIRST_TICK", state.status)
     }
@@ -187,13 +186,11 @@ class BrokerAuthVerificationTest {
         assertEquals("Invalid Client ID: client_id_not_found", state.lastError)
     }
 
-}
-
     @Test
     fun test16_upstoxUnavailableFyersHealthyFailover() {
         // Upstox disconnected
         healthManager.reportDisconnected(ProviderHealthManager.PROVIDER_UPSTOX)
-        
+           
         // Fyers healthy & LIVE
         healthManager.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
         healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)

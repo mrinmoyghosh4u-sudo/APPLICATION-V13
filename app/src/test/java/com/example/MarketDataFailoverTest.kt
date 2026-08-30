@@ -40,8 +40,6 @@ class MarketDataFailoverTest {
         assertTrue("Angel One should be healthy and serve as Secondary fallback", healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_ANGEL_ONE))
     }
 
-}
-
     @Test
     fun test4_fyersStaleAfter15s_marksStale() {
         val oldTimestamp = System.currentTimeMillis() - 20000L // 20s ago
@@ -52,11 +50,6 @@ class MarketDataFailoverTest {
         val state = healthManager.getHealthState(ProviderHealthManager.PROVIDER_FYERS)
         assertTrue(state.stale)
         assertFalse(state.healthy)
-    }
-
-}
-
-}
     }
 
     @Test
@@ -72,7 +65,7 @@ class MarketDataFailoverTest {
     fun test8_allProvidersUnavailable_dataUnavailable() {
         healthManager.reportConnection(ProviderHealthManager.PROVIDER_FYERS, false)
         healthManager.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, false)
-                assertFalse(healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_FYERS))
+        assertFalse(healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_FYERS))
         assertFalse(healthManager.isProviderHealthy(ProviderHealthManager.PROVIDER_ANGEL_ONE))
-            }
+    }
 }

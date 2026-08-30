@@ -240,6 +240,7 @@ fun hasValidSession(): Boolean {
         val provider: String = "",
         val state: String = "",
         val createdAt: Long = 0L,
+        val redirectUri: String = "",
         val consumed: Boolean = false
     )
     
@@ -317,4 +318,23 @@ fun hasValidSession(): Boolean {
         isFyersConnected = false
         fyersTokenTimestamp = 0L
     }
+
+    fun saveUpstoxCredentials(apiKey: String, apiSecret: String, token: String = "") {
+        upstoxApiKey = apiKey
+        upstoxApiSecret = apiSecret
+        if (token.isNotEmpty()) {
+            upstoxAccessToken = token
+            isUpstoxConnected = true
+        }
+    }
+
+    fun saveFyersCredentials(appId: String, secretId: String, token: String = "") {
+        fyersAppId = appId
+        fyersSecretId = secretId
+        if (token.isNotEmpty()) {
+            fyersAccessToken = token
+            isFyersConnected = true
+        }
+    }
+
 }

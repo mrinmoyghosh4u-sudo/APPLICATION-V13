@@ -47,8 +47,12 @@ data class RealTimePriceTick(
     val bid: Double = 0.0,
     val ask: Double = 0.0,
     val greeks: OptionGreeks = OptionGreeks(),
-    val exchange: String = "NSE"
-)
+    val exchange: String = "NSE",
+    val token: String = "",
+    val state: String = ""
+) {
+    val ltp: Double get() = price
+}
 
 object MarketDataStore {
     private val _providerState = kotlinx.coroutines.flow.MutableStateFlow(MarketDataProviderState())
@@ -79,6 +83,29 @@ object MarketDataStore {
     @Volatile
     var isFailoverActive: Boolean = false
         private set
+
+
+    fun updateTick(
+        source: String,
+        symbol: String,
+        token: String = "",
+        exchange: String = "NSE",
+        ltp: Double = 0.0,
+        receivedTimestamp: Long = System.currentTimeMillis(),
+        state: String = ""
+    ) {
+        updateTick(
+            RealTimePriceTick(
+                symbol = symbol,
+                price = ltp,
+                timestamp = receivedTimestamp,
+                source = source,
+                token = token,
+                exchange = exchange,
+                state = state
+            )
+        )
+    }
 
     fun updateTick(tick: RealTimePriceTick) {
         // Drop MOCK ticks if we are during a failover transition to prevent UI noise

@@ -6,21 +6,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Provider Health Monitor
- * 
- * Tracks internal health metrics for all market data providers:
- * - Connection state
- * - Authentication state
- * - Last successful request & tick timestamps
- * - Latency & error count
- * - Stale threshold detection
- * 
- * Strict Rules:
- * - Provider info is NEVER exposed to normal trading UI.
- * - Safe internal diagnostic logging only.
- * - Sensitive secrets (API keys, JWT, TOTP, tokens) are NEVER logged.
- */
 data class ProviderHealthState(
     val provider: String,
     val status: String = "NOT_CONFIGURED",
@@ -45,27 +30,250 @@ data class ProviderHealthState(
 )
 
 class ProviderHealthManager {
+    private val healthMap = ConcurrentHashMap<String, ProviderHealthState>()
     private val _providerHealth = MutableStateFlow<Map<String, ProviderHealthState>>(emptyMap())
     val providerHealth: StateFlow<Map<String, ProviderHealthState>> = _providerHealth.asStateFlow()
+
+    init {
+        for (provider in listOf(PROVIDER_UPSTOX, PROVIDER_FYERS, PROVIDER_ANGEL_ONE, PROVIDER_DHAN)) {
+            healthMap[provider] = ProviderHealthState(provider = provider)
+        }
+        _providerHealth.value = healthMap.toMap()
+    }
+
     companion object {
         const val PROVIDER_DHAN = "DHAN"
-
-        const val STATE_CREDENTIALS_MISSING = "CREDENTIALS_MISSING"
-
-        private const val TAG = "DataEngineDiagnostics"
-        const val STALE_TIMEOUT_MS = 15000L // 15 seconds stale timeout
-        
-        // Canonical Provider Keys
         const val PROVIDER_UPSTOX = "Upstox"
         const val PROVIDER_FYERS = "Fyers"
         const val PROVIDER_ANGEL_ONE = "Angel One"
 
-}
+        const val STALE_TIMEOUT_MS = 15000L // 15 seconds
 
+        const val STATE_CREDENTIALS_MISSING = "CREDENTIALS_MISSING"
+        const val STATE_STATE_MISMATCH = "STATE_MISMATCH"
+        const val STATE_AUTH_CODE_MISSING = "AUTH_CODE_MISSING"
+        const val STATE_TOKEN_EXCHANGE_FAILED = "TOKEN_EXCHANGE_FAILED"
+        const val STATE_TOKEN_INVALID = "TOKEN_INVALID"
+        const val STATE_AUTH_CANCELLED = "AUTH_CANCELLED"
+    }
 
-    fun reportAuthenticating(provider: String) {}
-    fun reportWaitingForCallback(provider: String, state: String) {}
-    fun reportAuthFailure(provider: String, errorCategory: String, message: String) {}
-    fun reportCallbackReceived(provider: String, state: String) {}
-    fun reportAuthCodeReceived(provider: String, code: String) {}
+    private fun updateState(provider: String, transform: (ProviderHealthState) -> ProviderHealthState) {
+        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val updated = transform(current)
+        healthMap[provider] = updated
+        _providerHealth.value = healthMap.toMap()
+    }
+
+    fun getHealthState(provider: String = PROVIDER_UPSTOX): ProviderHealthState {
+        return healthMap[provider] ?: ProviderHealthState(provider = provider)
+    }
+
+    fun isProviderHealthy(provider: String): Boolean {
+        return getHealthState(provider).healthy
+    }
+
+    fun reportConfigured(provider: String, configured: Boolean) {
+        updateState(provider) {
+            it.copy(
+                status = if (configured) "CONFIGURED" else "NOT_CONFIGURED",
+                authenticationState = if (configured) "CONFIGURED" else "NOT_CONFIGURED",
+                healthy = false
+            )
+        }
+    }
+
+    fun reportAuthenticating(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "AUTHENTICATING",
+                authenticationState = "AUTHENTICATING",
+                healthy = false
+            )
+        }
+    }
+
+    fun reportWaitingForCallback(provider: String = PROVIDER_UPSTOX, state: String = "") {
+        updateState(provider) {
+            it.copy(
+                status = "WAITING_FOR_CALLBACK",
+                authenticationState = "WAITING_FOR_CALLBACK"
+            )
+        }
+    }
+
+    fun reportCallbackReceived(provider: String = PROVIDER_UPSTOX, state: String = "") {
+        updateState(provider) {
+            it.copy(
+                status = "CALLBACK_RECEIVED",
+                authenticationState = "CALLBACK_RECEIVED"
+            )
+        }
+    }
+
+    fun reportValidatingState(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "VALIDATING_STATE",
+                authenticationState = "VALIDATING_STATE"
+            )
+        }
+    }
+
+    fun reportAuthCodeReceived(provider: String = PROVIDER_UPSTOX, code: String = "") {
+        updateState(provider) {
+            it.copy(
+                status = "AUTH_CODE_RECEIVED",
+                authenticationState = "AUTH_CODE_RECEIVED"
+            )
+        }
+    }
+
+    fun reportTokenExchange(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "TOKEN_EXCHANGE",
+                authenticationState = "TOKEN_EXCHANGE"
+            )
+        }
+    }
+
+    fun reportTokenValidated(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "TOKEN_VALIDATED",
+                authenticationState = "TOKEN_VALIDATED"
+            )
+        }
+    }
+
+    fun reportAuthentication(provider: String = PROVIDER_UPSTOX, success: Boolean, errorMessage: String = "") {
+        updateState(provider) {
+            if (success) {
+                it.copy(
+                    status = "AUTHENTICATED",
+                    authenticationState = "AUTHENTICATED",
+                    authenticated = true,
+                    lastError = "",
+                    healthy = false
+                )
+            } else {
+                it.copy(
+                    status = "AUTH_FAILED",
+                    authenticationState = "AUTH_FAILED",
+                    authenticated = false,
+                    lastError = errorMessage,
+                    healthy = false
+                )
+            }
+        }
+    }
+
+    fun reportAuthFailure(provider: String, failureType: String, message: String) {
+        val mappedAuthState = when (failureType) {
+            STATE_STATE_MISMATCH -> "STATE_VALIDATION_FAILED"
+            STATE_AUTH_CODE_MISSING -> "AUTH_CODE_MISSING"
+            STATE_TOKEN_EXCHANGE_FAILED -> "TOKEN_EXCHANGE_FAILED"
+            STATE_TOKEN_INVALID -> "TOKEN_INVALID"
+            STATE_AUTH_CANCELLED -> "AUTH_CANCELLED"
+            else -> "AUTH_FAILED"
+        }
+        updateState(provider) {
+            it.copy(
+                status = "AUTH_FAILED",
+                authenticationState = mappedAuthState,
+                authenticated = false,
+                lastError = message,
+                healthy = false
+            )
+        }
+    }
+
+    fun reportConnecting(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "WEBSOCKET_CONNECTING",
+                webSocketState = "CONNECTING",
+                healthy = false
+            )
+        }
+    }
+
+    fun reportConnection(provider: String = PROVIDER_UPSTOX, connected: Boolean) {
+        updateState(provider) {
+            if (connected) {
+                it.copy(
+                    status = "WEBSOCKET_CONNECTED",
+                    webSocketState = "WEBSOCKET_CONNECTED",
+                    connected = true,
+                    healthy = false
+                )
+            } else {
+                it.copy(
+                    status = "DISCONNECTED",
+                    webSocketState = "DISCONNECTED",
+                    connected = false,
+                    healthy = false
+                )
+            }
+        }
+    }
+
+    fun reportDisconnected(provider: String = PROVIDER_UPSTOX) {
+        reportConnection(provider, false)
+    }
+
+    fun reportSubscribing(provider: String = PROVIDER_UPSTOX) {
+        updateState(provider) {
+            it.copy(
+                status = "SUBSCRIBING",
+                subscriptionState = "SUBSCRIBING",
+                healthy = false
+            )
+        }
+    }
+
+    fun reportSubscribed(provider: String = PROVIDER_UPSTOX, count: Int) {
+        updateState(provider) {
+            it.copy(
+                status = "WAITING_FOR_FIRST_TICK",
+                subscriptionState = "SUBSCRIBED",
+                activeSubscriptionCount = count,
+                healthy = false
+            )
+        }
+    }
+
+    fun reportTickReceived(provider: String, timestamp: Long) {
+        updateState(provider) {
+            it.copy(
+                status = "LIVE",
+                firstTickReceived = true,
+                lastTickTimestamp = timestamp,
+                tickAgeMs = 0L,
+                stale = false,
+                healthy = true,
+                connected = true,
+                authenticated = true,
+                lastError = ""
+            )
+        }
+    }
+
+    fun checkAndEvaluateStaleness(now: Long = System.currentTimeMillis()) {
+        for ((provider, state) in healthMap) {
+            if (state.lastTickTimestamp > 0L) {
+                val age = now - state.lastTickTimestamp
+                if (age > STALE_TIMEOUT_MS) {
+                    updateState(provider) {
+                        it.copy(
+                            status = "STALE",
+                            tickAgeMs = age,
+                            stale = true,
+                            healthy = false
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

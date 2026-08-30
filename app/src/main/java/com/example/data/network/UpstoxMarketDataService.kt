@@ -452,6 +452,7 @@ class UpstoxMarketDataService(
                 if (!hasFirstTick) {
                     _connectionState.value = "WAITING_FOR_FIRST_TICK"
                 }
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, subscribedInstrumentKeys.size)
             }
         } catch (_: Exception) {
             // Non-JSON plain text or heartbeats
@@ -472,6 +473,7 @@ class UpstoxMarketDataService(
                 if (!hasFirstTick) {
                     _connectionState.value = "WAITING_FOR_FIRST_TICK"
                 }
+                healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, subscribedInstrumentKeys.size)
             }
         }
 
@@ -495,6 +497,7 @@ class UpstoxMarketDataService(
                     _connectionState.value = "LIVE"
                     Log.i(TAG, "[UPSTOX_LIVE] Upstox WebSocket market data feed state is now LIVE")
                 }
+                healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_UPSTOX, if (feed.timestamp > 0L) feed.timestamp else now)
 
 
                 val tick = com.example.data.model.RealTimePriceTick(

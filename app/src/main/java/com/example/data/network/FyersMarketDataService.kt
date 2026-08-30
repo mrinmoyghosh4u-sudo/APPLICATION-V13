@@ -285,6 +285,7 @@ class FyersMarketDataService(
         if (newSymbols.isNotEmpty()) {
             subscribedSymbols.addAll(newSymbols)
         }
+        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
         if (isConnected && isSubscribed && webSocket != null) {
             sendSubscription()
         }
@@ -293,6 +294,7 @@ class FyersMarketDataService(
     fun unsubscribeSymbols(symbols: List<String>) {
         if (symbols.isEmpty()) return
         subscribedSymbols.removeAll(symbols.toSet())
+        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_FYERS, subscribedSymbols.size)
         if (isConnected && isSubscribed && webSocket != null) {
             try {
                 val payload = JSONObject().apply {
@@ -752,7 +754,11 @@ class FyersMarketDataService(
             Log.i(TAG, "[FYERS_FIRST_REAL_TICK] First valid FYERS real tick received: $rawSymbol = $ltp")
             hasFirstTick = true
         }
+        if (_connectionState.value != "LIVE") {
+            _connectionState.value = "LIVE"
+        }
         lastTickReceivedTime = now
+        healthManager?.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, if (ts > 0L) ts else now)
 
         val exch = detectExchange(rawSymbol)
         val standardSym = FyersSymbolMapper.fromFyersSymbol(rawSymbol)

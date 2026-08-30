@@ -71,14 +71,16 @@ class Phase1ProviderHealthTest {
     fun testStaleThresholdEvaluation() {
         val now = System.currentTimeMillis()
         val oldTimestamp = now - 16000L // 16 seconds ago (> 15s STALE_TIMEOUT_MS)
-
-                
-        // Before evaluation, status is LIVE
         
+        healthManager.reportConnection(ProviderHealthManager.PROVIDER_FYERS, true)
+        healthManager.reportAuthentication(ProviderHealthManager.PROVIDER_FYERS, true)
+        healthManager.reportTickReceived(ProviderHealthManager.PROVIDER_FYERS, oldTimestamp)
+            
         // Run staleness check
         healthManager.checkAndEvaluateStaleness(now)
 
-                assertTrue("Status must be STALE or MARKET_CLOSED when tick age > 15s", staleState.status == "STALE" || staleState.status == "MARKET_CLOSED")
+        val staleState = healthManager.getHealthState(ProviderHealthManager.PROVIDER_FYERS)
+        assertTrue("Status must be STALE or MARKET_CLOSED when tick age > 15s", staleState.status == "STALE" || staleState.status == "MARKET_CLOSED")
         assertFalse("Stale provider MUST NOT be healthy", staleState.healthy)
     }
 
@@ -94,6 +96,4 @@ class Phase1ProviderHealthTest {
         assertFalse(authFailedState.authenticated)
         assertEquals("Invalid API Key", authFailedState.lastError)
     }
-
-}
 }

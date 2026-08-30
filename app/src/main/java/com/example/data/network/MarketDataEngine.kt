@@ -39,9 +39,9 @@ import java.util.Locale
 class MarketDataEngine(
     var fyersMarketDataService: FyersMarketDataService? = null,
     var upstoxMarketDataService: UpstoxMarketDataService? = null,
-    val angelMarketDataService: AngelOneMarketDataService,
-    private val sessionManager: SessionManager,
-    private val healthManager: ProviderHealthManager
+    val angelMarketDataService: AngelOneMarketDataService? = null,
+    private val sessionManager: SessionManager? = null,
+    private val healthManager: ProviderHealthManager? = null
 ) {
     private val _providerState = kotlinx.coroutines.flow.MutableStateFlow(com.example.data.model.MarketDataProviderState())
     val providerState: kotlinx.coroutines.flow.StateFlow<com.example.data.model.MarketDataProviderState> = _providerState.asStateFlow()
@@ -113,8 +113,8 @@ class MarketDataEngine(
 
         // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getOptionChain(symbol, expiry ?: "")
-        if (angelRes.isSuccess) {
+        val angelRes = angelMarketDataService?.getOptionChain(symbol, expiry ?: "")
+        if (angelRes?.isSuccess == true) {
             return Result.failure(Exception("Not implemented"))
         }
 
@@ -140,8 +140,8 @@ class MarketDataEngine(
 
         // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getHistoricalCandles(symbol, interval)
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
+        val angelRes = angelMarketDataService?.getHistoricalCandles(symbol, interval)
+        if (angelRes?.isSuccess == true && (angelRes?.getOrDefault(emptyList()) ?: emptyList()).isNotEmpty()) {
             return Result.failure(Exception("Not implemented"))
         }
 
@@ -202,9 +202,9 @@ class MarketDataEngine(
         
         // Priority 2: Angel One
         val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService.getMarketQuotes(symbols)
-        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
-            val valid = angelRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+        val angelRes = angelMarketDataService?.getMarketQuotes(symbols)
+        if (angelRes?.isSuccess == true && (angelRes?.getOrDefault(emptyList()) ?: emptyList()).isNotEmpty()) {
+            val valid = (angelRes?.getOrDefault(emptyList()) ?: emptyList()).filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
                 _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
                 _internalActiveProvider.value = "ANGEL ONE"
@@ -261,7 +261,7 @@ class MarketDataEngine(
             // reconnect fyers
             CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
         }
-        angelMarketDataService.reconnect()
+        angelMarketDataService?.reconnect()
         
     }
 }
