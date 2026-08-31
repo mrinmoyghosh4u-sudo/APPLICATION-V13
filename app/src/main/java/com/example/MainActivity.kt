@@ -129,10 +129,13 @@ class MainActivity : FragmentActivity() {
 
                     if (appPreferences.isAutoCheckUpdateEnabled()) {
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val res = updateManager.checkForUpdates()
-                            if (res is com.example.util.update.UpdateCheckResult.UpdateAvailable) {
-                                autoUpdateBannerInfo = res.info
-                                updateManager.autoDownloadAndInstall(res.info)
+                            try {
+                                val res = updateManager.checkForUpdates()
+                                if (res is com.example.util.update.UpdateCheckResult.UpdateAvailable) {
+                                    autoUpdateBannerInfo = res.info
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("MainActivity", "Auto-check update failed safely: ${e.localizedMessage}")
                             }
                         }
                     }
@@ -317,15 +320,17 @@ class MainActivity : FragmentActivity() {
                                                 else -> {
                                                     androidx.compose.material3.TextButton(
                                                         onClick = {
-                                                            navController.navigate("main")
+                                                            coroutineScope.launch {
+                                                                updateManager.autoDownloadAndInstall(updateInfo)
+                                                            }
                                                         },
                                                         contentPadding = PaddingValues(horizontal = 8.dp)
                                                     ) {
                                                         androidx.compose.material3.Text(
-                                                            "DETAILS",
+                                                            "UPDATE",
                                                             fontSize = 11.sp,
                                                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                                            color = com.example.ui.theme.SecondaryGold
+                                                            color = com.example.ui.theme.ProfitGreen
                                                         )
                                                     }
                                                 }

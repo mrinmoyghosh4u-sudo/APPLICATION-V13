@@ -149,59 +149,60 @@ fun ProfileScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 14.dp),
+                    .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CrownLogo(size = 36.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "KING KHAN AI TRADE",
-                            fontSize = 16.sp,
+                            text = "👑",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "PROFILE & SETTINGS",
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
-                            color = Color.White,
+                            color = PrimaryGold,
                             letterSpacing = 0.5.sp
                         )
-                        KingKhanTagline(fontSize = 11.sp)
                     }
+                    Text(
+                        text = "Manage credentials, feeds & risk systems",
+                        fontSize = 11.sp,
+                        color = TextGray
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LiveStatusBadge(
                         isLive = marketDataSource.isNotBlank(),
-                        dataSource = marketDataSource.ifBlank { "OFFLINE" },
-                        modifier = Modifier.padding(end = 6.dp)
+                        dataSource = marketDataSource.ifBlank { "OFFLINE" }
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable { onOpenNotificationCenter() }
-                            .padding(6.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = onOpenNotificationCenter,
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Notifications,
-                            contentDescription = "Notifications",
-                            tint = PrimaryGold,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        if (unreadCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 4.dp, y = (-2).dp)
-                                    .size(16.dp)
-                                    .background(LossRed, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (unreadCount > 9) "9+" else "$unreadCount",
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                        BadgedBox(
+                            badge = {
+                                if (unreadCount > 0) {
+                                    Badge(
+                                        containerColor = LossRed,
+                                        contentColor = Color.White
+                                    ) {
+                                        Text(text = if (unreadCount > 9) "9+" else "$unreadCount", fontSize = 9.sp)
+                                    }
+                                }
                             }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = PrimaryGold,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
