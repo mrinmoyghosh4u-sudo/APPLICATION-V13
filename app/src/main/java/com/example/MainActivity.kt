@@ -613,10 +613,10 @@ class MainActivity : FragmentActivity() {
                                                 viewModel = viewModel,
                                                 brokerStatuses = brokerStatuses,
                                                 onSwitchBroker = { broker ->
-                                                    viewModel.switchActiveBroker(broker)
+                                                    viewModel.openConnectDialog(broker)
                                                 },
                                                 onReconnectBroker = { broker ->
-                                                    viewModel.reconnectBroker(broker)
+                                                    viewModel.openConnectDialog(broker)
                                                 },
                                                 onDisconnectBroker = { broker ->
                                                     viewModel.disconnectBroker(broker)
@@ -835,11 +835,11 @@ class MainActivity : FragmentActivity() {
                                 brokerStatuses = topLevelBrokerStatuses,
                                 providerHealth = topLevelProviderHealth,
                                 onDisconnect = { broker -> viewModel.disconnectBroker(broker) },
-                                onReconnect = { broker -> viewModel.reconnectBroker(broker) },
+                                onReconnect = { broker -> viewModel.openConnectDialog(broker) },
                                 onDismiss = { viewModel.closeConnectDialog() },
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
                                 onDhanLogin = { clientId, accessToken -> viewModel.connectDhan(clientId, accessToken) },
-                                onUpstoxLogin = { clientId, secret -> viewModel.connectUpstox(clientId, secret) },
+                                onUpstoxLogin = { clientId, secret, codeOrToken -> viewModel.connectUpstox(clientId, secret, codeOrToken) },
                                 onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) }
                             )
                         }

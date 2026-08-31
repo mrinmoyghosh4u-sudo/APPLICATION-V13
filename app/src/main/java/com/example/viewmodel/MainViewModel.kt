@@ -507,12 +507,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            if (clientId.isNotBlank() && accessToken.isNotBlank()) {
-                sessionManager.dhanClientId = clientId
-                sessionManager.dhanAccessToken = accessToken
+            val cleanClientId = clientId.trim()
+            val cleanToken = accessToken.trim()
+            if (cleanClientId.isNotBlank() && cleanToken.isNotBlank()) {
+                sessionManager.dhanClientId = cleanClientId
+                sessionManager.dhanAccessToken = cleanToken
                 sessionManager.isDhanConnected = true
-                brokerManager.brokerAuthManager.updateStatus("Dhan", "Primary Order Execution", com.example.data.network.BrokerAuthStatus.CONNECTED, "Active for Order Execution")
-                
+                sessionManager.activeBroker = "Dhan"
+                brokerManager.setActiveBroker("Dhan")
+                brokerManager.brokerAuthManager.updateStatus(
+                    "Dhan",
+                    "Primary Order Execution",
+                    com.example.data.network.BrokerAuthStatus.CONNECTED,
+                    "Active for Order Execution (Client: $cleanClientId)"
+                )
+                val current = _userProfile.value
+                val updated = current.copy(
+                    isDhanConnected = true,
+                    dhanClientId = cleanClientId,
+                    connectedBroker = "Dhan"
+                )
+                _userProfile.value = updated
+                repository.updateProfile(updated)
+                _isSessionValid.value = true
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                repository.addNotification(
+                    title = "Dhan Connected",
+                    message = "DhanHQ account $cleanClientId connected successfully ⚡",
+                    type = "SUCCESS"
+                )
+                refreshBrokerData()
             } else {
                 _authErrorMessage.value = "Client ID and Access Token are required"
             }
@@ -524,8 +549,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
-            val res = brokerManager.brokerAuthManager.connectAngelOne(clientCode, mpin, apiKey, totpSecret)
-            if (res.isFailure) {
+            val cleanCode = clientCode.trim().uppercase()
+            val cleanMpin = mpin.trim()
+            val cleanKey = apiKey.trim()
+            val cleanTotp = totpSecret.trim()
+            
+            val res = brokerManager.brokerAuthManager.connectAngelOne(cleanCode, cleanMpin, cleanKey, cleanTotp)
+            if (res.isSuccess) {
+                val current = _userProfile.value
+                val updated = current.copy(
+                    isAngelConnected = true,
+                    angelClientId = cleanCode,
+                    connectedBroker = if (current.connectedBroker.isBlank()) "Angel One" else current.connectedBroker
+                )
+                _userProfile.value = updated
+                repository.updateProfile(updated)
+                _isSessionValid.value = true
+                _authSuccessEvent.value = true
+                _showConnectDialog.value = false
+                repository.addNotification(
+                    title = "Angel One Connected",
+                    message = "Angel One account $cleanCode authenticated successfully 📊",
+                    type = "SUCCESS"
+                )
+                refreshBrokerData()
+            } else {
                 _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Angel login failed"
             }
             _isAuthInProgress.value = false
@@ -547,41 +595,89 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return trimmed
     }
 
-    fun connectUpstox(apiKey: String, apiSecret: String, authCode: String = "") {
+    fun connectUpstox(apiKey: String, apiSecret: String, authCodeOrToken: String = "") {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
+            val cleanKey = apiKey.trim()
+            val cleanSecret = apiSecret.trim()
+            val cleanInput = authCodeOrToken.trim()
+            
             try {
-                sessionManager.upstoxApiKey = apiKey
-                sessionManager.upstoxApiSecret = apiSecret
-                if (authCode.isNotBlank()) {
-                    val res = brokerManager.upstoxAuthManager.exchangeAuthCode(authCode)
-                    if (res.isFailure) {
-                        _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Upstox login failed"
+                if (cleanKey.isNotBlank()) sessionManager.upstoxApiKey = cleanKey
+                if (cleanSecret.isNotBlank()) sessionManager.upstoxApiSecret = cleanSecret
+                
+                if (cleanInput.isNotBlank()) {
+                    val res = brokerManager.upstoxAuthManager.exchangeAuthCode(cleanInput)
+                    if (res.isSuccess) {
+                        sessionManager.isUpstoxConnected = true
+                        brokerManager.brokerAuthManager.updateStatus(
+                            "Upstox",
+                            "Secondary Data Feed",
+                            com.example.data.network.BrokerAuthStatus.CONNECTED,
+                            "Connected (Live Protobuf Market Stream)"
+                        )
+                        _showConnectDialog.value = false
+                        repository.addNotification(
+                            title = "Upstox Connected",
+                            message = "Upstox market streamer connected successfully ⚡",
+                            type = "SUCCESS"
+                        )
+                        refreshBrokerData()
+                    } else {
+                        _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Upstox authorization failed"
                     }
+                } else if (cleanKey.isNotBlank()) {
+                    _authErrorMessage.value = "Please click 'OPEN UPSTOX LOGIN' to authorize or paste your Token/Code"
+                } else {
+                    _authErrorMessage.value = "Upstox API Key is required"
                 }
             } catch (e: Exception) {
-                _authErrorMessage.value = e.message
+                _authErrorMessage.value = e.message ?: "Upstox connection error"
             }
             _isAuthInProgress.value = false
         }
     }
 
-    fun connectFyers(appId: String, secretId: String, authCode: String = "") {
+    fun connectFyers(appId: String, secretId: String, authCodeOrToken: String = "") {
         viewModelScope.launch {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
+            val cleanAppId = appId.trim()
+            val cleanSecret = secretId.trim()
+            val cleanInput = authCodeOrToken.trim()
+            
             try {
-                sessionManager.fyersAppId = appId
-                sessionManager.fyersSecretId = secretId
-                if (authCode.isNotBlank()) {
-                    val res = brokerManager.fyersAuthManager.exchangeAuthCode(authCode)
-                    if (res.isFailure) {
-                        _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Fyers login failed"
+                if (cleanAppId.isNotBlank()) sessionManager.fyersAppId = cleanAppId
+                if (cleanSecret.isNotBlank()) sessionManager.fyersSecretId = cleanSecret
+                
+                if (cleanInput.isNotBlank()) {
+                    val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanInput)
+                    if (res.isSuccess) {
+                        sessionManager.isFyersConnected = true
+                        brokerManager.brokerAuthManager.updateStatus(
+                            "Fyers",
+                            "Primary Market Data Feed",
+                            com.example.data.network.BrokerAuthStatus.CONNECTED,
+                            "Connected (Live V3 WebSocket Feeds)"
+                        )
+                        _showConnectDialog.value = false
+                        repository.addNotification(
+                            title = "Fyers Connected",
+                            message = "Fyers market data feed connected successfully 🚀",
+                            type = "SUCCESS"
+                        )
+                        refreshBrokerData()
+                    } else {
+                        _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Fyers authorization failed"
                     }
+                } else if (cleanAppId.isNotBlank()) {
+                    _authErrorMessage.value = "Please click 'OPEN FYERS LOGIN' to authorize or paste your Token/Code"
+                } else {
+                    _authErrorMessage.value = "Fyers App ID is required"
                 }
             } catch (e: Exception) {
-                _authErrorMessage.value = e.message
+                _authErrorMessage.value = e.message ?: "Fyers connection error"
             }
             _isAuthInProgress.value = false
         }
