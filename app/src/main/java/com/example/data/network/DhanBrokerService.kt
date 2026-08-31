@@ -5,6 +5,12 @@ import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
 import com.example.data.model.OptionStrikeItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class DhanBrokerService(
@@ -13,58 +19,131 @@ class DhanBrokerService(
     private val sessionManager: SessionManager
 ) : IBrokerService {
 
-    override suspend fun getProfile(): Result<UserProfileEntity> {
-        if (sessionManager.dhanAccessToken.isNullOrEmpty()) {
-            return Result.failure(Exception("Dhan account is not connected. Please connect your Dhan account."))
+    private val directClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
+    override suspend fun getProfile(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
+        val token = sessionManager.dhanAccessToken?.trim() ?: ""
+        val clientId = sessionManager.dhanClientId?.trim() ?: ""
+        if (token.isEmpty()) {
+            return@withContext Result.failure(Exception("Dhan account is not connected. Please connect your Dhan account."))
         }
 
-        return runCatching {
-            val response = api.getFundLimit()
-            if (response.isSuccessful) {
-                val fund = response.body()
-                val avail = fund?.availableBalance 
-                    ?: fund?.altAvailableBalance 
-                    ?: fund?.sodLimit 
-                    ?: fund?.withdrawableBalance 
-                    ?: fund?.netMarginAvailable 
-                    ?: fund?.cashBalance 
-                    ?: 0.0
-                
-                // Fetch positions to get realized/unrealized P&L
-                var totalRealized = 0.0
-                var totalUnrealized = 0.0
-                runCatching {
-                    val posRes = api.getPositions()
-                    if (posRes.isSuccessful) {
-                        posRes.body()?.forEach { 
-                            totalRealized += it.realizedProfit
-                            totalUnrealized += it.unrealizedProfit
-                        }
+        runCatching {
+            var avail: Double? = null
+            var collateral = 0.0
+            var returnedClientId = clientId
+
+            // 1. Try Retrofit API call
+            runCatching {
+                val response = api.getFundLimit()
+                if (response.isSuccessful) {
+                    val fund = response.body()
+                    val parsedAvail = fund?.availableBalance 
+                        ?: fund?.altAvailableBalance 
+                        ?: fund?.sodLimit 
+                        ?: fund?.withdrawableBalance 
+                        ?: fund?.netMarginAvailable 
+                        ?: fund?.cashBalance
+                    if (parsedAvail != null) {
+                        avail = parsedAvail
+                    }
+                    fund?.collateralAmount?.let { collateral = it }
+                    fund?.dhanClientId?.takeIf { it.isNotBlank() }?.let { returnedClientId = it }
+                }
+            }
+
+            // 2. If Retrofit didn't get fund value or failed, use direct OkHttp fallback
+            if (avail == null) {
+                val directResult = fetchFundsDirectly(token, clientId)
+                if (directResult != null) {
+                    avail = directResult.first
+                    collateral = directResult.second
+                    if (directResult.third.isNotBlank()) {
+                        returnedClientId = directResult.third
                     }
                 }
+            }
 
-                val clientId = fund?.dhanClientId?.takeIf { it.isNotBlank() } ?: sessionManager.dhanClientId ?: ""
-                val accountName = if (clientId.isNotBlank()) "Dhan Account ($clientId)" else "Dhan Account"
+            val finalAvail = avail ?: 0.0
 
-                UserProfileEntity(
-                    id = 1,
-                    name = accountName,
-                    email = "",
-                    availableMargin = avail,
-                    accountBalance = avail,
-                    todaysPnl = totalRealized + totalUnrealized,
-                    todaysPnlPercent = 0.0,
-                    connectedBroker = "Dhan",
-                    isDhanConnected = true,
-                    dhanClientId = clientId,
-                    realizedPnl = totalRealized,
-                    unrealizedPnl = totalUnrealized
-                )
-            } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                throw Exception("API Error ${response.code()}: $errorBody")
+            // 3. Fetch positions to get realized/unrealized P&L
+            var totalRealized = 0.0
+            var totalUnrealized = 0.0
+            runCatching {
+                val posRes = api.getPositions()
+                if (posRes.isSuccessful) {
+                    posRes.body()?.forEach { 
+                        totalRealized += it.realizedProfit
+                        totalUnrealized += it.unrealizedProfit
+                    }
+                }
+            }
+
+            val finalClientId = returnedClientId.ifBlank { clientId }
+            val accountName = if (finalClientId.isNotBlank()) "Dhan Account ($finalClientId)" else "Dhan Account"
+
+            UserProfileEntity(
+                id = 1,
+                name = accountName,
+                email = "",
+                availableMargin = finalAvail,
+                accountBalance = finalAvail,
+                totalBalance = finalAvail + collateral,
+                todaysPnl = totalRealized + totalUnrealized,
+                todaysPnlPercent = 0.0,
+                connectedBroker = "Dhan",
+                isDhanConnected = true,
+                dhanClientId = finalClientId,
+                realizedPnl = totalRealized,
+                unrealizedPnl = totalUnrealized
+            )
+        }
+    }
+
+    private fun fetchFundsDirectly(token: String, clientId: String): Triple<Double, Double, String>? {
+        val endpoints = listOf(
+            "https://api.dhan.co/v2/fundlimit",
+            "https://api.dhan.co/fundlimit"
+        )
+        for (url in endpoints) {
+            try {
+                val reqBuilder = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .header("access-token", token)
+                if (clientId.isNotBlank()) {
+                    reqBuilder.header("client-id", clientId)
+                }
+                val response = directClient.newCall(reqBuilder.build()).execute()
+                if (response.isSuccessful) {
+                    val bodyStr = response.body?.string() ?: ""
+                    if (bodyStr.isNotBlank()) {
+                        val json = JSONObject(bodyStr)
+                        val avail = when {
+                            json.has("availabelBalance") -> json.optDouble("availabelBalance", 0.0)
+                            json.has("availableBalance") -> json.optDouble("availableBalance", 0.0)
+                            json.has("netMarginAvailable") -> json.optDouble("netMarginAvailable", 0.0)
+                            json.has("sodLimit") -> json.optDouble("sodLimit", 0.0)
+                            json.has("withdrawableBalance") -> json.optDouble("withdrawableBalance", 0.0)
+                            json.has("cashBalance") -> json.optDouble("cashBalance", 0.0)
+                            else -> 0.0
+                        }
+                        val collateral = json.optDouble("collateralAmount", 0.0)
+                        val cId = json.optString("dhanClientId", "")
+                        return Triple(avail, collateral, cId)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DhanBrokerService", "Direct fund fetch failed on $url: ${e.message}")
             }
         }
+        return null
     }
 
     override suspend fun getFunds(): Result<Double> {

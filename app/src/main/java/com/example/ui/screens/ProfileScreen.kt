@@ -144,7 +144,7 @@ fun ProfileScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             // =========================================================================
-            // 1. TOP BAR / BRAND HEADER
+            // 1. TOP BAR / BRAND HEADER (Logo, Heading, Tagline)
             // =========================================================================
             Row(
                 modifier = Modifier
@@ -153,31 +153,27 @@ fun ProfileScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    CrownLogo(size = 38.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
                         Text(
-                            text = "👑",
-                            fontSize = 20.sp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "PROFILE & SETTINGS",
-                            fontSize = 18.sp,
+                            text = "KING KHAN AI TRADE",
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Black,
-                            color = PrimaryGold,
+                            color = Color.White,
                             letterSpacing = 0.5.sp
                         )
+                        KingKhanTagline(fontSize = 11.sp)
                     }
-                    Text(
-                        text = "Manage credentials, feeds & risk systems",
-                        fontSize = 11.sp,
-                        color = TextGray
-                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LiveStatusBadge(
-                        isLive = marketDataSource.isNotBlank(),
+                        isLive = marketDataSource.isNotBlank() && marketDataSource != "OFFLINE" && !marketDataSource.contains("UNAVAILABLE"),
                         dataSource = marketDataSource.ifBlank { "OFFLINE" }
                     )
                     Spacer(modifier = Modifier.width(8.dp))

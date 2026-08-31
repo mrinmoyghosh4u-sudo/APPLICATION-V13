@@ -80,23 +80,27 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
 
     // 12. Validate the access token before every request and refresh it if required.
     private val dhanAuthInterceptor = Interceptor { chain ->
-        var token = sessionManager.dhanAccessToken
-        val clientId = sessionManager.dhanClientId
+        val token = sessionManager.dhanAccessToken?.trim() ?: ""
+        val clientId = sessionManager.dhanClientId?.trim() ?: ""
         
-        if (token.isNullOrBlank()) {
+        if (token.isBlank()) {
             throw IOException("Dhan Access Token is missing or expired")
         }
 
         val requestBuilder = chain.request().newBuilder()
-            .addHeader("Content-Type", "application/json")
-            .addHeader("client-id", clientId)
-            .addHeader("access-token", token)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("access-token", token)
+
+        if (clientId.isNotBlank()) {
+            requestBuilder.header("client-id", clientId)
+        }
 
         val request = requestBuilder.build()
-        var response = chain.proceed(request)
+        val response = chain.proceed(request)
 
         if (response.code == 401 || response.code == 403) {
-            Log.e("DhanAPI", "Dhan access token expired or invalid (401/403).")
+            Log.e("DhanAPI", "Dhan access token expired or invalid (${response.code}).")
         }
         response
     }
