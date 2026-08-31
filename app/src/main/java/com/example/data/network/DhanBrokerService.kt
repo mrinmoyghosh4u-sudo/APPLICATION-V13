@@ -22,24 +22,33 @@ class DhanBrokerService(
             val response = api.getFundLimit()
             if (response.isSuccessful) {
                 val fund = response.body()
-                val avail = fund?.availableBalance ?: fund?.altAvailableBalance ?: 0.0
+                val avail = fund?.availableBalance 
+                    ?: fund?.altAvailableBalance 
+                    ?: fund?.sodLimit 
+                    ?: fund?.withdrawableBalance 
+                    ?: fund?.netMarginAvailable 
+                    ?: fund?.cashBalance 
+                    ?: 0.0
                 
                 // Fetch positions to get realized/unrealized P&L
                 var totalRealized = 0.0
                 var totalUnrealized = 0.0
-                val posRes = api.getPositions()
-                if (posRes.isSuccessful) {
-                    posRes.body()?.forEach { 
-                        totalRealized += it.realizedProfit
-                        totalUnrealized += it.unrealizedProfit
+                runCatching {
+                    val posRes = api.getPositions()
+                    if (posRes.isSuccessful) {
+                        posRes.body()?.forEach { 
+                            totalRealized += it.realizedProfit
+                            totalUnrealized += it.unrealizedProfit
+                        }
                     }
                 }
 
                 val clientId = fund?.dhanClientId?.takeIf { it.isNotBlank() } ?: sessionManager.dhanClientId ?: ""
+                val accountName = if (clientId.isNotBlank()) "Dhan Account ($clientId)" else "Dhan Account"
 
                 UserProfileEntity(
                     id = 1,
-                    name = "",
+                    name = accountName,
                     email = "",
                     availableMargin = avail,
                     accountBalance = avail,

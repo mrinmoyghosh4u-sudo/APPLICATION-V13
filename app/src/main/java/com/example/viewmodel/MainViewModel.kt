@@ -515,17 +515,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionManager.isDhanConnected = true
                 sessionManager.activeBroker = "Dhan"
                 brokerManager.setActiveBroker("Dhan")
+
+                var liveMargin = 0.0
+                var liveRealized = 0.0
+                var liveUnrealized = 0.0
+                var fetchedName = "Dhan ($cleanClientId)"
+
+                runCatching {
+                    val profRes = brokerManager.getProfile()
+                    if (profRes.isSuccess) {
+                        val prof = profRes.getOrThrow()
+                        liveMargin = prof.availableMargin
+                        liveRealized = prof.realizedPnl
+                        liveUnrealized = prof.unrealizedPnl
+                        if (prof.name.isNotBlank()) {
+                            fetchedName = prof.name
+                        }
+                    }
+                }
+
                 brokerManager.brokerAuthManager.updateStatus(
                     "Dhan",
                     "Primary Order Execution",
                     com.example.data.network.BrokerAuthStatus.CONNECTED,
-                    "Active for Order Execution (Client: $cleanClientId)"
+                    "Active for Order Execution (Client: $cleanClientId • Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)})"
                 )
                 val current = _userProfile.value
                 val updated = current.copy(
+                    name = fetchedName,
                     isDhanConnected = true,
                     dhanClientId = cleanClientId,
-                    connectedBroker = "Dhan"
+                    connectedBroker = "Dhan",
+                    availableMargin = liveMargin,
+                    accountBalance = liveMargin,
+                    realizedPnl = liveRealized,
+                    unrealizedPnl = liveUnrealized,
+                    todaysPnl = liveRealized + liveUnrealized
                 )
                 _userProfile.value = updated
                 repository.updateProfile(updated)
@@ -534,7 +559,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _showConnectDialog.value = false
                 repository.addNotification(
                     title = "Dhan Connected",
-                    message = "DhanHQ account $cleanClientId connected successfully ⚡",
+                    message = "DhanHQ account $cleanClientId connected (Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)}) ⚡",
                     type = "SUCCESS"
                 )
                 refreshBrokerData()

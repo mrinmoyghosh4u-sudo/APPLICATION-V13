@@ -224,6 +224,16 @@ fun ProfileScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Avatar Circle
+                        val holderName = when {
+                            userProfile.name.isNotBlank() && userProfile.name != "King Khan Master Trader" -> userProfile.name
+                            userProfile.isDhanConnected && userProfile.dhanClientId.isNotBlank() -> "Dhan Account (${userProfile.dhanClientId})"
+                            userProfile.isDhanConnected -> "Dhan Account Holder"
+                            userProfile.dhanClientId.isNotBlank() -> "Dhan Account (${userProfile.dhanClientId})"
+                            userProfile.isAngelConnected && userProfile.angelClientId.isNotBlank() -> "Angel One (${userProfile.angelClientId})"
+                            else -> "Trader Account"
+                        }
+                        val initial = holderName.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "D"
+
                         Box(
                             modifier = Modifier
                                 .size(56.dp)
@@ -238,7 +248,6 @@ fun ProfileScreen(
                                 .background(DarkBackground),
                             contentAlignment = Alignment.Center
                         ) {
-                            val initial = (userProfile.name.ifBlank { "King Khan" }).first().uppercaseChar().toString()
                             Text(
                                 text = initial,
                                 fontSize = 24.sp,
@@ -252,44 +261,29 @@ fun ProfileScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = userProfile.name.ifBlank { "King Khan Master Trader" },
+                                    text = holderName,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextWhite
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(PrimaryGold.copy(alpha = 0.15f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "👑 " + userProfile.role.ifBlank { "PRO TRADER" },
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SecondaryGold
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(ProfitGreen.copy(alpha = 0.15f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "KYC VERIFIED",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ProfitGreen
-                                    )
-                                }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            if (userProfile.isDhanConnected || userProfile.dhanClientId.isNotBlank()) {
+                                Text(
+                                    text = "⚡ Dhan Order Execution: Connected" + if (userProfile.dhanClientId.isNotBlank()) " (${userProfile.dhanClientId})" else "",
+                                    fontSize = 11.sp,
+                                    color = ProfitGreen,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            } else {
+                                Text(
+                                    text = "Order Execution: Dhan Disconnected",
+                                    fontSize = 11.sp,
+                                    color = TextGray
+                                )
                             }
                             if (userProfile.email.isNotBlank() || userProfile.phone.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(3.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = listOfNotNull(
                                         userProfile.email.takeIf { it.isNotBlank() },
@@ -482,7 +476,7 @@ fun ProfileScreen(
             val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) BrokerAuthStatus.CONNECTED else BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "DhanHQ",
-                subtitle = "Live Execution & Portfolio Sync (API v2)",
+                subtitle = "Primary Order Execution Engine (DhanHQ API v2)",
                 status = dhanStatus,
                 statusMessage = dhanInfo?.message ?: if (userProfile.isDhanConnected) "Connected (Client: ${userProfile.dhanClientId.ifBlank { "Active" }})" else "Disconnected",
                 onConnect = { onSwitchBroker("Dhan") },
@@ -498,7 +492,7 @@ fun ProfileScreen(
             val angelStatus = angelInfo?.status ?: if (userProfile.isAngelConnected) BrokerAuthStatus.CONNECTED else BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "Angel One",
-                subtitle = "SmartAPI Trading & Option Chain Feed",
+                subtitle = "Market Data & Option Chain Feed (SmartAPI)",
                 status = angelStatus,
                 statusMessage = angelInfo?.message ?: if (userProfile.isAngelConnected) "Connected (Client: ${userProfile.angelClientId.ifBlank { "Active" }})" else "Disconnected",
                 onConnect = { onSwitchBroker("Angel One") },
@@ -514,7 +508,7 @@ fun ProfileScreen(
             val fyersStatus = fyersInfo?.status ?: BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "Fyers",
-                subtitle = "Primary Market Data Feed (API v3 WebSocket)",
+                subtitle = "Market Data Feed (API v3 WebSocket)",
                 status = fyersStatus,
                 statusMessage = fyersInfo?.message ?: "WebSocket Live Tick Feeds",
                 onConnect = { onSwitchBroker("Fyers") },
@@ -530,7 +524,7 @@ fun ProfileScreen(
             val upstoxStatus = upstoxInfo?.status ?: BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "Upstox",
-                subtitle = "Protobuf Binary Market Streamer (API v3)",
+                subtitle = "Market Data Feed & Streamer (Protobuf API v3)",
                 status = upstoxStatus,
                 statusMessage = upstoxInfo?.message ?: "High-speed Market Stream",
                 onConnect = { onSwitchBroker("Upstox") },

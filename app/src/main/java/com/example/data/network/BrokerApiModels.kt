@@ -160,7 +160,10 @@ data class DhanFundLimitResponse(
     @Json(name = "availableBalance") val altAvailableBalance: Double? = null,
     @Json(name = "sodLimit") val sodLimit: Double? = null,
     @Json(name = "collateralAmount") val collateralAmount: Double? = null,
-    @Json(name = "utilizedAmount") val utilizedAmount: Double? = null
+    @Json(name = "utilizedAmount") val utilizedAmount: Double? = null,
+    @Json(name = "withdrawableBalance") val withdrawableBalance: Double? = null,
+    @Json(name = "netMarginAvailable") val netMarginAvailable: Double? = null,
+    @Json(name = "cashBalance") val cashBalance: Double? = null
 )
 
 @JsonClass(generateAdapter = true)
