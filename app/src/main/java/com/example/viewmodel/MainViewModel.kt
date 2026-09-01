@@ -252,18 +252,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun validateAndRestoreSession(): Boolean = sessionRestoreMutex.withLock {
         _isSessionRestoring.value = true
-        val hasSession = sessionManager.hasValidSession()
-        if (!hasSession) {
-            android.util.Log.d("SessionRestore", "session exists: false")
-            _isSessionValid.value = false
+        try {
+            android.util.Log.i("MainViewModel", "[SESSION_RESTORE] Starting full session validation and restoration flow...")
+            brokerManager.brokerAuthManager.initialize()
+            
+            val hasConnectedBroker = brokerManager.brokerAuthManager.hasAnyConnectedBroker()
+            _isSessionValid.value = hasConnectedBroker
+            android.util.Log.i("MainViewModel", "[SESSION_RESTORE] Validated connected brokers present: $hasConnectedBroker")
+            
+            // Restore active broker
+            if (sessionManager.isDhanConnected) {
+                sessionManager.activeBroker = "Dhan"
+            }
+            
+            if (hasConnectedBroker) {
+                repository.syncWithBroker()
+            }
+            return@withLock hasConnectedBroker
+        } catch (e: Exception) {
+            android.util.Log.e("MainViewModel", "[SESSION_RESTORE_ERROR] Error restoring session: ${e.message}", e)
+            val fallbackValid = brokerManager.brokerAuthManager.hasAnyConnectedBroker()
+            _isSessionValid.value = fallbackValid
+            return@withLock fallbackValid
+        } finally {
             _isSessionRestoring.value = false
-            return@withLock false
         }
-        android.util.Log.d("SessionRestore", "session exists: true")
-        _isSessionValid.value = true
-        _isSessionRestoring.value = false
-        repository.syncWithBroker()
-        return@withLock true
     }
 
     private fun observeData() {

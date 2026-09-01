@@ -5,9 +5,8 @@ import com.example.util.AngelAuthHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class BrokerAuthStatus {
     NOT_CONFIGURED,
@@ -49,33 +48,48 @@ class BrokerAuthManager(
         _statuses.value = current
     }
 
-    suspend fun initialize() {
+    fun hasAnyConnectedBroker(): Boolean {
+        return sessionManager.isDhanConnected || 
+               sessionManager.isAngelConnected || 
+               sessionManager.isUpstoxConnected || 
+               sessionManager.isFyersConnected
+    }
+
+    fun hasActiveMarketDataProvider(): Boolean {
+        return sessionManager.isUpstoxConnected || 
+               sessionManager.isFyersConnected || 
+               sessionManager.isAngelConnected
+    }
+
+    suspend fun initialize() = withContext(Dispatchers.IO) {
         _isInitializing.value = true
         try {
+            Log.i(TAG, "[SESSION_RESTORE_START] Commencing independent broker session validation...")
             validateDhanSession()
-            validateAngelSession()
             validateUpstoxSession()
             validateFyersSession()
+            validateAngelSession()
+            Log.i(TAG, "[SESSION_RESTORE_END] Broker session validation completed. Connected brokers: Dhan=${sessionManager.isDhanConnected}, Upstox=${sessionManager.isUpstoxConnected}, Fyers=${sessionManager.isFyersConnected}, Angel=${sessionManager.isAngelConnected}")
         } finally {
             _isInitializing.value = false
         }
     }
     
-    private suspend fun validateDhanSession() {
-        val token = sessionManager.dhanAccessToken?.trim() ?: ""
-        val clientId = sessionManager.dhanClientId?.trim() ?: ""
+    suspend fun validateDhanSession() = withContext(Dispatchers.IO) {
+        val token = sessionManager.dhanAccessToken.trim()
+        val clientId = sessionManager.dhanClientId.trim()
         
         if (token.isBlank()) {
             val hasCreds = clientId.isNotBlank() && 
                            (sessionManager.dhanClientSecret.isNotBlank() || com.example.util.BrokerConfig.dhanClientSecret.isNotBlank())
             val status = if (hasCreds) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
             val msg = if (hasCreds) "Login Required" else "Credentials not configured"
-            updateStatus("Dhan", "Primary Order Execution", status, msg)
             sessionManager.isDhanConnected = false
-            return
+            updateStatus("Dhan", "Primary Order Execution", status, msg)
+            return@withContext
         }
         
-        // Active API validation: verify Dhan session with lightweight live profile/funds call
+        // Active API validation: verify Dhan session with live profile/funds call
         val profRes = dhanService.getProfile()
         if (profRes.isSuccess) {
             sessionManager.isDhanConnected = true
@@ -94,64 +108,114 @@ class BrokerAuthManager(
         }
     }
     
-    private suspend fun validateAngelSession() {
-        val hasCreds = sessionManager.angelApiKey.isNotBlank() || com.example.util.BrokerConfig.angelApiKey.isNotBlank()
+    suspend fun validateAngelSession() = withContext(Dispatchers.IO) {
+        val hasCreds = (sessionManager.angelApiKey.isNotBlank() || com.example.util.BrokerConfig.angelApiKey.isNotBlank()) &&
+                       sessionManager.angelClientCode.isNotBlank()
+        val hasAuthToken = sessionManager.angelAuthToken.isNotBlank()
         
-        if (!hasCreds) {
+        if (!hasCreds && !hasAuthToken) {
+            sessionManager.isAngelConnected = false
             updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
-            return
+            return@withContext
         }
         
-        if (sessionManager.angelAuthToken.isNotBlank()) {
-            updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #2 Active")
-            angelMarketDataService.connect()
-        } else {
-            updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Login Required")
+        if (hasAuthToken) {
+            val profRes = angelOneService.getProfile()
+            if (profRes.isSuccess) {
+                sessionManager.isAngelConnected = true
+                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #2 Active")
+                return@withContext
+            } else {
+                Log.w(TAG, "[ANGEL_SESSION_VALIDATION_FAILED] Token invalid: ${profRes.exceptionOrNull()?.message}")
+                sessionManager.isAngelConnected = false
+            }
         }
+
+        // Token missing or expired: attempt auto-reconnect if credentials exist
+        val clientCode = sessionManager.angelClientCode
+        val pin = sessionManager.angelClientPin
+        val apiKey = sessionManager.angelApiKey.takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.angelApiKey
+        val totpSecret = sessionManager.angelTotpSecret
+        
+        if (clientCode.isNotBlank() && pin.isNotBlank() && apiKey.isNotBlank() && totpSecret.isNotBlank()) {
+            updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
+            val reconnectRes = connectAngelOne(clientCode, pin, apiKey, totpSecret)
+            if (reconnectRes.isSuccess) {
+                sessionManager.isAngelConnected = true
+                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #2 Active (Auto-Restored)")
+                return@withContext
+            }
+        }
+
+        sessionManager.isAngelConnected = false
+        val status = if (hasCreds) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+        val msg = if (hasCreds) "Login Required" else "Credentials not configured"
+        updateStatus("Angel One", "Fallback #2 Market Data", status, msg)
     }
     
-    private suspend fun validateUpstoxSession() {
-        if (!sessionManager.upstoxAccessToken.isNullOrBlank()) {
-            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
-            brokerManager.upstoxMarketDataService.connect()
-        } else {
-            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Login Required")
+    suspend fun validateUpstoxSession() = withContext(Dispatchers.IO) {
+        val hasToken = !sessionManager.upstoxAccessToken.isNullOrBlank()
+        val hasApiKey = sessionManager.upstoxApiKey.isNotBlank() || com.example.util.BrokerConfig.upstoxApiKey.isNotBlank()
+
+        if (!hasToken && !hasApiKey) {
+            sessionManager.isUpstoxConnected = false
+            updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+            return@withContext
         }
+
+        if (hasToken) {
+            val isValid = brokerManager.upstoxAuthManager.validateSession()
+            if (isValid) {
+                sessionManager.isUpstoxConnected = true
+                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONNECTED, "Live Market Data Active")
+                return@withContext
+            }
+        }
+
+        sessionManager.isUpstoxConnected = false
+        val status = if (hasApiKey) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+        val msg = if (hasApiKey) "Token Expired. Login Required." else "Credentials not configured"
+        updateStatus("Upstox", "Primary Market Data", status, msg)
     }
     
-    private suspend fun validateFyersSession() {
+    suspend fun validateFyersSession() = withContext(Dispatchers.IO) {
         val hasSession = !sessionManager.fyersAccessToken.isNullOrBlank()
         val hasRefreshToken = !sessionManager.fyersRefreshToken.isNullOrBlank()
+        val hasAppId = sessionManager.fyersAppId.isNotBlank() || com.example.util.BrokerConfig.fyersAppId.isNotBlank()
         
-        if (!hasSession && !hasRefreshToken) {
+        if (!hasSession && !hasRefreshToken && !hasAppId) {
+            sessionManager.isFyersConnected = false
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
-            return
+            return@withContext
         }
         
-        val timestamp = sessionManager.fyersTokenTimestamp
-        val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
-        
-        if (hasSession && !isExpired) {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
-            brokerManager.fyersMarketDataService.connect()
-            return
+        if (hasSession) {
+            val isValid = brokerManager.fyersAuthManager.validateSession()
+            if (isValid) {
+                sessionManager.isFyersConnected = true
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
+                return@withContext
+            }
         }
         
         if (hasRefreshToken) {
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
-            val result = reconnectBroker("Fyers")
+            val result = brokerManager.fyersAuthManager.refreshSession()
             if (result.isSuccess) {
+                sessionManager.isFyersConnected = true
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
-            } else {
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
+                return@withContext
             }
-        } else {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
         }
+
+        sessionManager.isFyersConnected = false
+        val status = if (hasAppId) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+        val msg = if (hasAppId) "Session Expired. Login Required." else "Credentials not configured"
+        updateStatus("Fyers", "Fallback #1 Market Data", status, msg)
     }
     
-    suspend fun connectAngelOne(clientCode: String, pin: String, apiKey: String, totpSecret: String): Result<Boolean> {
-        return try {
+    suspend fun connectAngelOne(clientCode: String, pin: String, apiKey: String, totpSecret: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
             val res = AngelAuthHelper.generateSession(clientCode, pin, totpSecret, apiKey)
             if (res.isSuccess) {
                 val tokens = res.getOrThrow()
@@ -162,9 +226,9 @@ class BrokerAuthManager(
                 sessionManager.angelClientCode = clientCode
                 sessionManager.angelClientPin = pin
                 sessionManager.angelTotpSecret = totpSecret
+                sessionManager.angelTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isAngelConnected = true
                 
-                angelMarketDataService.connect()
                 updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #2 Active")
                 Result.success(true)
             } else {
@@ -175,28 +239,39 @@ class BrokerAuthManager(
         }
     }
     
-    suspend fun reconnectBroker(brokerName: String): Result<Boolean> {
-        return when (brokerName) {
+    suspend fun reconnectBroker(brokerName: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        when (brokerName) {
             "Fyers" -> {
                 val fyersAuth = brokerManager.fyersAuthManager
                 val refreshRes = fyersAuth.refreshSession()
                 if (refreshRes.isSuccess) {
-                    brokerManager.fyersMarketDataService.connect()
+                    sessionManager.isFyersConnected = true
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
                     Result.success(true)
                 } else {
+                    sessionManager.isFyersConnected = false
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
                     Result.failure(Exception(refreshRes.exceptionOrNull()?.message ?: "Fyers refresh failed"))
                 }
             }
             "Angel One" -> {
                 val clientCode = sessionManager.angelClientCode
                 val pin = sessionManager.angelClientPin
-                val apiKey = sessionManager.angelApiKey
+                val apiKey = sessionManager.angelApiKey.takeIf { it.isNotBlank() } ?: com.example.util.BrokerConfig.angelApiKey
                 val totpSecret = sessionManager.angelTotpSecret
-                if (clientCode.isNotBlank() && pin.isNotBlank() && apiKey.isNotBlank()) {
+                if (clientCode.isNotBlank() && pin.isNotBlank() && apiKey.isNotBlank() && totpSecret.isNotBlank()) {
                     connectAngelOne(clientCode, pin, apiKey, totpSecret)
                 } else {
                     Result.failure(Exception("Missing credentials for auto-reconnect"))
                 }
+            }
+            "Dhan" -> {
+                validateDhanSession()
+                if (sessionManager.isDhanConnected) Result.success(true) else Result.failure(Exception("Dhan session invalid"))
+            }
+            "Upstox" -> {
+                validateUpstoxSession()
+                if (sessionManager.isUpstoxConnected) Result.success(true) else Result.failure(Exception("Upstox session invalid"))
             }
             else -> Result.failure(Exception("$brokerName auto-reconnect not supported. Please re-login."))
         }
@@ -205,26 +280,21 @@ class BrokerAuthManager(
     fun disconnectBroker(name: String) {
         when (name) {
             "Dhan" -> {
-                sessionManager.dhanAccessToken = ""
-                sessionManager.isDhanConnected = false
+                sessionManager.clearDhanCredentials()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Angel One" -> {
-                sessionManager.angelAuthToken = ""
-                sessionManager.isAngelConnected = false
+                sessionManager.clearAngelSessionTokens()
                 angelMarketDataService.disconnect()
                 updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Upstox" -> {
-                sessionManager.upstoxAccessToken = ""
-                sessionManager.isUpstoxConnected = false
+                sessionManager.clearUpstoxSession()
                 brokerManager.upstoxMarketDataService.disconnect()
                 updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
             "Fyers" -> {
-                sessionManager.fyersAccessToken = ""
-                sessionManager.fyersRefreshToken = ""
-                sessionManager.isFyersConnected = false
+                sessionManager.clearFyersSession()
                 brokerManager.fyersMarketDataService.disconnect()
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
             }
@@ -232,19 +302,29 @@ class BrokerAuthManager(
     }
     
     fun removeAccount(name: String) {
-        disconnectBroker(name)
         when (name) {
             "Angel One" -> {
-                sessionManager.angelApiKey = ""
-                sessionManager.angelClientCode = ""
-                sessionManager.angelClientPin = ""
-                sessionManager.angelTotpSecret = ""
+                sessionManager.clearAngelOneCredentials()
+                angelMarketDataService.disconnect()
                 updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials removed")
             }
             "Dhan" -> {
-                sessionManager.dhanClientId = ""
-                sessionManager.dhanClientSecret = ""
+                sessionManager.clearDhanCredentials()
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Credentials removed")
+            }
+            "Upstox" -> {
+                sessionManager.clearUpstoxSession()
+                sessionManager.upstoxApiKey = ""
+                sessionManager.upstoxApiSecret = ""
+                brokerManager.upstoxMarketDataService.disconnect()
+                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials removed")
+            }
+            "Fyers" -> {
+                sessionManager.clearFyersSession()
+                sessionManager.fyersAppId = ""
+                sessionManager.fyersSecretId = ""
+                brokerManager.fyersMarketDataService.disconnect()
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials removed")
             }
         }
     }

@@ -27,8 +27,8 @@ class DhanBrokerService(
     }
 
     override suspend fun getProfile(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
-        val token = sessionManager.dhanAccessToken?.trim() ?: ""
-        val clientId = sessionManager.dhanClientId?.trim() ?: ""
+        val token = sessionManager.dhanAccessToken.trim()
+        val clientId = sessionManager.dhanClientId.trim()
         if (token.isEmpty()) {
             return@withContext Result.failure(Exception("Dhan account is not connected. Please connect your Dhan account."))
         }
@@ -47,10 +47,10 @@ class DhanBrokerService(
                     val fund = response.body()
                     val parsedAvail = fund?.availableBalance 
                         ?: fund?.altAvailableBalance 
-                        ?: fund?.sodLimit 
-                        ?: fund?.withdrawableBalance 
                         ?: fund?.netMarginAvailable 
-                        ?: fund?.cashBalance
+                        ?: fund?.sodLimit 
+                        ?: fund?.cashBalance 
+                        ?: fund?.withdrawableBalance
                     if (parsedAvail != null) {
                         avail = parsedAvail
                     }
@@ -79,7 +79,8 @@ class DhanBrokerService(
                 }
             }
 
-            val finalAvail = avail ?: 0.0
+            // Critical Guard: If balance could not be retrieved from either method, do NOT default to 0.0
+            val finalAvail = avail ?: throw Exception("Unable to fetch Dhan balance. Broker fund limit endpoint returned no valid balance.")
 
             // 3. Fetch positions to get realized/unrealized P&L
             var totalRealized = 0.0
@@ -134,18 +135,20 @@ class DhanBrokerService(
                     val bodyStr = response.body?.string() ?: ""
                     if (bodyStr.isNotBlank() && bodyStr.trim().startsWith("{")) {
                         val json = JSONObject(bodyStr)
-                        val avail = when {
-                            json.has("availabelBalance") -> json.optDouble("availabelBalance", 0.0)
-                            json.has("availableBalance") -> json.optDouble("availableBalance", 0.0)
-                            json.has("netMarginAvailable") -> json.optDouble("netMarginAvailable", 0.0)
-                            json.has("sodLimit") -> json.optDouble("sodLimit", 0.0)
-                            json.has("withdrawableBalance") -> json.optDouble("withdrawableBalance", 0.0)
-                            json.has("cashBalance") -> json.optDouble("cashBalance", 0.0)
-                            else -> 0.0
+                        val parsedAvail: Double? = when {
+                            json.has("availabelBalance") -> json.optDouble("availabelBalance")
+                            json.has("availableBalance") -> json.optDouble("availableBalance")
+                            json.has("netMarginAvailable") -> json.optDouble("netMarginAvailable")
+                            json.has("sodLimit") -> json.optDouble("sodLimit")
+                            json.has("withdrawableBalance") -> json.optDouble("withdrawableBalance")
+                            json.has("cashBalance") -> json.optDouble("cashBalance")
+                            else -> null
                         }
-                        val collateral = json.optDouble("collateralAmount", 0.0)
-                        val cId = json.optString("dhanClientId", "")
-                        return Triple(avail, collateral, cId)
+                        if (parsedAvail != null && !parsedAvail.isNaN()) {
+                            val collateral = json.optDouble("collateralAmount", 0.0)
+                            val cId = json.optString("dhanClientId", "")
+                            return Triple(parsedAvail, collateral, cId)
+                        }
                     }
                 } else if (response.code == 401 || response.code == 403) {
                     android.util.Log.w("DhanBrokerService", "Direct fund fetch: token expired or invalid (HTTP ${response.code})")
