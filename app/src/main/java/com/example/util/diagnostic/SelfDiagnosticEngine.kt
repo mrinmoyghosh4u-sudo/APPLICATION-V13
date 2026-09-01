@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.example.data.network.BrokerManager
 import com.example.data.model.MarketDataStore
+import com.example.data.model.MarketDataProviders
+import com.example.util.MarketStatusUtil
 import com.example.util.validation.ValidationEngine
 
 class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
@@ -28,6 +30,11 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
     private val _fullAZReport = MutableStateFlow<List<AZDiagnosticResult>>(emptyList())
     val fullAZReport: StateFlow<List<AZDiagnosticResult>> = _fullAZReport.asStateFlow()
 
+    @Volatile
+    private var isRecovering = false
+    private var lastRecoveryAttemptTime = 0L
+    private val RECOVERY_COOLDOWN_MS = 30_000L
+
     init {
         startMonitoring()
     }
@@ -45,113 +52,157 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
         val newHealthMap = mutableMapOf<String, ComponentHealth>()
 
         // 1. Monitor Upstox (Market Data Priority 1)
-        val upstoxHealth = checkBrokerHealth("UPSTOX")
-        newHealthMap["UPSTOX"] = upstoxHealth
+        val upstoxHealth = checkBrokerHealth(MarketDataProviders.UPSTOX)
+        newHealthMap[MarketDataProviders.UPSTOX] = upstoxHealth
 
         // 2. Monitor Fyers (Market Data Priority 2)
-        val fyersHealth = checkBrokerHealth("FYERS")
-        newHealthMap["FYERS"] = fyersHealth
+        val fyersHealth = checkBrokerHealth(MarketDataProviders.FYERS)
+        newHealthMap[MarketDataProviders.FYERS] = fyersHealth
 
         // 3. Monitor Angel One (Market Data Priority 3)
-        val angelHealth = checkBrokerHealth("ANGEL ONE")
-        newHealthMap["ANGEL_ONE"] = angelHealth
+        val angelHealth = checkBrokerHealth(MarketDataProviders.ANGEL_ONE)
+        newHealthMap[MarketDataProviders.ANGEL_ONE] = angelHealth
 
-
-        // 5. Monitor Dhan (Order Execution Only)
+        // 4. Monitor Dhan (Order Execution Only)
         val dhanHealth = checkDhanHealth()
-        newHealthMap["DHAN"] = dhanHealth
+        newHealthMap[MarketDataProviders.DHAN] = dhanHealth
 
-        // 6. Monitor Option Chain
+        // 5. Monitor Option Chain
         val optionChainHealth = checkOptionChainHealth()
         newHealthMap["OPTION_CHAIN"] = optionChainHealth
 
-        // 7. Monitor AI Engine
+        // 6. Monitor AI Engine
         val aiHealth = checkAiSignalHealth()
         newHealthMap["AI_SIGNAL"] = aiHealth
 
         _componentHealthMap.value = newHealthMap
 
-        // Update overall system health based on critical components
+        // Update overall system health based on unified state
         val activeProviderState = MarketDataStore.providerState.value
         val isMarketDataLive = activeProviderState.live && !activeProviderState.stale
+        val isMarketClosed = activeProviderState.status == "MARKET CLOSED" || 
+                (!MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen && !MarketStatusUtil.getDetailedMarketStatus("MCX").isOpen)
         
-        if (!isMarketDataLive) {
+        if (isMarketDataLive || isMarketClosed) {
+            _systemHealth.value = HealthState.HEALTHY
+        } else {
             _systemHealth.value = HealthState.DEGRADED
             attemptFailoverOrRecovery()
-        } else {
-            _systemHealth.value = HealthState.HEALTHY
         }
     }
 
     private fun checkBrokerHealth(broker: String): ComponentHealth {
-        val authStatus = brokerManager.brokerAuthManager.statuses.value[broker]?.status
+        val canonicalBroker = MarketDataProviders.normalize(broker)
+        val authStatus = brokerManager.brokerAuthManager.statuses.value.entries.firstOrNull { 
+            MarketDataProviders.normalize(it.key) == canonicalBroker || it.key.equals(broker, ignoreCase = true) 
+        }?.value?.status
+        
         if (authStatus != com.example.data.network.BrokerAuthStatus.CONNECTED) {
-            return ComponentHealth(broker, HealthState.AUTH_FAILED, details = mapOf("error" to "Not authenticated"))
+            return ComponentHealth(canonicalBroker, HealthState.AUTH_FAILED, details = mapOf("error" to "Not authenticated"))
         }
 
         val providerState = MarketDataStore.providerState.value
-        if (providerState.provider == broker) {
+        if (MarketDataProviders.normalize(providerState.provider) == canonicalBroker) {
             if (providerState.stale) {
-                return ComponentHealth(broker, HealthState.STALE, details = mapOf(
-                    "tickAge" to providerState.lastUpdate,
-                    "error" to "Stale market data (> 15s)"
+                val tickAge = if (providerState.lastUpdate > 0) System.currentTimeMillis() - providerState.lastUpdate else 0L
+                return ComponentHealth(canonicalBroker, HealthState.STALE, details = mapOf(
+                    "tickAge" to tickAge,
+                    "error" to "Stale market data (> 30s)"
                 ))
             }
             if (providerState.live) {
-                return ComponentHealth(broker, HealthState.HEALTHY, details = mapOf(
+                return ComponentHealth(canonicalBroker, HealthState.HEALTHY, details = mapOf(
                     "lastTick" to providerState.lastUpdate,
                     "connected" to true
                 ))
             }
-            return ComponentHealth(broker, HealthState.NO_TICK, details = mapOf("error" to "No real tick received yet"))
+            if (providerState.status == "WAITING_FOR_FIRST_TICK" || providerState.status == "CONNECTING") {
+                return ComponentHealth(canonicalBroker, HealthState.NO_TICK, details = mapOf("status" to "Waiting for first tick"))
+            }
+            if (providerState.status == "MARKET CLOSED") {
+                return ComponentHealth(canonicalBroker, HealthState.HEALTHY, details = mapOf("status" to "Market Closed"))
+            }
+            return ComponentHealth(canonicalBroker, HealthState.NO_TICK, details = mapOf("error" to "No real tick received yet"))
         }
         
-        return ComponentHealth(broker, HealthState.OFFLINE, details = mapOf("error" to "Standby or disconnected"))
+        return ComponentHealth(canonicalBroker, HealthState.OFFLINE, details = mapOf("status" to "Standby"))
     }
 
     private fun checkDhanHealth(): ComponentHealth {
         val authStatus = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status
         if (authStatus != com.example.data.network.BrokerAuthStatus.CONNECTED) {
-            return ComponentHealth("DHAN", HealthState.AUTH_FAILED, details = mapOf("error" to "Dhan not authenticated (Order execution blocked)"))
+            return ComponentHealth(MarketDataProviders.DHAN, HealthState.AUTH_FAILED, details = mapOf("error" to "Dhan not authenticated (Order execution blocked)"))
         }
-        return ComponentHealth("DHAN", HealthState.HEALTHY, details = mapOf("connected" to true, "role" to "ORDER_EXECUTION_ONLY"))
+        return ComponentHealth(MarketDataProviders.DHAN, HealthState.HEALTHY, details = mapOf("connected" to true, "role" to "ORDER_EXECUTION_ONLY"))
     }
 
     private fun checkOptionChainHealth(): ComponentHealth {
-        // Just checking if we can potentially fetch options or if there's any loaded
-        // For actual self-diagnostic we would verify against MarketDataStore's current option chain if it was stored there.
-        // Assuming we rely on OptionExpiryUtil and Option contracts being official
         return ComponentHealth("OPTION_CHAIN", HealthState.HEALTHY, details = mapOf("status" to "Ready to fetch"))
     }
 
     private fun checkAiSignalHealth(): ComponentHealth {
-        val isMarketDataLive = MarketDataStore.providerState.value.live && !MarketDataStore.providerState.value.stale
-        if (!isMarketDataLive) {
-            return ComponentHealth("AI_SIGNAL", HealthState.STALE, details = mapOf("error" to "Signal paused due to stale data"))
+        val providerState = MarketDataStore.providerState.value
+        val isMarketDataLive = providerState.live && !providerState.stale
+        val isMarketClosed = providerState.status == "MARKET CLOSED" || 
+                (!MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen && !MarketStatusUtil.getDetailedMarketStatus("MCX").isOpen)
+        
+        if (isMarketDataLive) {
+            return ComponentHealth("AI_SIGNAL", HealthState.HEALTHY, details = mapOf("status" to "Ready"))
         }
-        return ComponentHealth("AI_SIGNAL", HealthState.HEALTHY, details = mapOf("status" to "Ready"))
+        if (isMarketClosed) {
+            return ComponentHealth("AI_SIGNAL", HealthState.HEALTHY, details = mapOf("status" to "Market Closed - Standby"))
+        }
+        return ComponentHealth("AI_SIGNAL", HealthState.STALE, details = mapOf("error" to "Signal paused due to stale data"))
     }
 
     private suspend fun attemptFailoverOrRecovery() {
         val providerState = MarketDataStore.providerState.value
-        val activeProvider = providerState.provider
+        
+        // 1. If market data is already LIVE, do nothing!
+        if (providerState.live && !providerState.stale) {
+            return
+        }
 
-        if (providerState.stale || !providerState.live) {
-            val log = AutoRecoveryLog(
-                timestamp = System.currentTimeMillis(),
-                component = activeProvider,
-                problem = "No real tick received or stale data",
-                detectedCause = "WebSocket disconnect or silent feed",
-                action = "Attempting failover/reconnect via ProviderHealthManager",
-                verification = "Waiting for new real tick...",
-                result = HealthState.REPAIRING
-            )
-            addRecoveryLog(log)
-            
-            // Re-trigger the active provider's websocket connection or rely on the engine's internal reconnect
+        // 2. If market is closed, do nothing!
+        val isNseOpen = MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen
+        val isMcxOpen = MarketStatusUtil.getDetailedMarketStatus("MCX").isOpen
+        if (!isNseOpen && !isMcxOpen) {
+            return
+        }
+
+        // 3. Rate-limiting & Cooldown lock
+        val now = System.currentTimeMillis()
+        if (isRecovering || (now - lastRecoveryAttemptTime < RECOVERY_COOLDOWN_MS)) {
+            return
+        }
+
+        // 4. Do not attempt if no broker is even logged in
+        val anyBrokerConnected = brokerManager.brokerAuthManager.statuses.value.values.any { 
+            it.status == com.example.data.network.BrokerAuthStatus.CONNECTED 
+        }
+        if (!anyBrokerConnected) {
+            return
+        }
+
+        isRecovering = true
+        lastRecoveryAttemptTime = now
+
+        val activeProviderName = MarketDataProviders.getDisplayName(providerState.provider)
+        val problemDesc = if (providerState.stale) "Stale market data (> 30s)" else "Waiting for real market tick"
+        val log = AutoRecoveryLog(
+            timestamp = System.currentTimeMillis(),
+            component = activeProviderName,
+            problem = problemDesc,
+            detectedCause = "WebSocket disconnect or silent feed",
+            action = "Attempting failover/reconnect via ProviderHealthManager",
+            verification = "Waiting for new real tick...",
+            result = HealthState.REPAIRING
+        )
+        addRecoveryLog(log)
+        
+        try {
             brokerManager.marketDataEngine.retryConnection()
-            
-            delay(5000)
+            delay(6000)
             
             val newState = MarketDataStore.providerState.value
             if (newState.live && !newState.stale) {
@@ -165,6 +216,8 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
                     result = HealthState.UNRESOLVED
                 ))
             }
+        } finally {
+            isRecovering = false
         }
     }
 
@@ -195,15 +248,48 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             
             // 4. MARKET DATA
             val providerState = MarketDataStore.providerState.value
-            val mdHealth = if (providerState.live && !providerState.stale) HealthState.HEALTHY else HealthState.STALE
-            results.add(AZDiagnosticResult(DiagnosticCategory.MARKET_DATA, "Active Feed: ${providerState.provider}", mdHealth, "Checked", mapOf("TickAgeMs" to providerState.lastUpdate.toString(), "Live" to providerState.live.toString())))
+            val isNseOpen = MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen
+            val isMcxOpen = MarketStatusUtil.getDetailedMarketStatus("MCX").isOpen
+            val isMarketClosed = !isNseOpen && !isMcxOpen
+
+            val mdHealth = when {
+                providerState.live && !providerState.stale -> HealthState.HEALTHY
+                isMarketClosed -> HealthState.HEALTHY
+                providerState.status == "WAITING_FOR_FIRST_TICK" -> HealthState.NO_TICK
+                else -> HealthState.STALE
+            }
+            val displayName = MarketDataProviders.getDisplayName(providerState.provider)
+            val mdMsg = when {
+                providerState.live && !providerState.stale -> "Live Feed Active ($displayName)"
+                isMarketClosed -> "Market Closed"
+                providerState.status == "WAITING_FOR_FIRST_TICK" -> "Waiting for first tick ($displayName)"
+                else -> "Feed Stale / Disconnected"
+            }
+            results.add(
+                AZDiagnosticResult(
+                    DiagnosticCategory.MARKET_DATA, 
+                    "Active Feed: $displayName", 
+                    mdHealth, 
+                    mdMsg, 
+                    mapOf(
+                        "Provider" to displayName,
+                        "TickAgeMs" to if (providerState.lastUpdate > 0) (System.currentTimeMillis() - providerState.lastUpdate).toString() else "N/A", 
+                        "Live" to providerState.live.toString(),
+                        "Status" to providerState.status
+                    )
+                )
+            )
             
             // 5. OPTION CHAIN
             results.add(AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.OFFLINE, "Runtime Verification Required", mapOf("Source" to "Broker mapped")))
             
             // 6. AI SIGNAL
             val aiHealth = if (mdHealth == HealthState.HEALTHY) HealthState.HEALTHY else HealthState.STALE
-            val aiMsg = if (aiHealth == HealthState.HEALTHY) "Active" else "SIGNAL PAUSED - Stale Data"
+            val aiMsg = when {
+                providerState.live && !providerState.stale -> "Active"
+                isMarketClosed -> "Market Closed (Standby)"
+                else -> "SIGNAL PAUSED - Stale Data"
+            }
             results.add(AZDiagnosticResult(DiagnosticCategory.AI_SIGNAL, "Signal Engine", aiHealth, aiMsg, mapOf("Data Freshness" to (mdHealth == HealthState.HEALTHY).toString())))
             
             // 7. ORDER ENGINE

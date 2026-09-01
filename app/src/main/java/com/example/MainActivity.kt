@@ -381,7 +381,8 @@ class MainActivity : FragmentActivity() {
                                             else -> "login"
                                         }
                                         navController.navigate(startRoute) {
-                                            popUpTo(navController.graph.id) { inclusive = true }
+                                            popUpTo("splash") { inclusive = true }
+                                            launchSingleTop = true
                                         }
                                     }
                                 )
@@ -393,7 +394,8 @@ class MainActivity : FragmentActivity() {
                                     onAgreeAndContinue = {
                                         val startRoute = if (viewModel.isSessionActive()) "main" else "login"
                                         navController.navigate(startRoute) {
-                                            popUpTo(navController.graph.id) { inclusive = true }
+                                            popUpTo("disclaimer") { inclusive = true }
+                                            launchSingleTop = true
                                         }
                                     }
                                 )
@@ -411,7 +413,8 @@ class MainActivity : FragmentActivity() {
                                     },
                                     onSkipLogin = {
                                         navController.navigate("main") {
-                                            popUpTo(navController.graph.id) { inclusive = true }
+                                            popUpTo("login") { inclusive = true }
+                                            launchSingleTop = true
                                         }
                                     }
                                 )
@@ -690,7 +693,7 @@ class MainActivity : FragmentActivity() {
                             composable("portfolio") {
                                 androidx.activity.compose.BackHandler {
                                     if (!navController.popBackStack()) {
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     }
                                 }
                                 PortfolioScreen(
@@ -701,11 +704,11 @@ class MainActivity : FragmentActivity() {
                                     onRefresh = { viewModel.refreshBrokerData() },
                                     onNavigateToPositions = {
                                         coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     },
                                     onNavigateToOrders = {
                                         coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     }
                                 )
                             }
@@ -722,7 +725,7 @@ class MainActivity : FragmentActivity() {
                                 
                                 androidx.activity.compose.BackHandler {
                                     if (!navController.popBackStack()) {
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     }
                                 }
 
@@ -732,7 +735,7 @@ class MainActivity : FragmentActivity() {
                                     viewModel = viewModel,
                                     onBack = { 
                                         if (!navController.popBackStack()) {
-                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                            navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                         }
                                     },
                                     onOpenOrderDialog = { symbol, side, price, lot ->
@@ -744,7 +747,7 @@ class MainActivity : FragmentActivity() {
                             composable("telegram_settings") {
                                 androidx.activity.compose.BackHandler {
                                     if (!navController.popBackStack()) {
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     }
                                 }
                                 TelegramSettingsScreen(
@@ -763,7 +766,7 @@ class MainActivity : FragmentActivity() {
                                     smsStatusMessage = smsStatusMessage,
                                     onBack = { 
                                         if (!navController.popBackStack()) {
-                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                            navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                         }
                                     },
                                     onSaveSettings = { token, chatId, enabled, channelId ->
@@ -802,14 +805,14 @@ class MainActivity : FragmentActivity() {
                             composable("diagnostics") {
                                 androidx.activity.compose.BackHandler {
                                     if (!navController.popBackStack()) {
-                                        navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                        navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                     }
                                 }
                                 com.example.ui.screens.DiagnosticsScreen(
                                     viewModel = viewModel,
                                     onBack = { 
                                         if (!navController.popBackStack()) {
-                                            navController.navigate("main") { popUpTo(navController.graph.id) { inclusive = true } }
+                                            navController.navigate("main") { popUpTo("main") { inclusive = true } }
                                         }
                                     }
                                 )

@@ -39,8 +39,8 @@ class MarketDataEngine(
     private val sessionManager: SessionManager? = null,
     private val healthManager: ProviderHealthManager? = null
 ) {
-    private val _providerState = MutableStateFlow(com.example.data.model.MarketDataProviderState())
-    val providerState: StateFlow<com.example.data.model.MarketDataProviderState> = _providerState.asStateFlow()
+    // Single Source of Truth from MarketDataStore
+    val providerState: StateFlow<com.example.data.model.MarketDataProviderState> = MarketDataStore.providerState
 
     companion object {
         private const val TAG = "MarketDataEngine"
@@ -55,7 +55,7 @@ class MarketDataEngine(
     private val _marketBreadth = MutableStateFlow<MarketBreadth?>(null)
     val marketBreadth: StateFlow<MarketBreadth?> = _marketBreadth.asStateFlow()
 
-    private val _internalActiveProvider = MutableStateFlow(ProviderHealthManager.PROVIDER_UPSTOX)
+    private val _internalActiveProvider = MutableStateFlow(com.example.data.model.MarketDataProviders.UPSTOX)
     val internalActiveProvider: StateFlow<String> = _internalActiveProvider.asStateFlow()
     
     private val _lastTickTimeMs = MutableStateFlow(0L)
@@ -65,41 +65,30 @@ class MarketDataEngine(
     private var primaryProviderOverride: String? = null
 
     init {
-        startHeartbeatMonitor()
+        scope.launch {
+            MarketDataStore.providerState.collect { state ->
+                _lastTickTimeMs.value = state.lastUpdate
+                _internalActiveProvider.value = state.provider
+                _unifiedFeedStatus.value = when {
+                    state.live && !state.stale -> "LIVE — ${com.example.data.model.MarketDataProviders.getDisplayName(state.provider).uppercase()}"
+                    state.status == "MARKET CLOSED" -> "MARKET CLOSED"
+                    state.stale -> "STALE DATA"
+                    state.status == "WAITING_FOR_FIRST_TICK" -> "WAITING FOR FIRST TICK"
+                    state.status == "CONNECTING" -> "CONNECTING"
+                    else -> "REAL MARKET DATA UNAVAILABLE"
+                }
+            }
+        }
     }
 
     fun setPrimaryMarketDataProvider(providerName: String) {
         primaryProviderOverride = providerName
     }
 
-    private fun startHeartbeatMonitor() {
-        heartbeatJob?.cancel()
-        heartbeatJob = scope.launch {
-            while (true) {
-                delay(10000)
-                val lastTick = _lastTickTimeMs.value
-                val now = System.currentTimeMillis()
-                
-                if (lastTick > 0 && now - lastTick > STALE_THRESHOLD_MS) {
-                    Log.w(TAG, "Market Data Stale (>30s silence).")
-                    if (_unifiedFeedStatus.value.contains("LIVE")) {
-                        _unifiedFeedStatus.value = "STALE DATA"
-                        _providerState.value = _providerState.value.copy(stale = true, live = false, status = "STALE")
-                    }
-                }
-            }
-        }
-    }
-
-    fun updateLastTickTime() {
+    fun updateLastTickTime(provider: String = _internalActiveProvider.value) {
+        val canonical = com.example.data.model.MarketDataProviders.normalize(provider)
         _lastTickTimeMs.value = System.currentTimeMillis()
-        _providerState.value = _providerState.value.copy(
-            stale = false,
-            live = true,
-            status = "CONNECTED",
-            lastUpdate = System.currentTimeMillis(),
-            provider = _internalActiveProvider.value
-        )
+        MarketDataStore.updateProviderLive(canonical, _lastTickTimeMs.value)
     }
 
     // =========================================================================
@@ -335,12 +324,9 @@ class MarketDataEngine(
                 symbol = tick.symbol,
                 price = tick.ltp,
                 timestamp = System.currentTimeMillis(),
-                source = "UPSTOX"
+                source = com.example.data.model.MarketDataProviders.UPSTOX
             )
         )
-        _unifiedFeedStatus.value = "LIVE — UPSTOX"
-        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
-        updateLastTickTime()
     }
     
     suspend fun updateFyersTick(tick: MarketTick) {
@@ -349,12 +335,9 @@ class MarketDataEngine(
                 symbol = tick.symbol,
                 price = tick.ltp,
                 timestamp = System.currentTimeMillis(),
-                source = "FYERS"
+                source = com.example.data.model.MarketDataProviders.FYERS
             )
         )
-        _unifiedFeedStatus.value = "LIVE — FYERS"
-        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
-        updateLastTickTime()
     }
 
     suspend fun updateAngelTick(tick: MarketTick) {
@@ -363,12 +346,9 @@ class MarketDataEngine(
                 symbol = tick.symbol,
                 price = tick.ltp,
                 timestamp = System.currentTimeMillis(),
-                source = "ANGEL ONE"
+                source = com.example.data.model.MarketDataProviders.ANGEL_ONE
             )
         )
-        _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
-        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-        updateLastTickTime()
     }
 
     fun retryConnection() {

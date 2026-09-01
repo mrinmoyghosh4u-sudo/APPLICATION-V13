@@ -208,6 +208,9 @@ fun DiagnosticsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("PRIMARY FEED", fontSize = 10.sp, color = TextGray)
                                 val primaryName = when {
+                                    providerState.live && !providerState.stale -> "${com.example.data.model.MarketDataProviders.getDisplayName(providerState.provider)} (Live)"
+                                    providerState.status == "MARKET CLOSED" -> "Market Closed"
+                                    providerState.status == "WAITING_FOR_FIRST_TICK" -> "${com.example.data.model.MarketDataProviders.getDisplayName(providerState.provider)} (Waiting)"
                                     fyersConnectionState == "LIVE" || fyersConnectionState == "WEBSOCKET_LIVE" -> "Fyers WS"
                                     upstoxConnectionState == "LIVE" -> "Upstox Protobuf"
                                     angelConnectionState == "LIVE" -> "Angel SmartAPI"
@@ -217,7 +220,7 @@ fun DiagnosticsScreen(
                                     text = primaryName,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF64B5F6)
+                                    color = if (providerState.live && !providerState.stale) ProfitGreen else Color(0xFF64B5F6)
                                 )
                             }
                         }

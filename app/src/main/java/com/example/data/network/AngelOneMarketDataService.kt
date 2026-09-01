@@ -264,6 +264,7 @@ class AngelOneMarketDataService(
                 ws.send(req.toString())
                 _connectionState.value = "SUBSCRIBING"
                 isSubscribed = true
+                com.example.data.model.MarketDataStore.reportProviderSubscribed(com.example.data.model.MarketDataProviders.ANGEL_ONE, totalTokens)
                 Log.d("SmartStream", "[SUBSCRIPTION_SENT] count=$totalTokens")
             }
         }

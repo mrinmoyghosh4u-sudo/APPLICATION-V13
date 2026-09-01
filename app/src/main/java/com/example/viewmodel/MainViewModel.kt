@@ -279,8 +279,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (currentProfile.isDhanConnected != actualDhanStatus) {
                     _userProfile.value = currentProfile.copy(isDhanConnected = actualDhanStatus)
                 }
-                val rawFeedStatus = brokerManager.marketDataEngine.unifiedFeedStatus.value
-                _marketDataSource.value = if (actualDhanStatus) rawFeedStatus else "REAL MARKET DATA UNAVAILABLE"
             }
         }
         viewModelScope.launch {
@@ -1358,15 +1356,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun startLiveMarketFeed() {
         viewModelScope.launch {
             launch {
-                // brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
-                //     _marketDataSource.value = status
-                            }
+                brokerManager.marketDataEngine.unifiedFeedStatus.collect { status ->
+                    _marketDataSource.value = status
+                }
+            }
             launch {
-                // brokerManager.marketDataEngine.lastTickTimeMs.collect { time ->
-                //     if (time > 0) {
-                //         _marketDataLastUpdated.value = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(time))
-                //     }
-                            }
+                brokerManager.marketDataEngine.lastTickTimeMs.collect { time ->
+                    if (time > 0) {
+                        _marketDataLastUpdated.value = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(time))
+                    }
+                }
+            }
 
             while (true) {
                 syncMarketDataPipeline()

@@ -250,6 +250,7 @@ dependencies {
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   implementation("androidx.browser:browser:1.8.0")
+  implementation("androidx.appcompat:appcompat:1.7.0")
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
   implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
   testImplementation(libs.androidx.compose.ui.test.junit4)

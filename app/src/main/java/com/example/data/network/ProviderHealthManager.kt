@@ -1,6 +1,7 @@
 package com.example.data.network
 
 import android.util.Log
+import com.example.data.model.MarketDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,9 +37,14 @@ class ProviderHealthManager {
 
     init {
         for (provider in listOf(PROVIDER_UPSTOX, PROVIDER_FYERS, PROVIDER_ANGEL_ONE, PROVIDER_DHAN)) {
-            healthMap[provider] = ProviderHealthState(provider = provider)
+            val norm = normalizeKey(provider)
+            healthMap[norm] = ProviderHealthState(provider = provider)
         }
         _providerHealth.value = healthMap.toMap()
+
+        MarketDataStore.onTickReceivedListener = { provider: String, timestamp: Long ->
+            reportTickReceived(provider, timestamp)
+        }
     }
 
     companion object {
@@ -57,15 +63,21 @@ class ProviderHealthManager {
         const val STATE_AUTH_CANCELLED = "AUTH_CANCELLED"
     }
 
+    private fun normalizeKey(provider: String): String {
+        return com.example.data.model.MarketDataProviders.normalize(provider)
+    }
+
     private fun updateState(provider: String, transform: (ProviderHealthState) -> ProviderHealthState) {
-        val current = healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val norm = normalizeKey(provider)
+        val current = healthMap[norm] ?: ProviderHealthState(provider = provider)
         val updated = transform(current)
-        healthMap[provider] = updated
+        healthMap[norm] = updated
         _providerHealth.value = healthMap.toMap()
     }
 
     fun getHealthState(provider: String = PROVIDER_UPSTOX): ProviderHealthState {
-        return healthMap[provider] ?: ProviderHealthState(provider = provider)
+        val norm = normalizeKey(provider)
+        return healthMap[norm] ?: ProviderHealthState(provider = provider)
     }
 
     fun isProviderHealthy(provider: String): Boolean {
