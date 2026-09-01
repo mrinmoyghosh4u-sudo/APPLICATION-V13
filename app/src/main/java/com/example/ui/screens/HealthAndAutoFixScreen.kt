@@ -32,6 +32,7 @@ fun HealthAndAutoFixScreen(
 ) {
     val azReport by viewModel.diagnosticEngine.fullAZReport.collectAsStateWithLifecycle()
     val recoveryLogs by viewModel.diagnosticEngine.recoveryLogs.collectAsStateWithLifecycle()
+    val providerState by com.example.data.model.MarketDataStore.providerState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -56,6 +57,11 @@ fun HealthAndAutoFixScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Current Live Provider Status Card
+            item {
+                CurrentLiveStatusCard(providerState)
+            }
+
             item {
                 Button(
                     onClick = { viewModel.diagnosticEngine.runFullAZCheck() },
@@ -98,7 +104,7 @@ fun HealthAndAutoFixScreen(
                 item {
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        text = "AUTO-FIX HISTORY",
+                        text = "RECOVERY HISTORY (PAST EVENTS)",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 8.dp)
@@ -108,6 +114,64 @@ fun HealthAndAutoFixScreen(
                 items(recoveryLogs) { log ->
                     RecoveryLogCard(log)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CurrentLiveStatusCard(state: com.example.data.model.MarketDataProviderState) {
+    val isLive = state.live && !state.stale
+    val statusColor = if (isLive) Color(0xFF4CAF50) else if (state.stale) Color(0xFFFFC107) else Color(0xFF2196F3)
+    val displayName = com.example.data.model.MarketDataProviders.getDisplayName(state.provider).uppercase()
+    val tickAgeMs = if (state.lastUpdate > 0L) (System.currentTimeMillis() - state.lastUpdate).coerceAtLeast(0L) else 0L
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "CURRENT FEED STATUS",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Surface(
+                    color = statusColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = if (isLive) "● LIVE" else if (state.stale) "▲ STALE" else "○ ${state.status}",
+                        color = statusColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Active Provider:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(displayName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Tick Freshness:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (state.lastUpdate > 0L) "${tickAgeMs}ms ago" else "No Tick",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (tickAgeMs < 10_000L && state.lastUpdate > 0L) Color(0xFF4CAF50) else Color(0xFFFFC107)
+                )
             }
         }
     }

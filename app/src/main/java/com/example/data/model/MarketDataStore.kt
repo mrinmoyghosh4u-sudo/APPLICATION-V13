@@ -82,7 +82,8 @@ data class RealTimePriceTick(
     val greeks: OptionGreeks = OptionGreeks(),
     val exchange: String = "NSE",
     val token: String = "",
-    val state: String = ""
+    val state: String = "",
+    val isSnapshot: Boolean = false
 ) {
     val ltp: Double get() = price
 }
@@ -199,8 +200,9 @@ object MarketDataStore {
         currentMap[tick.symbol] = tick
         _ticks.value = currentMap
 
-        // Real tick handling: only valid real ticks with positive prices make the feed LIVE
-        if (!tick.price.isNaN() && tick.price > 0.0) {
+        // Real tick handling: only valid real WebSocket ticks (not REST snapshots) make the feed LIVE
+        val isSnapshotTick = tick.isSnapshot || tick.state.equals("SNAPSHOT", ignoreCase = true)
+        if (!isSnapshotTick && !tick.price.isNaN() && tick.price > 0.0) {
             val canonical = MarketDataProviders.normalize(tick.source)
             if (canonical != MarketDataProviders.UNKNOWN && 
                 canonical != MarketDataProviders.DHAN && 

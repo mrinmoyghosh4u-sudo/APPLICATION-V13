@@ -62,18 +62,35 @@ class BrokerAuthManager(
     }
     
     private suspend fun validateDhanSession() {
-        val hasCreds = sessionManager.dhanClientId.isNotBlank() && 
-                       (sessionManager.dhanClientSecret.isNotBlank() || com.example.util.BrokerConfig.dhanClientSecret.isNotBlank())
+        val token = sessionManager.dhanAccessToken?.trim() ?: ""
+        val clientId = sessionManager.dhanClientId?.trim() ?: ""
         
-        if (!hasCreds) {
-            updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
+        if (token.isBlank()) {
+            val hasCreds = clientId.isNotBlank() && 
+                           (sessionManager.dhanClientSecret.isNotBlank() || com.example.util.BrokerConfig.dhanClientSecret.isNotBlank())
+            val status = if (hasCreds) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
+            val msg = if (hasCreds) "Login Required" else "Credentials not configured"
+            updateStatus("Dhan", "Primary Order Execution", status, msg)
+            sessionManager.isDhanConnected = false
             return
         }
         
-        if (sessionManager.dhanAccessToken.isNotBlank()) {
+        // Active API validation: verify Dhan session with lightweight live profile/funds call
+        val profRes = dhanService.getProfile()
+        if (profRes.isSuccess) {
+            sessionManager.isDhanConnected = true
             updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONNECTED, "Active for Order Execution")
         } else {
-            updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Login Required")
+            sessionManager.isDhanConnected = false
+            val errorMsg = profRes.exceptionOrNull()?.message ?: "Session Expired"
+            if (errorMsg.contains("expired", ignoreCase = true) || 
+                errorMsg.contains("invalid", ignoreCase = true) || 
+                errorMsg.contains("401") || 
+                errorMsg.contains("403")) {
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Token Expired. Login Required.")
+            } else {
+                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.ERROR, errorMsg)
+            }
         }
     }
     

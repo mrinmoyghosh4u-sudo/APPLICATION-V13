@@ -10,7 +10,8 @@ import kotlinx.coroutines.withContext
 
 class UpstoxAuthManager(
     private val sessionManager: SessionManager,
-    private val upstoxApi: UpstoxApi
+    private val upstoxApi: UpstoxApi,
+    private val healthManager: ProviderHealthManager? = null
 ) {
     companion object {
         private const val TAG = "UpstoxAuthManager"
@@ -26,11 +27,14 @@ class UpstoxAuthManager(
             runCatching {
                 var cleanCode = authCode.trim()
 
-                // If state provided, validate state
+                // If state provided, validate state immediately and halt if invalid
                 if (!state.isNullOrBlank()) {
                     val stateValid = UpstoxAuthHelper.validateAndConsumeState(state)
                     if (!stateValid) {
-                        Log.w(TAG, "[UPSTOX_OAUTH_STATE_REJECTED] OAuth state validation failed")
+                        Log.e(TAG, "[UPSTOX_OAUTH_STATE_REJECTED] OAuth state validation failed: state mismatch or expired")
+                        healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_STATE_MISMATCH, "OAuth state validation failed")
+                        _authStatus.value = BrokerAuthStatus.ERROR
+                        throw SecurityException("OAuth state validation failed: state parameter invalid, expired, or already consumed")
                     }
                 }
 
@@ -41,6 +45,7 @@ class UpstoxAuthManager(
                     if (age < 18 * 60 * 60 * 1000L) {
                         Log.i(TAG, "[UPSTOX_TOKEN_VALID] Active Upstox session token is still valid (${age / 3600000}h old)")
                         _authStatus.value = BrokerAuthStatus.CONNECTED
+                        healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
                         return@runCatching existingToken
                     }
                 }
@@ -60,11 +65,19 @@ class UpstoxAuthManager(
                         val extracted = parsedUri.getQueryParameter("code") ?: parsedUri.getQueryParameter("auth_code")
                         val uriState = parsedUri.getQueryParameter("state")
                         if (!uriState.isNullOrBlank() && state.isNullOrBlank()) {
-                            UpstoxAuthHelper.validateAndConsumeState(uriState)
+                            val uriStateValid = UpstoxAuthHelper.validateAndConsumeState(uriState)
+                            if (!uriStateValid) {
+                                Log.e(TAG, "[UPSTOX_OAUTH_STATE_REJECTED] OAuth state from URI validation failed")
+                                healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_STATE_MISMATCH, "OAuth state from URI validation failed")
+                                _authStatus.value = BrokerAuthStatus.ERROR
+                                throw SecurityException("OAuth state validation failed: URI state parameter invalid, expired, or already consumed")
+                            }
                         }
                         if (!extracted.isNullOrBlank()) {
                             cleanCode = extracted
                         }
+                    } catch (e: SecurityException) {
+                        throw e
                     } catch (_: Exception) {}
                 }
                 if (cleanCode.contains("code=")) {
@@ -74,11 +87,16 @@ class UpstoxAuthManager(
                     cleanCode = cleanCode.substringAfter("auth_code=").substringBefore("&")
                 }
 
-                // Authorization code single-use guard
+                // Authorization code single-use guard: BLOCK IMMEDIATELY ON REPLAY
                 if (!UpstoxAuthHelper.validateAndConsumeAuthCode(cleanCode)) {
-                    Log.w(TAG, "[UPSTOX_CODE_REPLAY_REJECTED] Duplicate attempt to exchange authorization code")
+                    Log.e(TAG, "[UPSTOX_CODE_REPLAY_REJECTED] Duplicate attempt to exchange authorization code: $cleanCode")
+                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_INVALID, "Upstox authorization code replay rejected: code already used")
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                    throw SecurityException("Upstox authorization code replay rejected: code has already been consumed")
                 }
 
+                healthManager?.reportAuthCodeReceived(ProviderHealthManager.PROVIDER_UPSTOX, cleanCode)
+                healthManager?.reportTokenExchange(ProviderHealthManager.PROVIDER_UPSTOX)
                 Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
 
                 var tokenBody: UpstoxTokenResponse? = null
@@ -125,6 +143,7 @@ class UpstoxAuthManager(
                     sessionManager.isUpstoxConnected = false
                     sessionManager.upstoxAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
+                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED, err)
                     Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
                     throw Exception("TOKEN_EXCHANGE_FAILED: $err")
                 }
@@ -135,6 +154,7 @@ class UpstoxAuthManager(
                     sessionManager.isUpstoxConnected = false
                     sessionManager.upstoxAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
+                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_INVALID, "Access token is empty in response")
                     Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Access Token is empty in response")
                     throw Exception("TOKEN_EXCHANGE_FAILED: Access token is empty")
                 }
@@ -148,11 +168,13 @@ class UpstoxAuthManager(
                     sessionManager.isUpstoxConnected = false
                     sessionManager.upstoxAccessToken = null
                     _authStatus.value = BrokerAuthStatus.ERROR
+                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_INVALID, e.message ?: "Profile validation failed")
                     Log.e(TAG, "[UPSTOX_PROFILE_VALIDATION_FAILED] Token validation failed: ${e.message}")
                     throw Exception("PROFILE_VALIDATION_FAILED: ${e.message}")
                 }
 
                 Log.i(TAG, "[UPSTOX_TOKEN_VALID] Upstox profile validation passed")
+                healthManager?.reportTokenValidated(ProviderHealthManager.PROVIDER_UPSTOX)
 
                 // Securely store credentials and tokens in encrypted storage
                 sessionManager.upstoxAccessToken = accessToken
@@ -164,6 +186,7 @@ class UpstoxAuthManager(
 
                 Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox session successfully connected and authenticated")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
+                healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
                 accessToken
             }
         } finally {

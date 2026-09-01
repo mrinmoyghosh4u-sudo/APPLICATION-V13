@@ -208,8 +208,17 @@ class UpstoxMarketDataService(
                             val now = System.currentTimeMillis()
                             for (q in quotes) {
                                 if (q.ltp > 0.0) {
-                                    // REST Quote Fallback isolation: update tick store with REST state
-                                    com.example.data.model.MarketDataStore.updateTick(com.example.data.model.RealTimePriceTick(symbol = q.symbol, price = q.ltp, timestamp = now, source = "upstox"))
+                                    // REST Quote Fallback isolation: update tick store with REST state (snapshot only)
+                                    com.example.data.model.MarketDataStore.updateTick(
+                                        com.example.data.model.RealTimePriceTick(
+                                            symbol = q.symbol, 
+                                            price = q.ltp, 
+                                            timestamp = now, 
+                                            source = "upstox",
+                                            state = "SNAPSHOT",
+                                            isSnapshot = true
+                                        )
+                                    )
                                 }
                             }
                             // REST polling MUST NOT mark WebSocket state as LIVE or set hasFirstTick = true

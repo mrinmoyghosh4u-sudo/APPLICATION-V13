@@ -9,7 +9,8 @@ import kotlinx.coroutines.withContext
 
 class FyersAuthManager(
     private val sessionManager: SessionManager,
-    private val fyersApi: FyersApi
+    private val fyersApi: FyersApi,
+    private val healthManager: ProviderHealthManager? = null
 ) {
     private val TAG = "FyersAuthManager"
 

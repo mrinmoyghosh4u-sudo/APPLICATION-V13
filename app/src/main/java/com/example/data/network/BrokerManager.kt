@@ -28,7 +28,7 @@ class BrokerManager(
 ) {
     val healthManager = ProviderHealthManager()
 
-    val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService)
+    val angelMarketDataService = AngelOneMarketDataService(angelOneService, sessionManager, instrumentMasterService, healthManager)
     val dhanTradingService = DhanTradingService(dhanService, sessionManager)
     
     val networkClient = BrokerNetworkClient(sessionManager)
@@ -40,13 +40,13 @@ class BrokerManager(
         healthManager = healthManager
     )
 
-    val fyersAuthManager = FyersAuthManager(sessionManager, networkClient.fyersApi)
-    val fyersMarketDataService = FyersMarketDataService(sessionManager, marketDataEngine, networkClient.fyersApi).apply { 
+    val fyersAuthManager = FyersAuthManager(sessionManager, networkClient.fyersApi, healthManager)
+    val fyersMarketDataService = FyersMarketDataService(sessionManager, marketDataEngine, networkClient.fyersApi, healthManager).apply { 
         marketDataEngine.fyersMarketDataService = this 
     }
 
-    val upstoxAuthManager = UpstoxAuthManager(sessionManager, networkClient.upstoxApi)
-    val upstoxMarketDataService = UpstoxMarketDataService(sessionManager, marketDataEngine, networkClient.upstoxApi).apply {
+    val upstoxAuthManager = UpstoxAuthManager(sessionManager, networkClient.upstoxApi, healthManager)
+    val upstoxMarketDataService = UpstoxMarketDataService(sessionManager, marketDataEngine, networkClient.upstoxApi, healthManager).apply {
         marketDataEngine.upstoxMarketDataService = this
     }
 

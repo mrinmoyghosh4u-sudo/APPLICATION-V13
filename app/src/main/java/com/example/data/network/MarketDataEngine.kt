@@ -103,9 +103,6 @@ class MarketDataEngine(
             if (upstoxRes.isSuccess) {
                 val strikes = upstoxRes.getOrDefault(emptyList())
                 if (strikes.isNotEmpty()) {
-                    _unifiedFeedStatus.value = "LIVE — UPSTOX"
-                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
-                    updateLastTickTime()
                     val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
                     return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
                 }
@@ -119,9 +116,6 @@ class MarketDataEngine(
             if (fyersRes.isSuccess) {
                 val strikes = fyersRes.getOrDefault(emptyList())
                 if (strikes.isNotEmpty()) {
-                    _unifiedFeedStatus.value = "LIVE — FYERS"
-                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
-                    updateLastTickTime()
                     val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
                     return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
                 }
@@ -133,15 +127,11 @@ class MarketDataEngine(
         if (angelRes?.isSuccess == true) {
             val strikes = angelRes.getOrDefault(emptyList())
             if (strikes.isNotEmpty()) {
-                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
-                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                updateLastTickTime()
                 val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
                 return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
             }
         }
 
-        _unifiedFeedStatus.value = "SIGNAL PAUSED — NO DATA"
         return Result.failure(Exception("REAL OPTION CHAIN UNAVAILABLE"))
     }
 
@@ -255,9 +245,6 @@ class MarketDataEngine(
             if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
-                    _unifiedFeedStatus.value = "LIVE — UPSTOX"
-                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
-                    updateLastTickTime()
                     return Result.success(valid)
                 }
             }
@@ -270,9 +257,6 @@ class MarketDataEngine(
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
-                    _unifiedFeedStatus.value = "LIVE — FYERS"
-                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
-                    updateLastTickTime()
                     return Result.success(valid)
                 }
             }
@@ -283,14 +267,10 @@ class MarketDataEngine(
         if (angelRes?.isSuccess == true && (angelRes.getOrDefault(emptyList())).isNotEmpty()) {
             val valid = (angelRes.getOrDefault(emptyList())).filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
-                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
-                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
-                updateLastTickTime()
                 return Result.success(valid)
             }
         }
 
-        _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
         return Result.failure(Exception("REAL MARKET DATA UNAVAILABLE"))
     }
 

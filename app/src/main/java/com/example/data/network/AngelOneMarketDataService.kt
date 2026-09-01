@@ -28,7 +28,8 @@ import java.util.concurrent.TimeUnit
 class AngelOneMarketDataService(
     private val angelOneService: AngelOneBrokerService,
     private val sessionManager: SessionManager,
-    private val instrumentMaster: InstrumentMasterService
+    private val instrumentMaster: InstrumentMasterService,
+    private val healthManager: ProviderHealthManager? = null
 ) {
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient.Builder()
@@ -99,6 +100,7 @@ class AngelOneMarketDataService(
         }
 
         _connectionState.value = "CONNECTING"
+        healthManager?.reportConnecting(ProviderHealthManager.PROVIDER_ANGEL_ONE)
         if (force) {
             hasFirstTick = false
             isSubscribed = false
@@ -116,6 +118,7 @@ class AngelOneMarketDataService(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 _connectionState.value = "CONNECTED"
                 reconnectAttempt = 0
+                healthManager?.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, true)
                 Log.d("SmartStream", "[WEBSOCKET_CONNECTED]")
                 
                 pingJob = scope.launch {
@@ -155,6 +158,7 @@ class AngelOneMarketDataService(
                 _connectionState.value = "DISCONNECTED"
                 isSubscribed = false
                 hasFirstTick = false
+                healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_ANGEL_ONE)
                 com.example.data.model.MarketDataStore.setAngelHealth("OFFLINE")
                 Log.d("SmartStream", "WebSocket Closed: $reason")
                 if (code != 1000 && code != 1008 && code != 1001) {
@@ -166,7 +170,8 @@ class AngelOneMarketDataService(
                 _connectionState.value = "ERROR"
                 isSubscribed = false
                 hasFirstTick = false
-                com.example.data.model.MarketDataStore.setAngelHealth( "ERROR")
+                healthManager?.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, false)
+                com.example.data.model.MarketDataStore.setAngelHealth("ERROR")
                 Log.e("SmartStream", "WebSocket Failure: ${t.message}")
                 scheduleReconnect()
             }
