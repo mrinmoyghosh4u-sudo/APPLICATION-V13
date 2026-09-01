@@ -89,13 +89,13 @@ class UpstoxAuthManager(
 
                 // Authorization code single-use guard: BLOCK IMMEDIATELY ON REPLAY
                 if (!UpstoxAuthHelper.validateAndConsumeAuthCode(cleanCode)) {
-                    Log.e(TAG, "[UPSTOX_CODE_REPLAY_REJECTED] Duplicate attempt to exchange authorization code: $cleanCode")
+                    Log.e(TAG, "[UPSTOX_CODE_REPLAY_REJECTED] Duplicate attempt to exchange authorization code: [REDACTED]")
                     healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_INVALID, "Upstox authorization code replay rejected: code already used")
                     _authStatus.value = BrokerAuthStatus.ERROR
                     throw SecurityException("Upstox authorization code replay rejected: code has already been consumed")
                 }
 
-                healthManager?.reportAuthCodeReceived(ProviderHealthManager.PROVIDER_UPSTOX, cleanCode)
+                healthManager?.reportAuthCodeReceived(ProviderHealthManager.PROVIDER_UPSTOX, "[REDACTED]")
                 healthManager?.reportTokenExchange(ProviderHealthManager.PROVIDER_UPSTOX)
                 Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
 

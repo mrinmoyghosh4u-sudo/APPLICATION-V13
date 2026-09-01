@@ -137,7 +137,17 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
     }
 
     private fun checkOptionChainHealth(): ComponentHealth {
-        return ComponentHealth("OPTION_CHAIN", HealthState.HEALTHY, details = mapOf("status" to "Ready to fetch"))
+        val hasProvider = brokerManager.brokerAuthManager.hasActiveMarketDataProvider()
+        val providerState = MarketDataStore.providerState.value
+        val isNseOpen = MarketStatusUtil.getDetailedMarketStatus("NSE").isOpen
+        val isMcxOpen = MarketStatusUtil.getDetailedMarketStatus("MCX").isOpen
+        val isMarketClosed = !isNseOpen && !isMcxOpen
+        return when {
+            providerState.live && !providerState.stale -> ComponentHealth("OPTION_CHAIN", HealthState.HEALTHY, details = mapOf("status" to "Live Option Chain Ready"))
+            isMarketClosed -> ComponentHealth("OPTION_CHAIN", HealthState.HEALTHY, details = mapOf("status" to "Market Closed (Standby)"))
+            hasProvider -> ComponentHealth("OPTION_CHAIN", HealthState.NO_TICK, details = mapOf("status" to "Waiting for Live Data"))
+            else -> ComponentHealth("OPTION_CHAIN", HealthState.OFFLINE, details = mapOf("status" to "No Market Provider Connected"))
+        }
     }
 
     private fun checkAiSignalHealth(): ComponentHealth {
@@ -176,11 +186,9 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             return
         }
 
-        // 4. Do not attempt if no broker is even logged in
-        val anyBrokerConnected = brokerManager.brokerAuthManager.statuses.value.values.any { 
-            it.status == com.example.data.network.BrokerAuthStatus.CONNECTED 
-        }
-        if (!anyBrokerConnected) {
+        // 4. Do not attempt if no market data provider is connected/configured
+        val hasMarketProvider = brokerManager.brokerAuthManager.hasActiveMarketDataProvider()
+        if (!hasMarketProvider) {
             return
         }
 
@@ -281,15 +289,19 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             )
             
             // 5. OPTION CHAIN
+            val hasMarketProvider = brokerManager.brokerAuthManager.hasActiveMarketDataProvider()
             val optionChainStatus = when {
                 providerState.live && !providerState.stale -> {
-                    AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.HEALTHY, "REAL API VERIFIED", mapOf("Source" to "Live Provider Active", "Verified" to "TRUE"))
+                    AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.HEALTHY, "REAL API VERIFIED (PASS)", mapOf("Source" to "Live Provider Active", "Verified" to "TRUE"))
                 }
                 isMarketClosed -> {
                     AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.HEALTHY, "STANDBY (Market Closed)", mapOf("Source" to "Broker mapped", "Verified" to "STANDBY"))
                 }
+                hasMarketProvider -> {
+                    AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.NO_TICK, "NOT RUNTIME VERIFIED (Waiting for Live Tick)", mapOf("Source" to "Provider connected", "Verified" to "PENDING_TICK"))
+                }
                 else -> {
-                    AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.HEALTHY, "NOT RUNTIME VERIFIED", mapOf("Source" to "Broker mapped", "Verified" to "STANDBY"))
+                    AZDiagnosticResult(DiagnosticCategory.OPTION_CHAIN, "Contracts Validation", HealthState.OFFLINE, "UNAVAILABLE (No Market Provider)", mapOf("Source" to "None", "Verified" to "UNAVAILABLE"))
                 }
             }
             results.add(optionChainStatus)

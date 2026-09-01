@@ -145,14 +145,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     private val _marketDataSource = MutableStateFlow(brokerManager.currentMarketDataSource)
     val marketDataSource: StateFlow<String> = _marketDataSource.asStateFlow()
-    val isLiveFeedActive: StateFlow<Boolean> = combine(
-        
-        _userProfile,
-        brokerManager.brokerAuthManager.statuses
-    ) { profile, statuses ->
-        val isDhanConnected = profile.isDhanConnected || statuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
-        isDhanConnected
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isLiveFeedActive: StateFlow<Boolean> = com.example.data.model.MarketDataStore.providerState
+        .map { it.live && !it.stale && it.provider != com.example.data.model.MarketDataProviders.DHAN }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
 
     private val _marketDataLastUpdated = MutableStateFlow("")
@@ -260,9 +255,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isSessionValid.value = hasConnectedBroker
             android.util.Log.i("MainViewModel", "[SESSION_RESTORE] Validated connected brokers present: $hasConnectedBroker")
             
-            // Restore active broker
-            if (sessionManager.isDhanConnected) {
-                sessionManager.activeBroker = "Dhan"
+            // Restore active broker based on persisted selection
+            val savedActiveBroker = sessionManager.activeBroker.trim()
+            val isSavedBrokerValid = when (savedActiveBroker) {
+                "Dhan" -> sessionManager.isDhanConnected && brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                "Angel One" -> sessionManager.isAngelConnected && brokerManager.brokerAuthManager.statuses.value["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                "Upstox" -> sessionManager.isUpstoxConnected && brokerManager.brokerAuthManager.statuses.value["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                "Fyers" -> sessionManager.isFyersConnected && brokerManager.brokerAuthManager.statuses.value["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                else -> false
+            }
+            if (isSavedBrokerValid) {
+                brokerManager.setActiveBroker(savedActiveBroker)
+            } else if (savedActiveBroker.isNotBlank()) {
+                // If the previously selected broker is no longer valid, clear it rather than silently switching
+                sessionManager.activeBroker = ""
             }
             
             if (hasConnectedBroker) {
@@ -1398,11 +1404,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 //             1. Fetch live quotes across all tracking symbols
             val symbols = getAllLiveTrackingSymbols()
             val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
-//             quotesRes.getOrNull()?.let { quotes ->
-//                 if (quotes.isNotEmpty()) {
-//                     repository.updateWatchlistQuotes(quotes)
-//                 }
-//             }
+            quotesRes.getOrNull()?.let { quotes ->
+                if (quotes.isNotEmpty()) {
+                    repository.updateWatchlistQuotes(quotes)
+                }
+            }
 
 //             2. Ensure historical candles are populated in CandleStore for active Algo Index
             val activeAlgoIndex = com.example.util.AlgoEngine.selectedIndex.value
@@ -1416,31 +1422,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else -> "5m"
                 }
                 val histRes = brokerManager.getHistoricalCandles(activeAlgoIndex, candleInterval)
-//                 histRes.getOrNull()?.let { candles ->
-//                     if (candles != null) {
-//                         com.example.util.indicators.CandleStore.setHistoricalCandleData(activeAlgoIndex, strategyTimeframe, candles)
-//                     }
-//                 }
+                histRes.getOrNull()?.let { candles ->
+                    if (candles.isNotEmpty()) {
+                        com.example.util.indicators.CandleStore.setHistoricalCandleData(activeAlgoIndex, strategyTimeframe, candles)
+                    }
+                }
             }
 
 //             3. Synchronously fetch option chain for active option index / algo index
             val targetOptionIndex = if (_selectedOptionIndex.value.isNotBlank()) _selectedOptionIndex.value else activeAlgoIndex
             val expiry = _selectedOptionExpiry.value
-            val indexTick = com.example.data.model.MarketDataStore.getTick(targetOptionIndex)
-            val indexLtp = indexTick?.price ?: _watchlist.value.find { it.symbol.equals(targetOptionIndex, ignoreCase = true) }?.ltp ?: 0.0
 
             val optChainRes = brokerManager.getOptionChain(targetOptionIndex, expiry)
-            val strikes = emptyList<com.example.data.model.OptionStrikeItem>()
-            val isValidForIndex = true && strikes.any { strike ->
-                if (indexLtp > 0) {
-                    true
-                } else true
-            }
+            val strikes = optChainRes.getOrNull()
 
-            if (isValidForIndex && strikes != null) {
+            if (!strikes.isNullOrEmpty()) {
                 _optionStrikes.value = strikes
-            } else {
-                _optionStrikes.value = emptyList()
             }
 
             _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
@@ -1561,11 +1558,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val res = brokerManager.getHistoricalCandles(indexName, interval)
             if (res.isSuccess) {
-//                 val candles = res.getOrDefault(emptyList())
-//                 if (candles != null) {
-//                     com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
-//                 }
-                onResult(emptyList())
+                val candles = res.getOrDefault(emptyList())
+                if (candles.isNotEmpty()) {
+                    com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
+                }
+                onResult(candles)
             } else {
                 onResult(emptyList())
             }

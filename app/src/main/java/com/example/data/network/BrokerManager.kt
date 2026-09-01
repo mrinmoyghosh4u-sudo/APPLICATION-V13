@@ -71,10 +71,18 @@ class BrokerManager(
         get() = dhanService
 
     fun setActiveBroker(broker: String) {
-        sessionManager.activeBroker = "Dhan"
+        val normalized = when (broker.trim().lowercase()) {
+            "dhan" -> "Dhan"
+            "angel one", "angel", "angelone" -> "Angel One"
+            "upstox" -> "Upstox"
+            "fyers" -> "Fyers"
+            else -> broker.trim()
+        }
+        sessionManager.activeBroker = normalized
     }
 
     fun setPrimaryMarketDataProvider(providerName: String) {
+        sessionManager.primaryMarketDataProvider = providerName
         marketDataEngine.setPrimaryMarketDataProvider(providerName)
     }
 
@@ -128,7 +136,7 @@ class BrokerManager(
     }
 
     suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
-        return Result.success(emptyList()) // Expiries not supported directly via unified MarketDataEngine
+        return marketDataEngine.getOptionExpiries(symbol)
     }
 
     suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {

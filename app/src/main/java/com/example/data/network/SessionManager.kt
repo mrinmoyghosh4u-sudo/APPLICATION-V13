@@ -9,6 +9,10 @@ import androidx.security.crypto.MasterKey
 class SessionManager(context: Context) {
     private val appContext = context.applicationContext
 
+    private var _isSecureStorageAvailable = true
+    val isSecureStorageAvailable: Boolean
+        get() = _isSecureStorageAvailable
+
     private val prefs: SharedPreferences by lazy {
         initPrefs(appContext)
     }
@@ -41,8 +45,9 @@ class SessionManager(context: Context) {
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
             }.getOrElse { err ->
-                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}, falling back to standard SharedPreferences")
-                context.getSharedPreferences(prefFileName, Context.MODE_PRIVATE)
+                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}. FAILING CLOSED: Using in-memory store. Plaintext fallback is strictly prohibited.")
+                _isSecureStorageAvailable = false
+                InMemorySharedPreferences()
             }
         }
         migrateLegacyKeys(sharedPrefs)
@@ -52,6 +57,7 @@ class SessionManager(context: Context) {
     companion object {
         // Active broker & system keys
         private const val KEY_ACTIVE_BROKER = "active_broker"
+        private const val KEY_PRIMARY_MARKET_DATA_PROVIDER = "primary_market_data_provider"
         private const val KEY_BIOMETRIC_ENABLED = "is_biometric_enabled"
 
         // Angel One Canonical Keys
@@ -576,4 +582,141 @@ class SessionManager(context: Context) {
     var isTelegramAlertsEnabled: Boolean
         get() = prefs.getBoolean(KEY_TELEGRAM_ALERTS_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_TELEGRAM_ALERTS_ENABLED, value).apply()
+
+    // ==========================================
+    // PRIMARY MARKET DATA PROVIDER SELECTION
+    // ==========================================
+
+    var primaryMarketDataProvider: String
+        get() = prefs.getString(KEY_PRIMARY_MARKET_DATA_PROVIDER, "Upstox") ?: "Upstox"
+        set(value) = prefs.edit().putString(KEY_PRIMARY_MARKET_DATA_PROVIDER, value.trim()).apply()
+}
+
+/**
+ * Fail-closed In-Memory SharedPreferences implementation.
+ * Used when Android Keystore or EncryptedSharedPreferences is unavailable or corrupted,
+ * ensuring sensitive credentials are NEVER written to plaintext XML on disk.
+ */
+internal class InMemorySharedPreferences : SharedPreferences {
+    private val store = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    private val listeners = java.util.concurrent.CopyOnWriteArraySet<SharedPreferences.OnSharedPreferenceChangeListener>()
+
+    override fun getAll(): MutableMap<String, *> = HashMap(store)
+
+    override fun getString(key: String?, defValue: String?): String? {
+        if (key == null) return defValue
+        val v = store[key]
+        return if (v is String) v else defValue
+    }
+
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+        if (key == null) return defValues
+        @Suppress("UNCHECKED_CAST")
+        val v = store[key] as? Set<String>
+        return if (v != null) HashSet(v) else defValues
+    }
+
+    override fun getInt(key: String?, defValue: Int): Int {
+        if (key == null) return defValue
+        val v = store[key]
+        return if (v is Number) v.toInt() else defValue
+    }
+
+    override fun getLong(key: String?, defValue: Long): Long {
+        if (key == null) return defValue
+        val v = store[key]
+        return if (v is Number) v.toLong() else defValue
+    }
+
+    override fun getFloat(key: String?, defValue: Float): Float {
+        if (key == null) return defValue
+        val v = store[key]
+        return if (v is Number) v.toFloat() else defValue
+    }
+
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean {
+        if (key == null) return defValue
+        val v = store[key]
+        return if (v is Boolean) v else defValue
+    }
+
+    override fun contains(key: String?): Boolean = key != null && store.containsKey(key)
+
+    override fun edit(): SharedPreferences.Editor = EditorImpl()
+
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
+        if (listener != null) listeners.add(listener)
+    }
+
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
+        if (listener != null) listeners.remove(listener)
+    }
+
+    private inner class EditorImpl : SharedPreferences.Editor {
+        private val temp = HashMap<String, Any?>()
+        private var clear = false
+
+        override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+            if (key != null) temp[key] = value
+            return this
+        }
+
+        override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+            if (key != null) temp[key] = values?.toSet()
+            return this
+        }
+
+        override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+            if (key != null) temp[key] = value
+            return this
+        }
+
+        override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
+            if (key != null) temp[key] = value
+            return this
+        }
+
+        override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
+            if (key != null) temp[key] = value
+            return this
+        }
+
+        override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
+            if (key != null) temp[key] = value
+            return this
+        }
+
+        override fun remove(key: String?): SharedPreferences.Editor {
+            if (key != null) temp[key] = this // Sentinel for remove
+            return this
+        }
+
+        override fun clear(): SharedPreferences.Editor {
+            clear = true
+            return this
+        }
+
+        override fun commit(): Boolean {
+            apply()
+            return true
+        }
+
+        override fun apply() {
+            if (clear) {
+                store.clear()
+            }
+            for ((k, v) in temp) {
+                if (v === this) {
+                    store.remove(k)
+                } else if (v == null) {
+                    store.remove(k)
+                } else {
+                    store[k] = v
+                }
+                for (listener in listeners) {
+                    listener.onSharedPreferenceChanged(this@InMemorySharedPreferences, k)
+                }
+            }
+        }
+    }
 }

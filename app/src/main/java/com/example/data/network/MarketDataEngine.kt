@@ -85,6 +85,19 @@ class MarketDataEngine(
         primaryProviderOverride = providerName
     }
 
+    private fun getProviderPriorityOrder(): List<String> {
+        val rawSelected = primaryProviderOverride 
+            ?: sessionManager?.primaryMarketDataProvider 
+            ?: com.example.data.model.MarketDataProviders.UPSTOX
+        val primary = com.example.data.model.MarketDataProviders.normalize(rawSelected)
+        val defaultList = listOf(
+            com.example.data.model.MarketDataProviders.UPSTOX,
+            com.example.data.model.MarketDataProviders.FYERS,
+            com.example.data.model.MarketDataProviders.ANGEL_ONE
+        )
+        return listOf(primary) + defaultList.filter { it != primary }
+    }
+
     fun updateLastTickTime(provider: String = _internalActiveProvider.value) {
         val canonical = com.example.data.model.MarketDataProviders.normalize(provider)
         _lastTickTimeMs.value = System.currentTimeMillis()
@@ -93,42 +106,52 @@ class MarketDataEngine(
 
     // =========================================================================
     // 1. LIVE OPTION CHAIN
-    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
+    // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One)
     // =========================================================================
     suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<OptionChain> {
-        // Priority 1: Upstox (Primary)
-        val upstoxService = upstoxMarketDataService
-        if (upstoxService?.isConfigured() == true) {
-            val upstoxRes = upstoxService.getOptionChain(symbol, expiry ?: "")
-            if (upstoxRes.isSuccess) {
-                val strikes = upstoxRes.getOrDefault(emptyList())
-                if (strikes.isNotEmpty()) {
-                    val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                    return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+        val providers = getProviderPriorityOrder()
+        
+        for (provider in providers) {
+            when (provider) {
+                com.example.data.model.MarketDataProviders.UPSTOX -> {
+                    val upstoxService = upstoxMarketDataService
+                    if (upstoxService?.isConfigured() == true) {
+                        val upstoxRes = upstoxService.getOptionChain(symbol, expiry ?: "")
+                        if (upstoxRes.isSuccess) {
+                            val strikes = upstoxRes.getOrDefault(emptyList())
+                            if (strikes.isNotEmpty()) {
+                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                            }
+                        }
+                    }
                 }
-            }
-        }
-
-        // Priority 2: Fyers (Secondary)
-        val fyersService = fyersMarketDataService
-        if (fyersService?.isConfigured() == true) {
-            val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
-            if (fyersRes.isSuccess) {
-                val strikes = fyersRes.getOrDefault(emptyList())
-                if (strikes.isNotEmpty()) {
-                    val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                    return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                com.example.data.model.MarketDataProviders.FYERS -> {
+                    val fyersService = fyersMarketDataService
+                    if (fyersService?.isConfigured() == true) {
+                        val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
+                        if (fyersRes.isSuccess) {
+                            val strikes = fyersRes.getOrDefault(emptyList())
+                            if (strikes.isNotEmpty()) {
+                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                            }
+                        }
+                    }
                 }
-            }
-        }
-
-        // Priority 3: Angel One (Third)
-        val angelRes = angelMarketDataService?.getOptionChain(symbol, expiry ?: "")
-        if (angelRes?.isSuccess == true) {
-            val strikes = angelRes.getOrDefault(emptyList())
-            if (strikes.isNotEmpty()) {
-                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
+                    val angelService = angelMarketDataService
+                    if (angelService != null) {
+                        val angelRes = angelService.getOptionChain(symbol, expiry ?: "")
+                        if (angelRes.isSuccess) {
+                            val strikes = angelRes.getOrDefault(emptyList())
+                            if (strikes.isNotEmpty()) {
+                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -137,69 +160,79 @@ class MarketDataEngine(
 
     // =========================================================================
     // 2. HISTORICAL DATA
-    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
+    // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One)
     // =========================================================================
     suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
-        // Priority 1: Upstox (Primary)
-        val upstoxService = upstoxMarketDataService
-        if (upstoxService?.isConfigured() == true) {
-            val upstoxRes = upstoxService.getHistoricalCandles(symbol, interval)
-            if (upstoxRes.isSuccess) {
-                val candles = upstoxRes.getOrDefault(emptyList()).map {
-                    HistoricalCandle(
-                        time = "",
-                        timestamp = 0L,
-                        open = it.open.toDouble(),
-                        high = it.high.toDouble(),
-                        low = it.low.toDouble(),
-                        close = it.close.toDouble(),
-                        volume = it.volume.toLong()
-                    )
-                }
-                if (candles.isNotEmpty()) {
-                    return Result.success(candles)
-                }
-            }
-        }
+        val providers = getProviderPriorityOrder()
 
-        // Priority 2: Fyers (Secondary)
-        val fyersService = fyersMarketDataService
-        if (fyersService?.isConfigured() == true) {
-            val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
-            if (fyersRes.isSuccess) {
-                val candles = fyersRes.getOrDefault(emptyList()).map {
-                    HistoricalCandle(
-                        time = "",
-                        timestamp = 0L,
-                        open = it.open.toDouble(),
-                        high = it.high.toDouble(),
-                        low = it.low.toDouble(),
-                        close = it.close.toDouble(),
-                        volume = it.volume.toLong()
-                    )
+        for (provider in providers) {
+            when (provider) {
+                com.example.data.model.MarketDataProviders.UPSTOX -> {
+                    val upstoxService = upstoxMarketDataService
+                    if (upstoxService?.isConfigured() == true) {
+                        val upstoxRes = upstoxService.getHistoricalCandles(symbol, interval)
+                        if (upstoxRes.isSuccess) {
+                            val candles = upstoxRes.getOrDefault(emptyList()).map {
+                                HistoricalCandle(
+                                    time = "",
+                                    timestamp = 0L,
+                                    open = it.open.toDouble(),
+                                    high = it.high.toDouble(),
+                                    low = it.low.toDouble(),
+                                    close = it.close.toDouble(),
+                                    volume = it.volume.toLong()
+                                )
+                            }
+                            if (candles.isNotEmpty()) {
+                                return Result.success(candles)
+                            }
+                        }
+                    }
                 }
-                if (candles.isNotEmpty()) {
-                    return Result.success(candles)
+                com.example.data.model.MarketDataProviders.FYERS -> {
+                    val fyersService = fyersMarketDataService
+                    if (fyersService?.isConfigured() == true) {
+                        val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
+                        if (fyersRes.isSuccess) {
+                            val candles = fyersRes.getOrDefault(emptyList()).map {
+                                HistoricalCandle(
+                                    time = "",
+                                    timestamp = 0L,
+                                    open = it.open.toDouble(),
+                                    high = it.high.toDouble(),
+                                    low = it.low.toDouble(),
+                                    close = it.close.toDouble(),
+                                    volume = it.volume.toLong()
+                                )
+                            }
+                            if (candles.isNotEmpty()) {
+                                return Result.success(candles)
+                            }
+                        }
+                    }
                 }
-            }
-        }
-
-        // Priority 3: Angel One (Third)
-        val angelRes = angelMarketDataService?.getHistoricalCandles(symbol, interval)
-        if (angelRes?.isSuccess == true) {
-            val candles = angelRes.getOrDefault(emptyList()).map {
-                HistoricalCandle(
-                    time = "",
-                    timestamp = 0L,
-                    open = it.open.toDouble(),
-                    high = it.high.toDouble(),
-                    low = it.low.toDouble(),
-                    close = it.close.toDouble(),
-                    volume = it.volume.toLong()
-                )
-            }
-            if (candles.isNotEmpty()) {
-                return Result.success(candles)
+                com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
+                    val angelService = angelMarketDataService
+                    if (angelService != null) {
+                        val angelRes = angelService.getHistoricalCandles(symbol, interval)
+                        if (angelRes.isSuccess) {
+                            val candles = angelRes.getOrDefault(emptyList()).map {
+                                HistoricalCandle(
+                                    time = "",
+                                    timestamp = 0L,
+                                    open = it.open.toDouble(),
+                                    high = it.high.toDouble(),
+                                    low = it.low.toDouble(),
+                                    close = it.close.toDouble(),
+                                    volume = it.volume.toLong()
+                                )
+                            }
+                            if (candles.isNotEmpty()) {
+                                return Result.success(candles)
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -233,41 +266,51 @@ class MarketDataEngine(
 
     // =========================================================================
     // 4. INDEX DATA FAILOVER & MARKET QUOTES
-    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
+    // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One)
     // =========================================================================
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
         if (symbols.isEmpty()) return Result.success(emptyList())
 
-        // Priority 1: Upstox (Primary)
-        val upstoxService = upstoxMarketDataService
-        if (upstoxService?.isConfigured() == true) {
-            val upstoxRes = upstoxService.getMarketQuotes(symbols)
-            if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
-                val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
-                if (valid.isNotEmpty()) {
-                    return Result.success(valid)
+        val providers = getProviderPriorityOrder()
+
+        for (provider in providers) {
+            when (provider) {
+                com.example.data.model.MarketDataProviders.UPSTOX -> {
+                    val upstoxService = upstoxMarketDataService
+                    if (upstoxService?.isConfigured() == true) {
+                        val upstoxRes = upstoxService.getMarketQuotes(symbols)
+                        if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
+                            val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+                            if (valid.isNotEmpty()) {
+                                return Result.success(valid)
+                            }
+                        }
+                    }
                 }
-            }
-        }
-    
-        // Priority 2: Fyers (Secondary)
-        val fyersService = fyersMarketDataService
-        if (fyersService?.isConfigured() == true) {
-            val fyersRes = fyersService.getMarketQuotes(symbols)
-            if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
-                val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
-                if (valid.isNotEmpty()) {
-                    return Result.success(valid)
+                com.example.data.model.MarketDataProviders.FYERS -> {
+                    val fyersService = fyersMarketDataService
+                    if (fyersService?.isConfigured() == true) {
+                        val fyersRes = fyersService.getMarketQuotes(symbols)
+                        if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
+                            val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+                            if (valid.isNotEmpty()) {
+                                return Result.success(valid)
+                            }
+                        }
+                    }
                 }
-            }
-        }
-        
-        // Priority 3: Angel One (Third)
-        val angelRes = angelMarketDataService?.getMarketQuotes(symbols)
-        if (angelRes?.isSuccess == true && (angelRes.getOrDefault(emptyList())).isNotEmpty()) {
-            val valid = (angelRes.getOrDefault(emptyList())).filter { it.ltp > 0.0 }
-            if (valid.isNotEmpty()) {
-                return Result.success(valid)
+                com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
+                    val angelService = angelMarketDataService
+                    if (angelService != null) {
+                        val angelRes = angelService.getMarketQuotes(symbols)
+                        if (angelRes.isSuccess && (angelRes.getOrDefault(emptyList())).isNotEmpty()) {
+                            val valid = (angelRes.getOrDefault(emptyList())).filter { it.ltp > 0.0 }
+                            if (valid.isNotEmpty()) {
+                                return Result.success(valid)
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -340,5 +383,62 @@ class MarketDataEngine(
             CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
         }
         angelMarketDataService?.reconnect()
+    }
+
+    // =========================================================================
+    // 5. OPTION EXPIRIES FAILOVER
+    // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One) -> OptionExpiryUtil
+    // =========================================================================
+    suspend fun getOptionExpiries(symbol: String): Result<List<String>> {
+        val providers = getProviderPriorityOrder()
+
+        for (provider in providers) {
+            when (provider) {
+                com.example.data.model.MarketDataProviders.UPSTOX -> {
+                    val upstoxService = upstoxMarketDataService
+                    if (upstoxService?.isConfigured() == true) {
+                        val upstoxRes = upstoxService.getOptionExpiries(symbol)
+                        if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
+                            val expiries = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, upstoxRes.getOrDefault(emptyList()))
+                            if (expiries.isNotEmpty() && !expiries.contains("UNAVAILABLE")) {
+                                return Result.success(expiries)
+                            }
+                        }
+                    }
+                }
+                com.example.data.model.MarketDataProviders.FYERS -> {
+                    val fyersService = fyersMarketDataService
+                    if (fyersService?.isConfigured() == true) {
+                        val fyersRes = fyersService.getOptionExpiries(symbol)
+                        if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
+                            val expiries = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, fyersRes.getOrDefault(emptyList()))
+                            if (expiries.isNotEmpty() && !expiries.contains("UNAVAILABLE")) {
+                                return Result.success(expiries)
+                            }
+                        }
+                    }
+                }
+                com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
+                    val angelService = angelMarketDataService
+                    if (angelService?.isConfigured() == true) {
+                        val angelRes = angelService.getOptionExpiries(symbol)
+                        if (angelRes.isSuccess && angelRes.getOrDefault(emptyList()).isNotEmpty()) {
+                            val expiries = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, angelRes.getOrDefault(emptyList()))
+                            if (expiries.isNotEmpty() && !expiries.contains("UNAVAILABLE")) {
+                                return Result.success(expiries)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Priority Fallback: InstrumentMaster / OptionExpiryUtil
+        val expiries = com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol)
+        if (expiries.isNotEmpty() && !expiries.contains("UNAVAILABLE")) {
+            return Result.success(expiries)
+        }
+
+        return Result.failure(Exception("No valid option expiries available for $symbol"))
     }
 }
