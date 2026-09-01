@@ -1,1 +1,0 @@
-sed -i 's/val overallPnlPercent: Double = 0.0,/val overallPnlPercent: Double = 0.0,\n    val realizedPnl: Double = 0.0,\n    val unrealizedPnl: Double = 0.0,/' app/src/main/java/com/example/data/model/TradingEntities.kt

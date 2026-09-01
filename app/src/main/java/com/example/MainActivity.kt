@@ -50,6 +50,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.d("KingKhanApp", "MainActivity starting...")
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
@@ -840,7 +841,41 @@ class MainActivity : FragmentActivity() {
                                 onAngelLogin = { clientCode, mpin, apiKey, totpSecret -> viewModel.loginAngel(clientCode, mpin, apiKey, totpSecret) },
                                 onDhanLogin = { clientId, accessToken -> viewModel.connectDhan(clientId, accessToken) },
                                 onUpstoxLogin = { clientId, secret, codeOrToken -> viewModel.connectUpstox(clientId, secret, codeOrToken) },
-                                onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) }
+                                onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) },
+                                onOpenUpstoxLogin = { apiKey, secret -> viewModel.initiateUpstoxLogin(apiKey, secret, this@MainActivity) },
+                                onOpenFyersLogin = { appId, secret -> viewModel.initiateFyersLogin(appId, secret, this@MainActivity) }
+                            )
+                        }
+
+                        // Global Order Placement Dialog Overlay
+                        orderDialogState?.let { (symbol, side, priceLot) ->
+                            val (price, lot) = priceLot ?: (null to null)
+                            val exchange = when {
+                                symbol.contains("CRUDE") -> "MCX"
+                                symbol.contains("SENSEX") || symbol.contains("BANKEX") -> "BSE"
+                                else -> "NSE"
+                            }
+                            OrderDialog(
+                                symbol = symbol,
+                                initialSide = side,
+                                initialPrice = price,
+                                lotSize = lot,
+                                appPreferences = appPreferences,
+                                onDismiss = { orderDialogState = null },
+                                onConfirmOrder = { orderSide, orderType, qty, orderPrice ->
+                                    viewModel.placeNewOrder(
+                                        symbol = symbol,
+                                        exchange = exchange,
+                                        side = orderSide,
+                                        orderType = orderType,
+                                        qty = qty,
+                                        price = orderPrice
+                                    )
+                                    orderDialogState = null
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Order submitted: $orderSide $qty $symbol @ ₹$orderPrice")
+                                    }
+                                }
                             )
                         }
                     }

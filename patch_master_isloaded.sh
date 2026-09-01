@@ -1,2 +1,0 @@
-sed -i 's/FileInputStream(cacheFile).use { parseInputStream(it) }/try { FileInputStream(cacheFile).use { parseInputStream(it) } } catch (e: Exception) { android.util.Log.e("InstrumentMaster", "Error parsing cache", e) }/g' app/src/main/java/com/example/data/network/InstrumentMasterService.kt
-sed -i 's/body.byteStream().use { parseInputStream(it) }/try { body.byteStream().use { parseInputStream(it) } } catch (e: Exception) { android.util.Log.e("InstrumentMaster", "Error parsing stream", e) }/g' app/src/main/java/com/example/data/network/InstrumentMasterService.kt

@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+  <!-- Upstox Brand Vibrant Purple Background Circle -->
+  <path
+      android:fillColor="#5A2E8A"
+      android:pathData="M50,0 C77.61,0 100,22.39 100,50 C100,77.61 77.61,100 50,100 C22.39,100 0,77.61 0,50 C0,22.39 22.39,0 50,0 Z" />
+
+  <!-- Upstox 'U' Shape (White) -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M30,28 L40,28 L40,55 C40,61 44,65 50,65 C56,65 60,61 60,55 L60,28 L70,28 L70,55 C70,66 61,75 50,75 C39,75 30,66 30,55 Z" />
+
+  <!-- Upstox Accent Line / Arrow (Neon Green) -->
+  <path
+      android:fillColor="#00D09C"
+      android:pathData="M46,40 L54,40 L54,52 L46,52 Z" />
+
+</vector>

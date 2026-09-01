@@ -1035,7 +1035,7 @@ private fun AiOptionBuyerViewSection(
     onSelectSymbol: (String) -> Unit,
     signals: List<AiPreMarketOptionBuyerSignal>
 ) {
-    val symbolList = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX", "CRUDEOIL")
+    val symbolList = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
     val activeSignal = signals.find { it.symbol.equals(selectedSymbol, ignoreCase = true) }
         ?: signals.firstOrNull()
         ?: AiPreMarketOptionBuyerSignal(

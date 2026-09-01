@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+  <!-- Fyers Brand Blue Background Circle -->
+  <path
+      android:fillColor="#1E50F5"
+      android:pathData="M50,0 C77.61,0 100,22.39 100,50 C100,77.61 77.61,100 50,100 C22.39,100 0,77.61 0,50 C0,22.39 22.39,0 50,0 Z" />
+
+  <!-- Fyers Stylized 'F' Wings / Chevrons (White) -->
+  <!-- Top Bar -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M28,26 L72,26 L68,34 L28,34 Z" />
+
+  <!-- Middle Bar -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M28,42 L62,42 L58,50 L28,50 Z" />
+
+  <!-- Vertical Stem -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M28,26 L36,26 L36,74 L28,74 Z" />
+
+  <!-- Orange/Yellow Energy Accent Dot/Flame -->
+  <path
+      android:fillColor="#FFA500"
+      android:pathData="M66,42 L74,42 L70,50 L62,50 Z" />
+
+</vector>

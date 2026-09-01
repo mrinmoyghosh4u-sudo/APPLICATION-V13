@@ -1,5 +1,0 @@
-The m.Stock mock live ticker, non-exact expiry fallbacks, and unverified reference data fallbacks for option chains have been entirely removed.
-
-- **Mock Ticker Deleted**: The hardcoded ticker (`startLiveTickerFeed`) generating fake sequential quotes and random deltas in `MStockMarketDataService` has been completely deleted.
-- **Strict Expiry Matching**: In `InstrumentMasterService`, the fallback that returned random available options when exact expiries were missed has been replaced with a strict check returning an empty list, ensuring incorrect expiries are never displayed.
-- **Verified Providers Only**: Modified `MarketDataEngine`'s Option Chain failover pipeline to only hit verified real providers (Angel One and m.Stock). Fallbacks to NSE and Yahoo have been severed for Options, avoiding stale or unverified proxy chain data.

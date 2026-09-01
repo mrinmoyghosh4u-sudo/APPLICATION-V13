@@ -1,4 +1,0 @@
-I have fixed the hardcoded PnL values and the persistent API error banner.
-
-- **Real PnL Data Wiring**: Updated the Portfolio Overview section in the Home Screen to read `unrealizedPnl` and `realizedPnl` dynamically from the user's active session profile, rather than displaying static hardcoded strings.
-- **Error State Management**: Fixed a UI issue where momentary API or network exceptions would permanently lock the error banner on the screen. The error state is now properly cleared and reset at the beginning of each refresh cycle, preventing stale errors.

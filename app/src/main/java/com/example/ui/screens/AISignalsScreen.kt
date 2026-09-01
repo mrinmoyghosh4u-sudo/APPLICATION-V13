@@ -111,7 +111,8 @@ fun AISignalsScreen(
                 "FINNIFTY" -> signal.symbol.contains("FINNIFTY", ignoreCase = true)
                 "MIDCPNIFTY" -> signal.symbol.contains("MIDCPNIFTY", ignoreCase = true) || signal.symbol.contains("MID", ignoreCase = true)
                 "SENSEX" -> signal.symbol.contains("SENSEX", ignoreCase = true)
-                "MCX" -> signal.exchange.equals("MCX", ignoreCase = true) || signal.symbol.contains("CRUDEOIL", ignoreCase = true)
+                "BANKEX" -> signal.symbol.contains("BANKEX", ignoreCase = true)
+                "CRUDEOIL" -> signal.exchange.equals("MCX", ignoreCase = true) || signal.symbol.contains("CRUDEOIL", ignoreCase = true)
                 else -> signal.symbol.contains(selectedIndexFilter, ignoreCase = true)
             }
 
@@ -366,13 +367,14 @@ fun AISignalsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Index Selector Row
                         val indices = listOf(
-                            "ALL" to "All Indices",
+                            "ALL" to "All Symbols",
                             "NIFTY" to "Nifty 50",
                             "BANKNIFTY" to "Bank Nifty",
                             "FINNIFTY" to "Fin Nifty",
                             "MIDCPNIFTY" to "Midcap",
                             "SENSEX" to "Sensex",
-                            "MCX" to "MCX Commodity"
+                            "BANKEX" to "Bankex",
+                            "CRUDEOIL" to "Crude Oil"
                         )
 
                         Row(

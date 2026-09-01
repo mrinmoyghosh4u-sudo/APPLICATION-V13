@@ -62,7 +62,8 @@ data class AngelOrderBookItem(
     @Json(name = "averageprice") val averagePrice: Any? = "0",
     @Json(name = "status") val status: Any? = "",
     @Json(name = "orderupdatetime") val orderUpdateTime: Any? = "",
-    @Json(name = "updatetime") val updateTime: Any? = ""
+    @Json(name = "updatetime") val updateTime: Any? = "",
+    @Json(name = "text") val text: Any? = ""
 )
 
 @JsonClass(generateAdapter = true)
@@ -181,7 +182,9 @@ data class DhanOrderBookItem(
     @Json(name = "averagePrice") val averagePrice: Double = 0.0,
     @Json(name = "orderStatus") val orderStatus: String = "",
     @Json(name = "createTime") val createTime: String? = null,
-    @Json(name = "updateTime") val updateTime: String? = null
+    @Json(name = "updateTime") val updateTime: String? = null,
+    @Json(name = "remarks") val remarks: String? = null,
+    @Json(name = "text") val text: String? = null
 )
 
 @JsonClass(generateAdapter = true)

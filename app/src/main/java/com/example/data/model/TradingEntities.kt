@@ -41,6 +41,7 @@ data class OrderEntity(
     val ltp: Double = 0.0,
     val exitPrice: Double = 0.0,
     val realizedPnl: Double = 0.0,
+    val remarks: String = "",
     val optionType: String = "CE", // CE, PE, EQ
     val strike: Double = 0.0,
     val filledQty: Int = 0,
@@ -66,6 +67,7 @@ data class PortfolioHoldingEntity(
     val pnl: Double = 0.0,
     val pnlPercent: Double = 0.0,
     val realizedPnl: Double = 0.0,
+    val remarks: String = "",
     val unrealizedPnl: Double = 0.0,
     val securityId: String = "",
     val buyAvg: Double = 0.0,
@@ -173,6 +175,7 @@ data class UserProfileEntity(
     val overallPnl: Double = 0.0,
     val overallPnlPercent: Double = 0.0,
     val realizedPnl: Double = 0.0,
+    val remarks: String = "",
     val unrealizedPnl: Double = 0.0,
     val buyingPower: Double = 0.0
 ) {

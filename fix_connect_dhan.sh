@@ -1,1 +1,0 @@
-sed -i 's/val result = dhanService.login(clientId, accessToken, null)/sessionManager.dhanClientId = clientId\n            sessionManager.dhanAccessToken = accessToken\n            val result = Result.success(true)/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

@@ -1,1 +1,0 @@
-sed -i 's|val ltp = ltpInt / 100.0|val divisor = if (exchangeType.toInt() == 9) 10000000.0 else 100.0\n            val ltp = ltpInt / divisor|g' app/src/main/java/com/example/data/network/AngelOneMarketDataService.kt

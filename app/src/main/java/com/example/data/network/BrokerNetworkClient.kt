@@ -25,7 +25,11 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
         try {
             val response = chain.proceed(request)
             if (!response.isSuccessful) {
-                Log.e("BrokerAPI", "API FAILED: ${request.url.encodedPath} | Status: ${response.code}")
+                if (response.code == 401 || response.code == 403) {
+                    Log.w("BrokerAPI", "API Auth Required (${response.code}): ${request.url.encodedPath}")
+                } else {
+                    Log.e("BrokerAPI", "API FAILED: ${request.url.encodedPath} | Status: ${response.code}")
+                }
             }
             response
         } catch (e: Exception) {
@@ -100,7 +104,8 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
         val response = chain.proceed(request)
 
         if (response.code == 401 || response.code == 403) {
-            Log.e("DhanAPI", "Dhan access token expired or invalid (${response.code}).")
+            Log.w("DhanAPI", "Dhan access token expired or invalid (${response.code}). Please reconnect your Dhan account.")
+            sessionManager.isDhanConnected = false
         }
         response
     }

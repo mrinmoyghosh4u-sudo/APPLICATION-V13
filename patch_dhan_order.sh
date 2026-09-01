@@ -1,1 +1,0 @@
-sed -i 's/val exchangeSegment: String = "",/val exchangeSegment: String = "",\n    @Json(name = "productType") val productType: String = "",/' app/src/main/java/com/example/data/network/BrokerApiModels.kt

@@ -1142,6 +1142,21 @@ private fun DetailedOrderCardItem(
             }
         }
 
+        if (order.remarks.isNotBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LossRedBg, RoundedCornerShape(4.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = LossRed, modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(order.remarks, fontSize = 9.sp, color = LossRed, lineHeight = 12.sp)
+            }
+        }
+
         // Action Buttons Bar for Pending / Open Orders
         if (isPendingOrOpen) {
             Spacer(modifier = Modifier.height(10.dp))

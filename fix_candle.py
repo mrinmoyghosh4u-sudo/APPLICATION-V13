@@ -1,5 +1,0 @@
-content = open("app/src/main/java/com/example/data/network/AngelOneBrokerService.kt").read()
-content = content.replace("timestamp = row[0].toString(),", "")
-content = content.replace(".toDouble()", ".toFloat()")
-content = content.replace(".toLong()", "")
-open("app/src/main/java/com/example/data/network/AngelOneBrokerService.kt", "w").write(content)

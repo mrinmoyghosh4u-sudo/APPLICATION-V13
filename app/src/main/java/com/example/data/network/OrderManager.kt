@@ -68,6 +68,13 @@ class OrderManager(
                 return@withContext Result.failure(Exception("Invalid Order: Trading symbol cannot be empty."))
             }
 
+            // 3.1. Strict Approved Universe Check (Option Buyer Only on 8 Underlyings)
+            if (!com.example.data.model.MarketUniverse.isApprovedUnderlying(symbol)) {
+                return@withContext Result.failure(
+                    Exception("Rejected: '$symbol' is not in the approved 8-instrument universe (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, BANKEX, CRUDEOIL, CRUDEOIL M).")
+                )
+            }
+
             // 4. Exchange Validation
             val normExch = when (order.exchange.trim().uppercase()) {
                 "NSE", "NSE_EQ", "NSE-EQ" -> "NSE"

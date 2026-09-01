@@ -94,6 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val apiError: StateFlow<String?> = _apiError.asStateFlow()
 
     private val _isPlacingOrder = MutableStateFlow(false)
+    private val _exitingOrderIds = MutableStateFlow<Set<String>>(emptySet())
     val isPlacingOrder: StateFlow<Boolean> = _isPlacingOrder.asStateFlow()
 
     private val _telegramBotToken = MutableStateFlow(sessionManager.telegramBotToken)
@@ -230,14 +231,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.example.util.AlgoEngine.telegramService = telegramService
         com.example.util.AlgoEngine.alertService = alertService
         viewModelScope.launch {
-            repository.checkAndSeedInitialData()
-
-            brokerAuthManager.initialize()
-            if (sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()) {
-                brokerManager.fyersMarketDataService.connect()
+            try {
+                repository.checkAndSeedInitialData()
+                brokerAuthManager.initialize()
+                if (sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()) {
+                    runCatching { brokerManager.fyersMarketDataService.connect() }
+                }
+            } catch(e: Exception) { 
+                e.printStackTrace() 
+            } finally {
+                validateAndRestoreSession()
             }
-
-            validateAndRestoreSession()
         }
         observeData()
         setSelectedOptionIndex("NIFTY")
@@ -620,6 +624,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return trimmed
     }
 
+    fun initiateUpstoxLogin(apiKey: String, apiSecret: String, context: android.content.Context) {
+        val cleanKey = apiKey.trim().ifBlank { com.example.util.BrokerConfig.upstoxApiKey }
+        val cleanSecret = apiSecret.trim().ifBlank { com.example.util.BrokerConfig.upstoxApiSecret }
+        if (cleanKey.isBlank()) {
+            _authErrorMessage.value = "Upstox API Key (Client ID) is required"
+            return
+        }
+        sessionManager.upstoxApiKey = cleanKey
+        if (cleanSecret.isNotBlank()) sessionManager.upstoxApiSecret = cleanSecret
+        
+        val state = com.example.util.UpstoxAuthHelper.generateSecureState()
+        sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
+            provider = "UPSTOX",
+            state = state,
+            redirectUri = com.example.util.UpstoxAuthHelper.DEFAULT_REDIRECT_URI,
+            createdAt = System.currentTimeMillis(),
+            consumed = false
+        )
+        val loginUrl = com.example.util.UpstoxAuthHelper.getAuthorizationUrl(apiKey = cleanKey, state = state)
+        _authErrorMessage.value = null
+        _isAuthInProgress.value = true
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _isAuthInProgress.value = false
+            _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
+        }
+    }
+
+    fun initiateFyersLogin(appId: String, secretId: String, context: android.content.Context) {
+        val cleanAppId = appId.trim().ifBlank { com.example.util.BrokerConfig.fyersAppId }
+        val cleanSecret = secretId.trim().ifBlank { com.example.util.BrokerConfig.fyersSecretId }
+        if (cleanAppId.isBlank()) {
+            _authErrorMessage.value = "Fyers App ID is required"
+            return
+        }
+        sessionManager.fyersAppId = cleanAppId
+        if (cleanSecret.isNotBlank()) sessionManager.fyersSecretId = cleanSecret
+        
+        val state = com.example.util.FyersAuthHelper.generateSecureState()
+        sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
+            provider = "FYERS",
+            state = state,
+            redirectUri = com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI,
+            createdAt = System.currentTimeMillis(),
+            consumed = false
+        )
+        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(appId = cleanAppId, state = state)
+        _authErrorMessage.value = null
+        _isAuthInProgress.value = true
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _isAuthInProgress.value = false
+            _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
+        }
+    }
+
     fun connectUpstox(apiKey: String, apiSecret: String, authCodeOrToken: String = "") {
         viewModelScope.launch {
             _isAuthInProgress.value = true
@@ -849,7 +915,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
                 )
             }
-//             _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
+            _userProfile.value = updated
             repository.updateProfile(updated)
             alertService.notifyBrokerDisconnected(name)
         }
@@ -876,7 +942,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
                 )
             }
-//             _userProfile.value = updated.copy(isDhanConnected = brokerManager.brokerAuthManager.statuses.value["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED)
+            _userProfile.value = updated
             repository.updateProfile(updated)
             repository.addNotification("Account Removed", "$name credentials and tokens cleared", "WARNING")
         }
@@ -939,21 +1005,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isAuthInProgress.value = true
             _authErrorMessage.value = null
 
-//             STRICT VALIDATION FOR UPSTOX/FYERS
-            if (pendingSession == null) {
-                _isAuthInProgress.value = false
-                _authErrorMessage.value = "OAuth Error: No pending session found. Please try again."
-                return@launch
-            }
+            // Determine provider intelligently
+            val inferredProvider = pendingSession?.provider?.uppercase()?.trim()?.ifBlank { null }
+                ?: if (callbackState.startsWith("upstox_") || fullUrl.contains("upstox") || scheme == "kingkhan" && !fullUrl.contains("fyers")) "UPSTOX"
+                else if (callbackState.startsWith("fyers_") || fyersAuthCode != null || fullUrl.contains("fyers")) "FYERS"
+                else "UPSTOX"
 
-//             Determine provider
-            val inferredProvider = pendingSession.provider.uppercase().trim().ifBlank {
-                if (callbackState.startsWith("upstox_")) "UPSTOX"
-                else if (callbackState.startsWith("fyers_") || fyersAuthCode != null) "FYERS"
-                else ""
-            }
-
-//             Extract correct authorization code based on provider
+            // Extract correct authorization code based on provider
             var code: String? = null
             if (inferredProvider == "FYERS") {
                 code = fyersAuthCode
@@ -999,31 +1057,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            if (pendingSession.consumed) {
-                _isAuthInProgress.value = false
-                _authErrorMessage.value = "OAuth Error: This callback has already been processed (duplicate)."
-                return@launch
-            }
+            if (pendingSession != null) {
+                if (pendingSession.consumed) {
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "OAuth Error: This callback has already been processed (duplicate)."
+                    return@launch
+                }
 
-            if (callbackState.isBlank() || pendingSession.state != callbackState) {
-                _isAuthInProgress.value = false
-                _authErrorMessage.value = "OAuth Error: State mismatch. Possible CSRF attack."
-                return@launch
-            }
+                if (callbackState.isNotBlank() && pendingSession.state.isNotBlank() && pendingSession.state != callbackState) {
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "OAuth Error: State mismatch. Possible CSRF attack."
+                    return@launch
+                }
 
-//             Check session expiry (15 minutes)
-            val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-            if (isExpired) {
-                val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
-                android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
-                _isAuthInProgress.value = false
-                brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
-                return@launch
-            }
+                // Check session expiry (15 minutes)
+                val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
+                if (isExpired) {
+                    val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
+                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
+                    return@launch
+                }
 
-//             Mark session as consumed to prevent replay attacks
-            sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
+                // Mark session as consumed to prevent replay attacks
+                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
+            } else {
+                // If pendingSession was null, validate against UpstoxAuthHelper active state if available
+                if (callbackState.isNotBlank() && rawProvider == "UPSTOX") {
+                    com.example.util.UpstoxAuthHelper.validateAndConsumeState(callbackState)
+                }
+            }
 
             brokerManager.healthManager.reportCallbackReceived(providerName, "")
             android.util.Log.i("Auth", "[$logPrefix" + "_CALLBACK_RECEIVED] Redirect callback received with URI parameters")
@@ -1377,14 +1442,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private fun getAllLiveTrackingSymbols(): List<String> {
-        val baseSymbols = listOf(
-            "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
-            "SENSEX", "BANKEX",
-            "CRUDEOIL", "CRUDEOIL M",
-            "RELIANCE", "TCS", "INFY", "SBIN", "HDFCBANK", "ICICIBANK", "TATAMOTORS", "TATASTEEL"
-        )
-        val watchSymbols = _watchlist.value.map { it.symbol }
-        return (baseSymbols + watchSymbols).distinct()
+        return com.example.data.model.MarketUniverse.APPROVED_UNDERLYINGS
     }
 
     private fun syncMarketDataQuietly() {
@@ -1454,21 +1512,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSelectedOptionIndex(index: String) {
         _selectedOptionIndex.value = index
-//         _optionStrikes.value = emptyList() Immediately clear strikes on index change
+        _optionStrikes.value = emptyList() // Immediately clear strikes on index change to prevent stale contract data
         viewModelScope.launch {
-            val expiriesRes = brokerManager.getOptionExpiries(index)
-//             val apiExpiries = expiriesRes.getOrNull() ?: emptyList()
-            
-//             val sourceExpiries = if (apiExpiries.isNotEmpty()) {
-//                 apiExpiries
-//             } else {
-val sourceExpiries = emptyList<String>()
-//             }
-            
-            val finalExpiries = sourceExpiries
-            _availableOptionExpiries.value = finalExpiries
-            if (finalExpiries.isNotEmpty() && !finalExpiries.contains(_selectedOptionExpiry.value)) {
-                _selectedOptionExpiry.value = finalExpiries.first()
+            val expiries = repository.getOptionExpiries(index)
+            _availableOptionExpiries.value = expiries
+            if (expiries.isNotEmpty() && !expiries.contains(_selectedOptionExpiry.value)) {
+                _selectedOptionExpiry.value = expiries.first()
             }
             fetchOptionChain()
         }
@@ -1476,6 +1525,7 @@ val sourceExpiries = emptyList<String>()
 
     fun setSelectedOptionExpiry(expiry: String) {
         _selectedOptionExpiry.value = expiry
+        _optionStrikes.value = emptyList() // Clear strikes while fetching new expiry
         fetchOptionChain()
     }
 
@@ -1603,7 +1653,13 @@ val sourceExpiries = emptyList<String>()
                 )
                 refreshBrokerData()
             } catch (e: Exception) {
-                val errorMsg = e.message ?: "Order Placement Failed"
+                val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
+                val errorMsg = if (isTimeout) {
+                    "Network Timeout. The order may have been executed. Please check your Orders book before retrying."
+                } else {
+                    e.message ?: "Order Placement Failed"
+                }
+                
                 _apiError.value = errorMsg
                 alertService.notifyOrderRejected(
                     symbol = symbol,
@@ -1614,6 +1670,7 @@ val sourceExpiries = emptyList<String>()
                     orderId = "REJ_${System.currentTimeMillis()}",
                     broker = sessionManager.activeBroker
                 )
+                if (isTimeout) refreshBrokerData()
             } finally {
                 _isPlacingOrder.value = false
             }
@@ -1626,7 +1683,9 @@ val sourceExpiries = emptyList<String>()
                 repository.cancelOrder(orderId)
                 refreshBrokerData()
             } catch (e: Exception) {
-                _apiError.value = "Cancel Order Failed: ${e.message}"
+                val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
+                _apiError.value = if (isTimeout) "Cancel Request Timeout. Status uncertain." else "Cancel Order Failed: ${e.message}"
+                if (isTimeout) refreshBrokerData()
             }
         }
     }
@@ -1644,7 +1703,9 @@ val sourceExpiries = emptyList<String>()
                 repository.modifyOrder(orderId, newPrice, newQty, orderType, stopLoss, target)
                 refreshBrokerData()
             } catch (e: Exception) {
-                _apiError.value = "Modify Order Failed: ${e.message}"
+                val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
+                _apiError.value = if (isTimeout) "Modify Request Timeout. Status uncertain." else "Modify Order Failed: ${e.message}"
+                if (isTimeout) refreshBrokerData()
             }
         }
     }
@@ -1661,6 +1722,8 @@ val sourceExpiries = emptyList<String>()
     }
 
     fun exitPosition(orderId: String, exitPrice: Double, realizedPnl: Double) {
+        if (_exitingOrderIds.value.contains(orderId)) return
+        _exitingOrderIds.value = _exitingOrderIds.value + orderId
         viewModelScope.launch {
             try {
                 val existingOrder = _orders.value.find { it.orderId == orderId || it.brokerOrderId == orderId }
@@ -1693,12 +1756,18 @@ val sourceExpiries = emptyList<String>()
                 repository.exitPosition(orderId, exitPrice, realizedPnl)
                 refreshBrokerData()
             } catch (e: Exception) {
-                _apiError.value = "Exit Position Failed: ${e.message}"
+                val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
+                _apiError.value = if (isTimeout) "Exit Request Timeout. Status uncertain." else "Exit Position Failed: ${e.message}"
+                if (isTimeout) refreshBrokerData()
+            } finally {
+                _exitingOrderIds.value = _exitingOrderIds.value - orderId
             }
         }
     }
 
     fun partialExitPosition(orderId: String, exitLots: Int, exitPrice: Double, partialPnl: Double) {
+        if (_exitingOrderIds.value.contains(orderId)) return
+        _exitingOrderIds.value = _exitingOrderIds.value + orderId
         viewModelScope.launch {
             try {
                 val existingOrder = _orders.value.find { it.orderId == orderId || it.brokerOrderId == orderId }
@@ -1730,7 +1799,11 @@ val sourceExpiries = emptyList<String>()
                 repository.partialExitPosition(orderId, exitLots, partialPnl)
                 refreshBrokerData()
             } catch (e: Exception) {
-                _apiError.value = "Partial Exit Failed: ${e.message}"
+                val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
+                _apiError.value = if (isTimeout) "Partial Exit Timeout. Status uncertain." else "Partial Exit Failed: ${e.message}"
+                if (isTimeout) refreshBrokerData()
+            } finally {
+                _exitingOrderIds.value = _exitingOrderIds.value - orderId
             }
         }
     }

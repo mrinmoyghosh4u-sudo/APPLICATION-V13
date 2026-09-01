@@ -37,6 +37,8 @@ class DhanBrokerService(
             var avail: Double? = null
             var collateral = 0.0
             var returnedClientId = clientId
+            var tokenInvalid = false
+            var authErrorCode = 0
 
             // 1. Try Retrofit API call
             runCatching {
@@ -54,7 +56,15 @@ class DhanBrokerService(
                     }
                     fund?.collateralAmount?.let { collateral = it }
                     fund?.dhanClientId?.takeIf { it.isNotBlank() }?.let { returnedClientId = it }
+                } else if (response.code() == 401 || response.code() == 403) {
+                    tokenInvalid = true
+                    authErrorCode = response.code()
                 }
+            }
+
+            if (tokenInvalid) {
+                sessionManager.isDhanConnected = false
+                throw Exception("Dhan access token expired or invalid (HTTP $authErrorCode). Please reconnect your Dhan account.")
             }
 
             // 2. If Retrofit didn't get fund value or failed, use direct OkHttp fallback
@@ -107,8 +117,7 @@ class DhanBrokerService(
 
     private fun fetchFundsDirectly(token: String, clientId: String): Triple<Double, Double, String>? {
         val endpoints = listOf(
-            "https://api.dhan.co/v2/fundlimit",
-            "https://api.dhan.co/fundlimit"
+            "https://api.dhan.co/v2/fundlimit"
         )
         for (url in endpoints) {
             try {
@@ -123,7 +132,7 @@ class DhanBrokerService(
                 val response = directClient.newCall(reqBuilder.build()).execute()
                 if (response.isSuccessful) {
                     val bodyStr = response.body?.string() ?: ""
-                    if (bodyStr.isNotBlank()) {
+                    if (bodyStr.isNotBlank() && bodyStr.trim().startsWith("{")) {
                         val json = JSONObject(bodyStr)
                         val avail = when {
                             json.has("availabelBalance") -> json.optDouble("availabelBalance", 0.0)
@@ -138,6 +147,9 @@ class DhanBrokerService(
                         val cId = json.optString("dhanClientId", "")
                         return Triple(avail, collateral, cId)
                     }
+                } else if (response.code == 401 || response.code == 403) {
+                    android.util.Log.w("DhanBrokerService", "Direct fund fetch: token expired or invalid (HTTP ${response.code})")
+                    return null
                 }
             } catch (e: Exception) {
                 android.util.Log.e("DhanBrokerService", "Direct fund fetch failed on $url: ${e.message}")
@@ -176,6 +188,9 @@ class DhanBrokerService(
                         type = "EQUITY"
                     )
                 } ?: emptyList()
+            } else if (response.code() == 401 || response.code() == 403) {
+                android.util.Log.w("DhanBrokerService", "Holdings fetch: Dhan token expired (HTTP ${response.code()})")
+                emptyList()
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")
@@ -209,9 +224,13 @@ class DhanBrokerService(
                         target = 0.0,
                         status = item.orderStatus.uppercase(),
                         time = item.updateTime ?: item.createTime ?: "",
-                        brokerOrderId = item.orderId
+                        brokerOrderId = item.orderId,
+                        remarks = item.remarks ?: item.text ?: ""
                     )
                 } ?: emptyList()
+            } else if (response.code() == 401 || response.code() == 403) {
+                android.util.Log.w("DhanBrokerService", "Orders fetch: Dhan token expired (HTTP ${response.code()})")
+                emptyList()
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")
@@ -226,6 +245,9 @@ class DhanBrokerService(
             val response = api.getTrades()
             if (response.isSuccessful) {
                 response.body() ?: emptyList()
+            } else if (response.code() == 401 || response.code() == 403) {
+                android.util.Log.w("DhanBrokerService", "Trades fetch: Dhan token expired (HTTP ${response.code()})")
+                emptyList()
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")
@@ -295,6 +317,9 @@ class DhanBrokerService(
                         productType = item.productType
                     )
                 } ?: emptyList()
+            } else if (response.code() == 401 || response.code() == 403) {
+                android.util.Log.w("DhanBrokerService", "Positions fetch: Dhan token expired (HTTP ${response.code()})")
+                emptyList()
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")

@@ -1,5 +1,0 @@
-content = open('app/src/main/java/com/example/data/network/AngelOneBrokerService.kt').read()
-open_braces = content.count('{')
-close_braces = content.count('}')
-print(f"Open braces: {open_braces}")
-print(f"Close braces: {close_braces}")

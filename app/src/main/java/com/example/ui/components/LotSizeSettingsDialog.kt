@@ -43,13 +43,6 @@ fun LotSizeSettingsDialog(
 
     var crudeoilStr by remember { mutableStateOf(initialSettings.crudeoil.toString()) }
     var crudeoilmStr by remember { mutableStateOf(initialSettings.crudeoilm.toString()) }
-    var goldStr by remember { mutableStateOf(initialSettings.gold.toString()) }
-    var goldmStr by remember { mutableStateOf(initialSettings.goldm.toString()) }
-    var silverStr by remember { mutableStateOf(initialSettings.silver.toString()) }
-    var silvermStr by remember { mutableStateOf(initialSettings.silverm.toString()) }
-    var copperStr by remember { mutableStateOf(initialSettings.copper.toString()) }
-    var coppermStr by remember { mutableStateOf(initialSettings.copperm.toString()) }
-    var naturalgasStr by remember { mutableStateOf(initialSettings.naturalgas.toString()) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -83,7 +76,7 @@ fun LotSizeSettingsDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text("Lot Size Settings", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-                            Text("Exchange & Symbol Default Lot Quantities", fontSize = 11.sp, color = SecondaryGold)
+                            Text("8 Approved Underlyings Lot Quantities", fontSize = 11.sp, color = SecondaryGold)
                         }
                     }
 
@@ -97,13 +90,6 @@ fun LotSizeSettingsDialog(
                             bankexStr = "30"
                             crudeoilStr = "100"
                             crudeoilmStr = "10"
-                            goldStr = "100"
-                            goldmStr = "10"
-                            silverStr = "30"
-                            silvermStr = "5"
-                            copperStr = "2500"
-                            coppermStr = "250"
-                            naturalgasStr = "1250"
                         }
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = SecondaryGold, modifier = Modifier.size(16.dp))
@@ -120,7 +106,7 @@ fun LotSizeSettingsDialog(
                 ExchangeHeader(title = "NSE", badgeColor = ProfitGreen)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LotSizeCard(symbol = "NIFTY", lotSizeStr = niftyStr, defaultVal = "65") { niftyStr = it }
+                LotSizeCard(symbol = "NIFTY 50", lotSizeStr = niftyStr, defaultVal = "65") { niftyStr = it }
                 Spacer(modifier = Modifier.height(6.dp))
 
                 LotSizeCard(symbol = "BANKNIFTY", lotSizeStr = bankniftyStr, defaultVal = "30") { bankniftyStr = it }
@@ -151,28 +137,7 @@ fun LotSizeSettingsDialog(
                 LotSizeCard(symbol = "CRUDEOIL", lotSizeStr = crudeoilStr, defaultVal = "100") { crudeoilStr = it }
                 Spacer(modifier = Modifier.height(6.dp))
 
-                LotSizeCard(symbol = "CRUDEOILM (Mini)", lotSizeStr = crudeoilmStr, defaultVal = "10") { crudeoilmStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "GOLD", lotSizeStr = goldStr, defaultVal = "100") { goldStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "GOLDM (Mini)", lotSizeStr = goldmStr, defaultVal = "10") { goldmStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "SILVER", lotSizeStr = silverStr, defaultVal = "30") { silverStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "SILVERM (Mini)", lotSizeStr = silvermStr, defaultVal = "5") { silvermStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "NATURALGAS", lotSizeStr = naturalgasStr, defaultVal = "1250") { naturalgasStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "COPPER", lotSizeStr = copperStr, defaultVal = "2500") { copperStr = it }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LotSizeCard(symbol = "COPPERM (Mini)", lotSizeStr = coppermStr, defaultVal = "250") { coppermStr = it }
+                LotSizeCard(symbol = "CRUDEOIL M (Mini)", lotSizeStr = crudeoilmStr, defaultVal = "10") { crudeoilmStr = it }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -190,7 +155,7 @@ fun LotSizeSettingsDialog(
                         Icon(Icons.Default.Info, contentDescription = null, tint = SecondaryGold, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "These lot sizes are used consistently across Order Placement & Option Chain views.",
+                            "These lot sizes apply directly across Order Placement & Option Chain views for the 8 approved instruments.",
                             fontSize = 11.sp,
                             color = TextWhite,
                             lineHeight = 15.sp
@@ -224,14 +189,7 @@ fun LotSizeSettingsDialog(
                                 sensex = sensexStr.toIntOrNull() ?: 20,
                                 bankex = bankexStr.toIntOrNull() ?: 30,
                                 crudeoil = crudeoilStr.toIntOrNull() ?: 100,
-                                crudeoilm = crudeoilmStr.toIntOrNull() ?: 10,
-                                gold = goldStr.toIntOrNull() ?: 100,
-                                goldm = goldmStr.toIntOrNull() ?: 10,
-                                silver = silverStr.toIntOrNull() ?: 30,
-                                silverm = silvermStr.toIntOrNull() ?: 5,
-                                copper = copperStr.toIntOrNull() ?: 2500,
-                                copperm = coppermStr.toIntOrNull() ?: 250,
-                                naturalgas = naturalgasStr.toIntOrNull() ?: 1250
+                                crudeoilm = crudeoilmStr.toIntOrNull() ?: 10
                             )
                             appPreferences?.saveLotSizeSettings(newSettings)
                             onSave()

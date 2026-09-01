@@ -90,9 +90,9 @@ class SessionManager(context: Context) {
         totpSecret: String = ""
     ) {
         if (clientCode.isNotBlank()) angelClientId = clientCode.trim()
-        if (mpin.isNotBlank()) angelClientId = mpin.trim()
-        if (apiKey.isNotBlank()) angelClientId = apiKey.trim()
-        if (totpSecret.isNotBlank()) angelClientId = totpSecret.trim()
+        if (mpin.isNotBlank()) angelClientPin = mpin.trim()
+        if (apiKey.isNotBlank()) angelApiKey = apiKey.trim()
+        if (totpSecret.isNotBlank()) angelTotpSecret = totpSecret.trim()
     }
 
     fun clearAngelOneCredentials() {

@@ -51,7 +51,9 @@ fun BrokerConnectDialog(
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
     onFyersLogin: ((String, String, String) -> Unit)? = null,
     onUpstoxLogin: ((String, String, String) -> Unit)? = null,
-    onDhanLogin: ((String, String) -> Unit)? = null
+    onDhanLogin: ((String, String) -> Unit)? = null,
+    onOpenUpstoxLogin: ((String, String) -> Unit)? = null,
+    onOpenFyersLogin: ((String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val brokerList = listOf("Dhan", "Angel One", "Upstox", "Fyers")
@@ -235,6 +237,8 @@ fun BrokerConnectDialog(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val logoRes = when (selectedBroker) {
                                     "Angel One" -> R.drawable.ic_angel_one_logo
+                                    "Upstox" -> R.drawable.ic_upstox_logo
+                                    "Fyers" -> R.drawable.ic_fyers_logo
                                     else -> R.drawable.ic_dhan_logo
                                 }
                                 Box(
@@ -599,11 +603,15 @@ fun BrokerConnectDialog(
                             OutlinedButton(
                                 onClick = {
                                     if (upstoxApiKey.isNotBlank()) {
-                                        val url = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey.trim())
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                            context.startActivity(intent)
-                                        } catch (_: Exception) {}
+                                        if (onOpenUpstoxLogin != null) {
+                                            onOpenUpstoxLogin.invoke(upstoxApiKey.trim(), upstoxApiSecret.trim())
+                                        } else {
+                                            val url = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey.trim())
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        }
                                     }
                                 },
                                 enabled = upstoxApiKey.isNotBlank(),
@@ -722,11 +730,15 @@ fun BrokerConnectDialog(
                             OutlinedButton(
                                 onClick = {
                                     if (fyersAppId.isNotBlank()) {
-                                        val url = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId.trim())
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                            context.startActivity(intent)
-                                        } catch (_: Exception) {}
+                                        if (onOpenFyersLogin != null) {
+                                            onOpenFyersLogin.invoke(fyersAppId.trim(), fyersSecretId.trim())
+                                        } else {
+                                            val url = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId.trim())
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        }
                                     }
                                 },
                                 enabled = fyersAppId.isNotBlank(),

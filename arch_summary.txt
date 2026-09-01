@@ -1,5 +1,0 @@
-The broker architecture has been fully verified and aligned exactly with the requested specification.
-
-- **Dhan Exclusively for Order Execution**: All remaining Dhan market data API endpoints (`v2/optionchain`, `v2/optionchain/expirylist`), models (`DhanOptionChainRequest`, `DhanOptionChainItem`), and any references to Dhan option chains have been completely permanently removed from the data pipeline. Dhan is strictly isolated inside `OrderManager` and `DhanTradingService` for routing buy/sell/modify/cancel orders.
-- **Unified Market Data Engine**: `MarketDataEngine` is the sole provider of live market feeds and option chain data, enforcing the exact failover priority requested: **Angel One (Primary) -> m.Stock (Backup) -> NSE (Reference) -> Yahoo (Reference)**.
-- **Clean Separation**: The pipeline perfectly executes the flow: Real Live Market Data (Angel One) -> Instrument Master -> Central Market Data Engine -> UI/AI Signals -> User Confirmation -> Dhan Order Execution -> Telegram.

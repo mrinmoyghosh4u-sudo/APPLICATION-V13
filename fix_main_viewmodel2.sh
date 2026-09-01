@@ -1,1 +1,0 @@
-sed -i 's/exchangeResult.onSuccess { tokens ->/exchangeResult.onSuccess { tokens ->\n                        sessionManager.angelJwtToken = tokens.jwtToken\n                        sessionManager.angelRefreshToken = tokens.refreshToken\n                        sessionManager.angelFeedToken = tokens.feedToken/g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

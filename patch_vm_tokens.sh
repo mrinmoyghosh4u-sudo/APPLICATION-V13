@@ -1,1 +1,0 @@
-sed -i 's|com.example.util.InstrumentMapUtil.getAngelSymbolToken(symbol, exchange)|instrumentMasterService.resolveAngelToken(symbol, exchange) ?: ""|g' app/src/main/java/com/example/viewmodel/MainViewModel.kt

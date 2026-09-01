@@ -5,7 +5,6 @@ import com.example.data.model.HistoricalCandle
 import com.example.data.model.IndexQuote
 import com.example.data.model.MarketBreadth
 import com.example.data.model.RealTimePriceTick
-import com.example.data.model.MarketDataSourceNames
 import com.example.data.model.MarketDataStore
 import com.example.data.model.MarketTick
 import com.example.data.model.OptionChain
@@ -19,35 +18,33 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * UNIFIED MARKET DATA ENGINE / REPOSITORY
  * 
- * Central orchestrator implementing hidden automatic data failover:
- * Priority: 1. Fyers (Primary) -> 2. Angel One (Secondary) -> 3. m.Stock (Tertiary) -> DATA UNAVAILABLE
+ * Central orchestrator implementing automatic data failover:
+ * Priority: 1. Upstox (Primary) -> 2. Fyers (Secondary) -> 3. Angel One (Third) -> SIGNAL PAUSED / UNAVAILABLE
  *
  * STRICT REQUIREMENTS:
  * - NO YAHOO FINANCE
- * - NO HARDCODED OR RANDOM PRICES
- * - Return DATA UNAVAILABLE or fail Result if real data is missing.
+ * - NO HARDCODED OR RANDOM / SYNTHETIC PRICES
+ * - Return DATA UNAVAILABLE or fail Result if real live data is missing.
+ * - Signal generation pauses when all live market data sources disconnect or go stale.
  */
 class MarketDataEngine(
-    var fyersMarketDataService: FyersMarketDataService? = null,
     var upstoxMarketDataService: UpstoxMarketDataService? = null,
+    var fyersMarketDataService: FyersMarketDataService? = null,
     val angelMarketDataService: AngelOneMarketDataService? = null,
     private val sessionManager: SessionManager? = null,
     private val healthManager: ProviderHealthManager? = null
 ) {
-    private val _providerState = kotlinx.coroutines.flow.MutableStateFlow(com.example.data.model.MarketDataProviderState())
-    val providerState: kotlinx.coroutines.flow.StateFlow<com.example.data.model.MarketDataProviderState> = _providerState.asStateFlow()
+    private val _providerState = MutableStateFlow(com.example.data.model.MarketDataProviderState())
+    val providerState: StateFlow<com.example.data.model.MarketDataProviderState> = _providerState.asStateFlow()
 
     companion object {
         private const val TAG = "MarketDataEngine"
+        private const val STALE_THRESHOLD_MS = 30_000L // 30 seconds
     }
 
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -58,7 +55,7 @@ class MarketDataEngine(
     private val _marketBreadth = MutableStateFlow<MarketBreadth?>(null)
     val marketBreadth: StateFlow<MarketBreadth?> = _marketBreadth.asStateFlow()
 
-    private val _internalActiveProvider = MutableStateFlow(ProviderHealthManager.PROVIDER_FYERS)
+    private val _internalActiveProvider = MutableStateFlow(ProviderHealthManager.PROVIDER_UPSTOX)
     val internalActiveProvider: StateFlow<String> = _internalActiveProvider.asStateFlow()
     
     private val _lastTickTimeMs = MutableStateFlow(0L)
@@ -79,87 +76,162 @@ class MarketDataEngine(
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (true) {
-                delay(15000)
+                delay(10000)
                 val lastTick = _lastTickTimeMs.value
                 val now = System.currentTimeMillis()
                 
-                if (lastTick > 0 && now - lastTick > 30000) {
-                    Log.w(TAG, "Market Data Stale (>30s).")
+                if (lastTick > 0 && now - lastTick > STALE_THRESHOLD_MS) {
+                    Log.w(TAG, "Market Data Stale (>30s silence).")
                     if (_unifiedFeedStatus.value.contains("LIVE")) {
                         _unifiedFeedStatus.value = "STALE DATA"
+                        _providerState.value = _providerState.value.copy(stale = true, live = false, status = "STALE")
                     }
                 }
             }
         }
     }
 
-    private fun updateLastTickTime() {
+    fun updateLastTickTime() {
         _lastTickTimeMs.value = System.currentTimeMillis()
+        _providerState.value = _providerState.value.copy(
+            stale = false,
+            live = true,
+            status = "CONNECTED",
+            lastUpdate = System.currentTimeMillis(),
+            provider = _internalActiveProvider.value
+        )
     }
 
     // =========================================================================
     // 1. LIVE OPTION CHAIN
-    // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
+    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
     // =========================================================================
     suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<OptionChain> {
-        // Priority 1: Fyers
-        val fyersService = fyersMarketDataService
-        if (fyersService?.isConfigured() == true) {
-            val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
-            if (fyersRes.isSuccess) {
-                return Result.failure(Exception("Not implemented"))
+        // Priority 1: Upstox (Primary)
+        val upstoxService = upstoxMarketDataService
+        if (upstoxService?.isConfigured() == true) {
+            val upstoxRes = upstoxService.getOptionChain(symbol, expiry ?: "")
+            if (upstoxRes.isSuccess) {
+                val strikes = upstoxRes.getOrDefault(emptyList())
+                if (strikes.isNotEmpty()) {
+                    _unifiedFeedStatus.value = "LIVE — UPSTOX"
+                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
+                    updateLastTickTime()
+                    val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                    return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                }
             }
         }
 
-        // Priority 2: Angel One
-        val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService?.getOptionChain(symbol, expiry ?: "")
-        if (angelRes?.isSuccess == true) {
-            return Result.failure(Exception("Not implemented"))
+        // Priority 2: Fyers (Secondary)
+        val fyersService = fyersMarketDataService
+        if (fyersService?.isConfigured() == true) {
+            val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
+            if (fyersRes.isSuccess) {
+                val strikes = fyersRes.getOrDefault(emptyList())
+                if (strikes.isNotEmpty()) {
+                    _unifiedFeedStatus.value = "LIVE — FYERS"
+                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
+                    updateLastTickTime()
+                    val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                    return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                }
+            }
         }
 
-        // Priority 3: m.Stock
-        
+        // Priority 3: Angel One (Third)
+        val angelRes = angelMarketDataService?.getOptionChain(symbol, expiry ?: "")
+        if (angelRes?.isSuccess == true) {
+            val strikes = angelRes.getOrDefault(emptyList())
+            if (strikes.isNotEmpty()) {
+                _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
+                updateLastTickTime()
+                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
+                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+            }
+        }
 
+        _unifiedFeedStatus.value = "SIGNAL PAUSED — NO DATA"
         return Result.failure(Exception("REAL OPTION CHAIN UNAVAILABLE"))
     }
 
     // =========================================================================
     // 2. HISTORICAL DATA
-    // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
+    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
     // =========================================================================
     suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
-        // Priority 1: Fyers
-        val fyersService = fyersMarketDataService
-        if (fyersService?.isConfigured() == true) {
-            val startFyers = System.currentTimeMillis()
-            val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
-            if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
-                return Result.failure(Exception("Not implemented"))
+        // Priority 1: Upstox (Primary)
+        val upstoxService = upstoxMarketDataService
+        if (upstoxService?.isConfigured() == true) {
+            val upstoxRes = upstoxService.getHistoricalCandles(symbol, interval)
+            if (upstoxRes.isSuccess) {
+                val candles = upstoxRes.getOrDefault(emptyList()).map {
+                    HistoricalCandle(
+                        time = "",
+                        timestamp = 0L,
+                        open = it.open.toDouble(),
+                        high = it.high.toDouble(),
+                        low = it.low.toDouble(),
+                        close = it.close.toDouble(),
+                        volume = it.volume.toLong()
+                    )
+                }
+                if (candles.isNotEmpty()) {
+                    return Result.success(candles)
+                }
             }
         }
 
-        // Priority 2: Angel One
-        val startAngel = System.currentTimeMillis()
-        val angelRes = angelMarketDataService?.getHistoricalCandles(symbol, interval)
-        if (angelRes?.isSuccess == true && (angelRes?.getOrDefault(emptyList()) ?: emptyList()).isNotEmpty()) {
-            return Result.failure(Exception("Not implemented"))
+        // Priority 2: Fyers (Secondary)
+        val fyersService = fyersMarketDataService
+        if (fyersService?.isConfigured() == true) {
+            val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
+            if (fyersRes.isSuccess) {
+                val candles = fyersRes.getOrDefault(emptyList()).map {
+                    HistoricalCandle(
+                        time = "",
+                        timestamp = 0L,
+                        open = it.open.toDouble(),
+                        high = it.high.toDouble(),
+                        low = it.low.toDouble(),
+                        close = it.close.toDouble(),
+                        volume = it.volume.toLong()
+                    )
+                }
+                if (candles.isNotEmpty()) {
+                    return Result.success(candles)
+                }
+            }
         }
 
-        // Priority 3: m.Stock
-        
+        // Priority 3: Angel One (Third)
+        val angelRes = angelMarketDataService?.getHistoricalCandles(symbol, interval)
+        if (angelRes?.isSuccess == true) {
+            val candles = angelRes.getOrDefault(emptyList()).map {
+                HistoricalCandle(
+                    time = "",
+                    timestamp = 0L,
+                    open = it.open.toDouble(),
+                    high = it.high.toDouble(),
+                    low = it.low.toDouble(),
+                    close = it.close.toDouble(),
+                    volume = it.volume.toLong()
+                )
+            }
+            if (candles.isNotEmpty()) {
+                return Result.success(candles)
+            }
+        }
 
         return Result.failure(Exception("REAL HISTORICAL DATA UNAVAILABLE"))
     }
 
     // =========================================================================
     // 3. MARKET BREADTH
-    // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
     // =========================================================================
     suspend fun getMarketBreadth(): Result<MarketBreadth> {
-        // Since Fyers/Angel doesn't have direct breadth api, we calculate from quotes
-        val symbols = listOf("RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT")
+        val symbols = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
         val quotesRes = getMarketQuotes(symbols)
         if (quotesRes.isSuccess && quotesRes.getOrDefault(emptyList()).isNotEmpty()) {
             val quotes = quotesRes.getOrDefault(emptyList())
@@ -182,42 +254,52 @@ class MarketDataEngine(
 
     // =========================================================================
     // 4. INDEX DATA FAILOVER & MARKET QUOTES
-    // Priority: 1. Fyers -> 2. Angel One -> 3. m.Stock -> 4. Unavailable
+    // Priority: 1. Upstox -> 2. Fyers -> 3. Angel One -> 4. Unavailable
     // =========================================================================
     suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
         if (symbols.isEmpty()) return Result.success(emptyList())
+
+        // Priority 1: Upstox (Primary)
+        val upstoxService = upstoxMarketDataService
+        if (upstoxService?.isConfigured() == true) {
+            val upstoxRes = upstoxService.getMarketQuotes(symbols)
+            if (upstoxRes.isSuccess && upstoxRes.getOrDefault(emptyList()).isNotEmpty()) {
+                val valid = upstoxRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
+                if (valid.isNotEmpty()) {
+                    _unifiedFeedStatus.value = "LIVE — UPSTOX"
+                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
+                    updateLastTickTime()
+                    return Result.success(valid)
+                }
+            }
+        }
     
-        // Priority 1: Fyers
+        // Priority 2: Fyers (Secondary)
         val fyersService = fyersMarketDataService
         if (fyersService?.isConfigured() == true) {
-            val startFyers = System.currentTimeMillis()
             val fyersRes = fyersService.getMarketQuotes(symbols)
             if (fyersRes.isSuccess && fyersRes.getOrDefault(emptyList()).isNotEmpty()) {
                 val valid = fyersRes.getOrDefault(emptyList()).filter { it.ltp > 0.0 }
                 if (valid.isNotEmpty()) {
                     _unifiedFeedStatus.value = "LIVE — FYERS"
-                    _internalActiveProvider.value = "FYERS"
+                    _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
                     updateLastTickTime()
                     return Result.success(valid)
                 }
             }
         }
         
-        // Priority 2: Angel One
-        val startAngel = System.currentTimeMillis()
+        // Priority 3: Angel One (Third)
         val angelRes = angelMarketDataService?.getMarketQuotes(symbols)
-        if (angelRes?.isSuccess == true && (angelRes?.getOrDefault(emptyList()) ?: emptyList()).isNotEmpty()) {
-            val valid = (angelRes?.getOrDefault(emptyList()) ?: emptyList()).filter { it.ltp > 0.0 }
+        if (angelRes?.isSuccess == true && (angelRes.getOrDefault(emptyList())).isNotEmpty()) {
+            val valid = (angelRes.getOrDefault(emptyList())).filter { it.ltp > 0.0 }
             if (valid.isNotEmpty()) {
                 _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
-                _internalActiveProvider.value = "ANGEL ONE"
+                _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
                 updateLastTickTime()
                 return Result.success(valid)
             }
         }
-
-        // Priority 3: m.Stock
-        
 
         _unifiedFeedStatus.value = "REAL MARKET DATA UNAVAILABLE"
         return Result.failure(Exception("REAL MARKET DATA UNAVAILABLE"))
@@ -227,7 +309,6 @@ class MarketDataEngine(
         val quotes = getMarketQuotes(listOf(symbol))
         val item = quotes.getOrNull()?.firstOrNull()
         return if (item != null && item.ltp > 0.0) {
-            val state = MarketDataStore.getTick(symbol)
             Result.success(
                 IndexQuote(
                     symbol = item.symbol,
@@ -247,24 +328,57 @@ class MarketDataEngine(
             Result.failure(Exception("Index quote unavailable for $symbol"))
         }
     }
+
+    suspend fun updateUpstoxTick(tick: MarketTick) {
+        MarketDataStore.updateTick(
+            RealTimePriceTick(
+                symbol = tick.symbol,
+                price = tick.ltp,
+                timestamp = System.currentTimeMillis(),
+                source = "UPSTOX"
+            )
+        )
+        _unifiedFeedStatus.value = "LIVE — UPSTOX"
+        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_UPSTOX
+        updateLastTickTime()
+    }
     
     suspend fun updateFyersTick(tick: MarketTick) {
-        val current = MarketDataStore.getTick(tick.symbol)
-        
-        MarketDataStore.updateTick(com.example.data.model.RealTimePriceTick(symbol = tick.symbol, price = tick.ltp, timestamp = System.currentTimeMillis(), source = "FYERS"))
-        
+        MarketDataStore.updateTick(
+            RealTimePriceTick(
+                symbol = tick.symbol,
+                price = tick.ltp,
+                timestamp = System.currentTimeMillis(),
+                source = "FYERS"
+            )
+        )
         _unifiedFeedStatus.value = "LIVE — FYERS"
-        _internalActiveProvider.value = "FYERS"
+        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_FYERS
+        updateLastTickTime()
+    }
+
+    suspend fun updateAngelTick(tick: MarketTick) {
+        MarketDataStore.updateTick(
+            RealTimePriceTick(
+                symbol = tick.symbol,
+                price = tick.ltp,
+                timestamp = System.currentTimeMillis(),
+                source = "ANGEL ONE"
+            )
+        )
+        _unifiedFeedStatus.value = "LIVE — ANGEL ONE"
+        _internalActiveProvider.value = ProviderHealthManager.PROVIDER_ANGEL_ONE
         updateLastTickTime()
     }
 
     fun retryConnection() {
         _unifiedFeedStatus.value = "CONNECTING"
+        if (upstoxMarketDataService?.isConfigured() == true) {
+            CoroutineScope(Dispatchers.IO).launch { upstoxMarketDataService?.connect() }
+        }
         if (fyersMarketDataService?.isConfigured() == true) {
-            // reconnect fyers
             CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
         }
         angelMarketDataService?.reconnect()
-        
     }
 }

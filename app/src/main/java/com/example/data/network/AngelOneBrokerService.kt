@@ -80,7 +80,8 @@ class AngelOneBrokerService(
                         target = 0.0,
                         status = item.status?.toString()?.uppercase() ?: "PENDING",
                         time = item.orderUpdateTime?.toString() ?: item.updateTime?.toString() ?: "",
-                        brokerOrderId = item.orderId?.toString() ?: ""
+                        brokerOrderId = item.orderId?.toString() ?: "",
+                        remarks = item.text?.toString() ?: ""
                     )
                 }
             } else {

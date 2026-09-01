@@ -1,1 +1,0 @@
-sed -i '/fun subscribeToIndices/,/ws.send(req.toString())/ s|if (!instrumentMaster.isLoaded) return|// Race condition handled by observer|' app/src/main/java/com/example/data/network/AngelOneMarketDataService.kt
