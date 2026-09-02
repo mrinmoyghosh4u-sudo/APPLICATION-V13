@@ -358,7 +358,7 @@ class AngelOneMarketDataService(
             // Composite lookup: "$exchangeType:$token"
             val inst = instrumentMaster.getInstrumentByToken(token, exchangeType)
             val symbol = inst?.symbol ?: token
-            val exchange = inst?.exch_seg ?: when (exchangeType) {
+            val exchange = inst?.let { InstrumentMasterService.normalizeExchange(it.exch_seg) } ?: when (exchangeType) {
                 1 -> "NSE"
                 2 -> "NFO"
                 3 -> "BSE"

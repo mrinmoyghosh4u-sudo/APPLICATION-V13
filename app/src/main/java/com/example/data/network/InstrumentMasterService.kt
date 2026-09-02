@@ -53,7 +53,7 @@ class InstrumentMasterService(
                 "nfo", "nse_fo", "nse-fo", "nse_fno" -> "NFO"
                 "bse", "bse_cm", "bse-cm", "bse_eq" -> "BSE"
                 "bfo", "bse_fo", "bse-fo", "bse_fno" -> "BFO"
-                "mcx", "mcx_fo", "mcx-fo", "mcx_cm", "mcx_comm" -> "MCX"
+                "mcx", "mcx_fo", "mcx-fo", "mcx_cm", "mcx_comm", "nco", "mcx_opt", "mcx_fut" -> "MCX"
                 "cds", "cde_fo" -> "CDS"
                 "ncdex", "ncx_fo" -> "NCDEX"
                 else -> exchSeg.trim().uppercase()

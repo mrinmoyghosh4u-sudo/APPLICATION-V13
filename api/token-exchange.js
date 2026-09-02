@@ -76,9 +76,9 @@ module.exports = async (req, res) => {
   const parsedBody = await parseRequestBody(req);
 
   const code = (req.query?.code || req.query?.auth_code || parsedBody?.code || parsedBody?.auth_code || '').trim();
-  const redirectUri = (req.query?.redirect_uri || parsedBody?.redirect_uri || process.env.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth').trim();
-  const clientId = (req.query?.client_id || req.query?.apiKey || parsedBody?.client_id || parsedBody?.apiKey || process.env.UPSTOX_API_KEY || '').trim();
-  const clientSecret = (req.query?.client_secret || req.query?.apiSecret || parsedBody?.client_secret || parsedBody?.apiSecret || process.env.UPSTOX_API_SECRET || '').trim();
+  const redirectUri = (process.env.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth').trim();
+  const clientId = (process.env.UPSTOX_API_KEY || '').trim();
+  const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
 
   if (!code) {
     return res.status(400).json({ status: "error", error: "Missing authorization code" });

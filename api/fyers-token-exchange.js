@@ -1,8 +1,30 @@
 const https = require('https');
 const crypto = require('crypto');
 
-// In-memory set of consumed auth codes to guarantee idempotency and prevent duplicate upstream exchange
+// In-memory cache of successful token exchanges (code -> response) and consumed codes
+// Note: In serverless environments, in-memory caches persist per warm lambda instance.
+const tokenCache = new Map();
 const consumedCodes = new Map();
+
+function getCachedToken(code) {
+  const clean = (code || '').trim();
+  if (!clean) return null;
+  const entry = tokenCache.get(clean);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > 10 * 60 * 1000) {
+    tokenCache.delete(clean);
+    return null;
+  }
+  return entry.response;
+}
+
+function cacheToken(code, response) {
+  const clean = (code || '').trim();
+  if (clean && response) {
+    tokenCache.set(clean, { timestamp: Date.now(), response });
+    consumedCodes.set(clean, Date.now());
+  }
+}
 
 function isCodeConsumed(code) {
   const clean = (code || '').trim();
@@ -15,13 +37,6 @@ function isCodeConsumed(code) {
     return false;
   }
   return true;
-}
-
-function markCodeConsumed(code) {
-  const clean = (code || '').trim();
-  if (clean) {
-    consumedCodes.set(clean, Date.now());
-  }
 }
 
 function parseRequestBody(req) {
@@ -77,10 +92,15 @@ module.exports = async (req, res) => {
   const parsedBody = await parseRequestBody(req);
 
   const code = (req.query?.code || req.query?.auth_code || parsedBody?.code || parsedBody?.auth_code || '').trim();
-  const redirectUri = (req.query?.redirect_uri || parsedBody?.redirect_uri || 'https://application-beige-psi.vercel.app/oauth').trim();
 
   if (!code) {
     return res.status(400).json({ s: "error", code: 400, message: "Missing authorization code" });
+  }
+
+  // Return cached token if already exchanged
+  const cachedResponse = getCachedToken(code);
+  if (cachedResponse) {
+    return res.status(200).json(cachedResponse);
   }
 
   if (isCodeConsumed(code)) {
@@ -91,11 +111,8 @@ module.exports = async (req, res) => {
     });
   }
 
-  // Mark consumed before making the upstream request to prevent concurrent race-condition replays
-  markCodeConsumed(code);
-
-  let appId = (req.query?.app_id || req.query?.appId || req.query?.client_id || parsedBody?.app_id || parsedBody?.appId || parsedBody?.client_id || process.env.FYERS_APP_ID || '').trim();
-  const secretId = (req.query?.secret_id || req.query?.secretId || req.query?.client_secret || parsedBody?.secret_id || parsedBody?.secretId || parsedBody?.client_secret || process.env.FYERS_SECRET_ID || '').trim();
+  let appId = (process.env.FYERS_APP_ID || '').trim();
+  const secretId = (process.env.FYERS_SECRET_ID || '').trim();
 
   if (!appId || !secretId) {
     return res.status(500).json({ s: "error", code: 500, message: "Server missing FYERS credentials configuration (FYERS_APP_ID / FYERS_SECRET_ID)" });
@@ -139,6 +156,11 @@ module.exports = async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         try {
           const jsonResponse = JSON.parse(body);
+          if (postRes.statusCode >= 200 && postRes.statusCode < 300 && (jsonResponse.access_token || jsonResponse.s === 'ok')) {
+            cacheToken(code, jsonResponse);
+          } else if (postRes.statusCode === 400 || (jsonResponse.s === 'error' && (jsonResponse.code === 400 || jsonResponse.code === -100))) {
+            consumedCodes.set(code, Date.now());
+          }
           res.status(postRes.statusCode).json(jsonResponse);
         } catch (e) {
           res.status(postRes.statusCode).send(body);

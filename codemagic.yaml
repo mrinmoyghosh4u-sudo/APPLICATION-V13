@@ -37,7 +37,7 @@ workflows:
 
       - name: Build Release APK
         script: |
-          ./gradlew assembleRelease --no-daemon || true
+          ./gradlew assembleRelease --no-daemon
 
     artifacts:
       - app/build/outputs/apk/**/*.apk

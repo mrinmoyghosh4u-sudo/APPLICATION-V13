@@ -641,6 +641,75 @@ class SessionManager(context: Context) {
             .apply()
     }
 
+    sealed class OAuthValidationResult {
+        data class Valid(val session: PendingOAuthSession) : OAuthValidationResult()
+        object MissingPendingSession : OAuthValidationResult()
+        object MissingStoredState : OAuthValidationResult()
+        object MissingCallbackState : OAuthValidationResult()
+        object ProviderMismatch : OAuthValidationResult()
+        object StateMismatch : OAuthValidationResult()
+        object SessionExpired : OAuthValidationResult()
+        object AlreadyConsumed : OAuthValidationResult()
+    }
+
+    /**
+     * Strict OAuth state and session verification:
+     * 1. A pending OAuth session exists.
+     * 2. The stored state is non-empty.
+     * 3. The callback state is non-empty.
+     * 4. Stored state EXACTLY equals callback state.
+     * 5. The OAuth session has not expired (15m window).
+     * 6. The state has not already been consumed.
+     */
+    fun validateAndConsumeOAuthSession(expectedProvider: String, callbackState: String): OAuthValidationResult {
+        val provider = prefs.getString(KEY_PENDING_OAUTH_PROVIDER, null)
+        val createdAt = prefs.getLong(KEY_PENDING_OAUTH_CREATED_AT, 0L)
+        val isConsumed = prefs.getBoolean(KEY_PENDING_OAUTH_CONSUMED, false)
+        val storedState = prefs.getString(KEY_PENDING_OAUTH_STATE, "") ?: ""
+
+        if (provider.isNullOrBlank() || createdAt == 0L) {
+            return OAuthValidationResult.MissingPendingSession
+        }
+
+        if (isConsumed) {
+            return OAuthValidationResult.AlreadyConsumed
+        }
+
+        if (System.currentTimeMillis() - createdAt > 15 * 60 * 1000L) {
+            clearPendingOAuthSession()
+            return OAuthValidationResult.SessionExpired
+        }
+
+        if (expectedProvider.isNotBlank() && !provider.equals(expectedProvider, ignoreCase = true)) {
+            return OAuthValidationResult.ProviderMismatch
+        }
+
+        if (storedState.isBlank()) {
+            return OAuthValidationResult.MissingStoredState
+        }
+
+        if (callbackState.isBlank()) {
+            return OAuthValidationResult.MissingCallbackState
+        }
+
+        if (storedState != callbackState) {
+            return OAuthValidationResult.StateMismatch
+        }
+
+        val session = PendingOAuthSession(
+            provider = provider,
+            state = storedState,
+            createdAt = createdAt,
+            redirectUri = prefs.getString(KEY_PENDING_OAUTH_REDIRECT_URI, "") ?: "",
+            consumed = true
+        )
+
+        // Mark consumed immediately
+        prefs.edit().putBoolean(KEY_PENDING_OAUTH_CONSUMED, true).apply()
+
+        return OAuthValidationResult.Valid(session)
+    }
+
     var pendingOAuthBroker: String
         get() = prefs.getString("pending_oauth_broker", "") ?: ""
         set(value) = prefs.edit().putString("pending_oauth_broker", value).apply()

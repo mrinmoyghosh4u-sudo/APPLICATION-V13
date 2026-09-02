@@ -2,8 +2,9 @@ module.exports = (req, res) => {
   const queryParams = new URLSearchParams(req.query).toString();
   const appDeepLink = `kingkhan://oauth${queryParams ? '?' + queryParams : ''}`;
 
-  console.log(`OAuth Callback received query: ${queryParams}`);
-  console.log(`Deep link redirect URL: ${appDeepLink}`);
+  const hasState = Boolean(req.query?.state);
+  const hasCode = Boolean(req.query?.code || req.query?.auth_code || req.query?.token);
+  console.log(`[OAuth Callback] Processing redirect: hasState=${hasState}, hasCode=${hasCode}`);
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send(`

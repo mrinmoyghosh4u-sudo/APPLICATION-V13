@@ -93,3 +93,23 @@ class FyersInstrumentResolver(private val instrumentMaster: InstrumentMasterServ
         )
     }
 }
+
+class DhanInstrumentResolver(private val instrumentMaster: InstrumentMasterService?) {
+    fun resolve(symbol: String, exchange: String = "NSE"): CanonicalInstrument? {
+        val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
+        val normExch = InstrumentMasterService.normalizeExchange(exchange)
+        val secId = com.example.util.InstrumentMapUtil.getDhanSecurityId(cleanSym, normExch)
+        if (secId.isBlank()) return null
+        val lotSize = instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
+        return CanonicalInstrument(
+            exchange = normExch,
+            segment = if (normExch == "NFO" || normExch == "BFO") "FUT" else if (normExch == "MCX") "COMM" else "EQ",
+            symbol = cleanSym,
+            displayName = cleanSym,
+            instrumentType = if (cleanSym.endsWith("CE") || cleanSym.endsWith("PE")) "OPTION" else "EQUITY",
+            instrumentKey = secId,
+            token = secId,
+            lotSize = if (lotSize > 0) lotSize else 1
+        )
+    }
+}

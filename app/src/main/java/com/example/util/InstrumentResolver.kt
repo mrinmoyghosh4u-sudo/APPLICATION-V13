@@ -18,14 +18,7 @@ object InstrumentResolver {
         if (upper.contains("|")) {
             val parts = upper.split("|")
             if (parts.size == 2) {
-                exch = when (parts[0]) {
-                    "NSE_FO", "NFO" -> "NFO"
-                    "BSE_FO", "BFO" -> "BFO"
-                    "MCX_FO", "MCX" -> "MCX"
-                    "NSE_EQ", "NSE_INDEX", "NSE" -> "NSE"
-                    "BSE_EQ", "BSE_INDEX", "BSE" -> "BSE"
-                    else -> parts[0]
-                }
+                exch = InstrumentMasterService.normalizeExchange(parts[0])
                 token = parts[1]
             }
         } else if (upper.all { it.isDigit() }) {

@@ -689,65 +689,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun initiateUpstoxLogin(apiKey: String, apiSecret: String, context: android.content.Context) {
-        val cleanKey = apiKey.trim().ifBlank { com.example.util.BrokerConfig.upstoxApiKey }
-        val cleanSecret = apiSecret.trim().ifBlank { com.example.util.BrokerConfig.upstoxApiSecret }
-        if (cleanKey.isBlank()) {
-            _authErrorMessage.value = "Upstox API Key (Client ID) is required"
-            return
-        }
-        sessionManager.upstoxApiKey = cleanKey
-        if (cleanSecret.isNotBlank()) sessionManager.upstoxApiSecret = cleanSecret
-        
-        val state = com.example.util.UpstoxAuthHelper.generateSecureState()
-        sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
-            provider = "UPSTOX",
-            state = state,
-            redirectUri = com.example.util.UpstoxAuthHelper.DEFAULT_REDIRECT_URI,
-            createdAt = System.currentTimeMillis(),
-            consumed = false
+        startUpstoxOAuth(
+            apiKey = apiKey,
+            apiSecret = apiSecret,
+            onUrlGenerated = { loginUrl ->
+                _authErrorMessage.value = null
+                _isAuthInProgress.value = true
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
+                }
+            },
+            onError = { err ->
+                _authErrorMessage.value = err
+            }
         )
-        val loginUrl = com.example.util.UpstoxAuthHelper.getAuthorizationUrl(apiKey = cleanKey, state = state)
-        _authErrorMessage.value = null
-        _isAuthInProgress.value = true
-        try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            _isAuthInProgress.value = false
-            _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
-        }
     }
 
     fun initiateFyersLogin(appId: String, secretId: String, context: android.content.Context) {
-        val cleanAppId = appId.trim().ifBlank { com.example.util.BrokerConfig.fyersAppId }
-        val cleanSecret = secretId.trim().ifBlank { com.example.util.BrokerConfig.fyersSecretId }
-        if (cleanAppId.isBlank()) {
-            _authErrorMessage.value = "Fyers App ID is required"
-            return
-        }
-        sessionManager.fyersAppId = cleanAppId
-        if (cleanSecret.isNotBlank()) sessionManager.fyersSecretId = cleanSecret
-        
-        val state = com.example.util.FyersAuthHelper.generateSecureState()
-        sessionManager.pendingOAuthSession = SessionManager.PendingOAuthSession(
-            provider = "FYERS",
-            state = state,
-            redirectUri = com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI,
-            createdAt = System.currentTimeMillis(),
-            consumed = false
+        startFyersOAuth(
+            appId = appId,
+            secretId = secretId,
+            onUrlGenerated = { loginUrl ->
+                _authErrorMessage.value = null
+                _isAuthInProgress.value = true
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
+                }
+            },
+            onError = { err ->
+                _authErrorMessage.value = err
+            }
         )
-        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(appId = cleanAppId, state = state)
-        _authErrorMessage.value = null
-        _isAuthInProgress.value = true
-        try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            _isAuthInProgress.value = false
-            _authErrorMessage.value = "Failed to open browser: ${e.localizedMessage}"
-        }
     }
 
     fun connectUpstox(apiKey: String, apiSecret: String, authCodeOrToken: String = "") {
@@ -1121,22 +1103,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            if (pendingSession != null) {
-                if (pendingSession.consumed) {
+            // Strict OAuth State and Session Verification
+            when (val validation = sessionManager.validateAndConsumeOAuthSession(rawProvider, callbackState)) {
+                is SessionManager.OAuthValidationResult.Valid -> {
+                    // State successfully matched and marked consumed
+                }
+                is SessionManager.OAuthValidationResult.MissingPendingSession -> {
                     _isAuthInProgress.value = false
-                    _authErrorMessage.value = "OAuth Error: This callback has already been processed (duplicate)."
+                    _authErrorMessage.value = "$logPrefix Login Error: No matching pending OAuth session found."
+                    brokerManager.healthManager.reportAuthFailure(providerName, "NO_PENDING_SESSION", "No pending session")
                     return@launch
                 }
-
-                if (callbackState.isNotBlank() && pendingSession.state.isNotBlank() && pendingSession.state != callbackState) {
+                is SessionManager.OAuthValidationResult.AlreadyConsumed -> {
                     _isAuthInProgress.value = false
-                    _authErrorMessage.value = "OAuth Error: State mismatch. Possible CSRF attack."
+                    _authErrorMessage.value = "$logPrefix OAuth Error: This authorization session has already been processed (duplicate)."
+                    brokerManager.healthManager.reportAuthFailure(providerName, "ALREADY_CONSUMED", "Session reused")
                     return@launch
                 }
-
-                // Check session expiry (15 minutes)
-                val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-                if (isExpired) {
+                is SessionManager.OAuthValidationResult.SessionExpired -> {
                     val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
                     android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
                     _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
@@ -1144,13 +1128,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
                     return@launch
                 }
-
-                // Mark session as consumed to prevent replay attacks
-                sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
-            } else {
-                // If pendingSession was null, validate against UpstoxAuthHelper active state if available
-                if (callbackState.isNotBlank() && rawProvider == "UPSTOX") {
-                    com.example.util.UpstoxAuthHelper.validateAndConsumeState(callbackState)
+                is SessionManager.OAuthValidationResult.MissingCallbackState,
+                is SessionManager.OAuthValidationResult.MissingStoredState,
+                is SessionManager.OAuthValidationResult.StateMismatch,
+                is SessionManager.OAuthValidationResult.ProviderMismatch -> {
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "$logPrefix OAuth Error: State mismatch. Possible CSRF attack or invalid session."
+                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", "Invalid state")
+                    return@launch
                 }
             }
 
@@ -1221,44 +1206,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callbackState: String,
         pendingSession: SessionManager.PendingOAuthSession?
     ) {
-//         1. Strict Provider and Session Verification
-        if (pendingSession == null || !pendingSession.provider.equals("DHAN", ignoreCase = true)) {
-            android.util.Log.e("DhanAuth", "[DHAN_CALLBACK_REJECTED] No pending Dhan OAuth session found")
-            _authErrorMessage.value = "Dhan Login Error: No matching pending OAuth session found."
-            _isAuthInProgress.value = false
-            return
+        // Strict Provider, Expiry, Single-Use, and Exact State Verification
+        when (val validation = sessionManager.validateAndConsumeOAuthSession("DHAN", callbackState)) {
+            is SessionManager.OAuthValidationResult.Valid -> {
+                // Validated & consumed
+            }
+            is SessionManager.OAuthValidationResult.MissingPendingSession -> {
+                android.util.Log.e("DhanAuth", "[DHAN_CALLBACK_REJECTED] No pending Dhan OAuth session found")
+                _authErrorMessage.value = "Dhan Login Error: No matching pending OAuth session found."
+                _isAuthInProgress.value = false
+                return
+            }
+            is SessionManager.OAuthValidationResult.AlreadyConsumed -> {
+                android.util.Log.w("DhanAuth", "[DHAN_CALLBACK_REJECTED] Session state already consumed")
+                _authErrorMessage.value = "Dhan Login Error: This OAuth session has already been processed (duplicate)."
+                _isAuthInProgress.value = false
+                return
+            }
+            is SessionManager.OAuthValidationResult.SessionExpired -> {
+                android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
+                _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
+                _isAuthInProgress.value = false
+                return
+            }
+            is SessionManager.OAuthValidationResult.MissingCallbackState,
+            is SessionManager.OAuthValidationResult.MissingStoredState,
+            is SessionManager.OAuthValidationResult.StateMismatch,
+            is SessionManager.OAuthValidationResult.ProviderMismatch -> {
+                android.util.Log.e("DhanAuth", "[DHAN_STATE_MISMATCH] Returned OAuth state does not match pending session")
+                _authErrorMessage.value = "Dhan Login Error: State verification failed (Possible CSRF attack or invalid session)."
+                _isAuthInProgress.value = false
+                return
+            }
         }
 
-//         2. Single-use consumed verification
-        if (pendingSession.consumed) {
-            android.util.Log.w("DhanAuth", "[DHAN_CALLBACK_REJECTED] Session state already consumed")
-            _authErrorMessage.value = "Dhan Login Error: This OAuth session has already been processed (duplicate)."
-            _isAuthInProgress.value = false
-            return
-        }
-
-//         3. Expiry Check (15 minutes maximum lifetime)
-        val isExpired = (System.currentTimeMillis() - pendingSession.createdAt) > 15 * 60 * 1000L
-        if (isExpired) {
-            android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
-            _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
-            _isAuthInProgress.value = false
-            return
-        }
-
-//         4. Exact Cryptographic State Match
-        val expectedState = pendingSession.state.trim()
-        if (callbackState.isBlank() || expectedState.isBlank() || callbackState != expectedState) {
-            android.util.Log.e("DhanAuth", "[DHAN_STATE_MISMATCH] Returned OAuth state does not match pending session")
-            _authErrorMessage.value = "Dhan Login Error: State verification failed (Possible CSRF attack or invalid session)."
-            _isAuthInProgress.value = false
-            return
-        }
-
-//         5. Invalidate / consume state immediately upon successful verification
-        sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
-
-//         6. Check for cancellation or OAuth error query parameters
+        // Check for cancellation or OAuth error query parameters
         android.util.Log.i("DhanAuth", "[DHAN_CALLBACK_RECEIVED] OAuth callback received from redirect URL")
         val oauthError = uri.getQueryParameter("error") ?: uri.getQueryParameter("error_description")
         if (!oauthError.isNullOrBlank()) {
