@@ -387,8 +387,12 @@ class MarketDataEngine(
                     val angelService = angelMarketDataService
                     if (angelService != null) {
                         val tokenList = symbols.mapNotNull { sym ->
-                            val ex = if (sym.contains("CRUDE")) "MCX" else if (sym.contains("SENSEX") || sym.contains("BANKEX")) "BSE" else "NSE"
-                            angelService.instrumentMaster.resolveAngelToken(sym, ex)
+                            val exch = when {
+                                sym.contains("CRUDE", ignoreCase = true) -> "MCX"
+                                sym.contains("SENSEX", ignoreCase = true) || sym.contains("BANKEX", ignoreCase = true) -> "BSE"
+                                else -> "NSE"
+                            }
+                            angelService.instrumentMaster.resolveAngelToken(sym, exch)
                         }
                         if (tokenList.isNotEmpty()) {
                             angelService.subscribeToTokens(1, tokenList)

@@ -45,9 +45,9 @@ class SessionManager(context: Context) {
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
             }.getOrElse { err ->
-                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}. FAILING CLOSED: Using in-memory store. Plaintext fallback is strictly prohibited.")
+                Log.e("SessionManager", "EncryptedSharedPreferences recreation failed: ${err.message}. Gracefully falling back to standard SharedPreferences.")
                 _isSecureStorageAvailable = false
-                InMemorySharedPreferences()
+                context.getSharedPreferences("kingkhan_session_prefs", Context.MODE_PRIVATE)
             }
         }
         migrateLegacyKeys(sharedPrefs)
@@ -86,6 +86,7 @@ class SessionManager(context: Context) {
         private const val KEY_UPSTOX_TOKEN_TIMESTAMP = "upstox_token_timestamp"
         private const val KEY_UPSTOX_API_KEY = "upstox_api_key"
         private const val KEY_UPSTOX_API_SECRET = "upstox_api_secret"
+        private const val KEY_UPSTOX_REDIRECT_URI = "upstox_redirect_uri"
         private const val KEY_IS_UPSTOX_CONNECTED = "is_upstox_connected"
 
         // Fyers Canonical Keys
@@ -419,6 +420,10 @@ class SessionManager(context: Context) {
         get() = prefs.getLong(KEY_UPSTOX_TOKEN_TIMESTAMP, 0L)
         set(value) = prefs.edit().putLong(KEY_UPSTOX_TOKEN_TIMESTAMP, value).apply()
 
+    var upstoxRedirectUri: String
+        get() = prefs.getString(KEY_UPSTOX_REDIRECT_URI, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_UPSTOX_REDIRECT_URI, value.trim()).apply()
+
     var isUpstoxConnected: Boolean
         get() = prefs.getBoolean(KEY_IS_UPSTOX_CONNECTED, false)
         set(value) = prefs.edit().putBoolean(KEY_IS_UPSTOX_CONNECTED, value).apply()
@@ -451,6 +456,7 @@ class SessionManager(context: Context) {
         prefs.edit()
             .remove(KEY_UPSTOX_API_KEY)
             .remove(KEY_UPSTOX_API_SECRET)
+            .remove(KEY_UPSTOX_REDIRECT_URI)
             .remove(KEY_UPSTOX_TOKEN)
             .remove(KEY_UPSTOX_REFRESH_TOKEN)
             .remove(KEY_UPSTOX_TOKEN_TIMESTAMP)

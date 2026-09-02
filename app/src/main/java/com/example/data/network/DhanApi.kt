@@ -39,6 +39,6 @@ interface DhanApi {
     @GET("v2/RenewToken")
     suspend fun renewToken(
         @Header("access-token") currentToken: String,
-        @Header("dhanClientId") clientId: String
+        @Header("client-id") clientId: String
     ): Response<Map<String, Any>>
 }
