@@ -45,8 +45,10 @@ fun BrokerConnectDialog(
     errorMessage: String?,
     brokerStatuses: Map<String, com.example.data.network.BrokerConnectionState> = emptyMap(),
     providerHealth: Map<String, com.example.data.network.ProviderHealthState> = emptyMap(),
+    sessionManager: com.example.data.network.SessionManager? = null,
     onDisconnect: ((String) -> Unit)? = null,
     onReconnect: ((String) -> Unit)? = null,
+    onRemoveAccount: ((String) -> Unit)? = null,
     onDismiss: () -> Unit,
     onAngelLogin: ((String, String, String, String) -> Unit)? = null,
     onFyersLogin: ((String, String, String) -> Unit)? = null,
@@ -61,31 +63,56 @@ fun BrokerConnectDialog(
     var selectedBroker by remember { mutableStateOf(brokerList[initialIndex]) }
 
     // Dhan Form State
-    var dhanClientId by remember { mutableStateOf(BrokerConfig.dhanClientId) }
-    var dhanAccessToken by remember { mutableStateOf(BrokerConfig.dhanApiKey) }
+    var dhanClientId by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.dhanClientId?.ifBlank { BrokerConfig.dhanClientId } ?: BrokerConfig.dhanClientId)
+    }
+    var dhanAccessToken by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.dhanAccessToken?.ifBlank { BrokerConfig.dhanApiKey } ?: BrokerConfig.dhanApiKey)
+    }
     var showDhanToken by remember { mutableStateOf(false) }
 
     // Angel One Form State
-    var angelClientCode by remember { mutableStateOf("") }
-    var angelMpin by remember { mutableStateOf("") }
-    var angelApiKey by remember { mutableStateOf(BrokerConfig.angelApiKey) }
-    var angelTotpSecret by remember { mutableStateOf("") }
+    var angelClientCode by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.angelClientCode ?: "")
+    }
+    var angelMpin by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.angelClientPin ?: "")
+    }
+    var angelApiKey by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.angelApiKey?.ifBlank { BrokerConfig.angelApiKey } ?: BrokerConfig.angelApiKey)
+    }
+    var angelTotpSecret by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.angelTotpSecret ?: "")
+    }
     var showAngelMpin by remember { mutableStateOf(false) }
     var showAngelTotp by remember { mutableStateOf(false) }
 
     // Upstox Form State
-    var upstoxApiKey by remember { mutableStateOf(BrokerConfig.upstoxApiKey) }
-    var upstoxApiSecret by remember { mutableStateOf(BrokerConfig.upstoxApiSecret) }
-    var upstoxAuthCode by remember { mutableStateOf("") }
+    var upstoxApiKey by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.upstoxApiKey?.ifBlank { BrokerConfig.upstoxApiKey } ?: BrokerConfig.upstoxApiKey)
+    }
+    var upstoxApiSecret by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.upstoxApiSecret?.ifBlank { BrokerConfig.upstoxApiSecret } ?: BrokerConfig.upstoxApiSecret)
+    }
+    var upstoxAuthCode by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.upstoxAccessToken ?: "")
+    }
 
     // Fyers Form State
-    var fyersAppId by remember { mutableStateOf(BrokerConfig.fyersAppId) }
-    var fyersSecretId by remember { mutableStateOf(BrokerConfig.fyersSecretId) }
-    var fyersAuthCode by remember { mutableStateOf("") }
+    var fyersAppId by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.fyersAppId?.ifBlank { BrokerConfig.fyersAppId } ?: BrokerConfig.fyersAppId)
+    }
+    var fyersSecretId by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.fyersSecretId?.ifBlank { BrokerConfig.fyersSecretId } ?: BrokerConfig.fyersSecretId)
+    }
+    var fyersAuthCode by remember(selectedBroker) {
+        mutableStateOf(sessionManager?.fyersAccessToken ?: "")
+    }
 
     val clipboardManager = LocalClipboardManager.current
     val currentStatus = brokerStatuses[selectedBroker]?.status ?: com.example.data.network.BrokerAuthStatus.DISCONNECTED
     val isConnected = currentStatus == com.example.data.network.BrokerAuthStatus.CONNECTED
+    val isConfigured = sessionManager?.isBrokerConfigured(selectedBroker) == true || currentStatus == com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED || isConnected
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -806,36 +833,52 @@ fun BrokerConnectDialog(
                         }
                     }
 
-                    // If already connected, offer Reconnect & Disconnect Actions
-                    if (isConnected) {
+                    // If already configured or connected, offer Reconnect, Disconnect & Clear Saved Data Actions
+                    if (isConnected || isConfigured) {
                         Spacer(modifier = Modifier.height(16.dp))
                         HorizontalDivider(color = DarkCardBorder)
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = { onReconnect?.invoke(selectedBroker) },
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, PrimaryGold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryGold, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("RECONNECT", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                OutlinedButton(
+                                    onClick = { onReconnect?.invoke(selectedBroker) },
+                                    modifier = Modifier.weight(1f).height(42.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, PrimaryGold)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryGold, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("RECONNECT", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { onDisconnect?.invoke(selectedBroker) },
+                                    modifier = Modifier.weight(1f).height(42.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, LossRed)
+                                ) {
+                                    Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = LossRed, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("LOGOUT", color = LossRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
 
-                            OutlinedButton(
-                                onClick = { onDisconnect?.invoke(selectedBroker) },
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, LossRed)
-                            ) {
-                                Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = LossRed, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("DISCONNECT", color = LossRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            if (onRemoveAccount != null) {
+                                TextButton(
+                                    onClick = { onRemoveAccount.invoke(selectedBroker) },
+                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                ) {
+                                    Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = TextGray, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("CLEAR ALL SAVED CONFIGURATION FOR $selectedBroker", color = TextGray, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     }

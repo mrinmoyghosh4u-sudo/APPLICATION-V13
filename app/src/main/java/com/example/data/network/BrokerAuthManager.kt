@@ -319,23 +319,34 @@ class BrokerAuthManager(
     fun disconnectBroker(name: String) {
         when (name) {
             "Dhan" -> {
-                sessionManager.clearDhanCredentials()
-                updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.DISCONNECTED, "Disconnected")
+                sessionManager.clearDhanSessionTokens()
+                val status = if (sessionManager.dhanClientId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.DISCONNECTED
+                val msg = if (sessionManager.dhanClientId.isNotBlank()) "Disconnected. Login Required." else "Disconnected"
+                updateStatus("Dhan", "Primary Order Execution", status, msg)
             }
             "Angel One" -> {
                 sessionManager.clearAngelSessionTokens()
                 angelMarketDataService.disconnect()
-                updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
+                val isConfigured = sessionManager.angelClientId.isNotBlank()
+                val status = if (isConfigured) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.DISCONNECTED
+                val msg = if (isConfigured) "Disconnected. Login Required." else "Disconnected"
+                updateStatus("Angel One", "Fallback #2 Market Data", status, msg)
             }
             "Upstox" -> {
                 sessionManager.clearUpstoxSession()
                 brokerManager.upstoxMarketDataService.disconnect()
-                updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
+                val isConfigured = sessionManager.upstoxApiKey.isNotBlank()
+                val status = if (isConfigured) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.DISCONNECTED
+                val msg = if (isConfigured) "Disconnected. Login Required." else "Disconnected"
+                updateStatus("Upstox", "Primary Market Data", status, msg)
             }
             "Fyers" -> {
                 sessionManager.clearFyersSession()
                 brokerManager.fyersMarketDataService.disconnect()
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.DISCONNECTED, "Disconnected")
+                val isConfigured = sessionManager.fyersAppId.isNotBlank()
+                val status = if (isConfigured) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.DISCONNECTED
+                val msg = if (isConfigured) "Disconnected. Login Required." else "Disconnected"
+                updateStatus("Fyers", "Fallback #1 Market Data", status, msg)
             }
         }
     }
@@ -352,16 +363,12 @@ class BrokerAuthManager(
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONFIGURE, "Credentials removed")
             }
             "Upstox" -> {
-                sessionManager.clearUpstoxSession()
-                sessionManager.upstoxApiKey = ""
-                sessionManager.upstoxApiSecret = ""
+                sessionManager.clearUpstoxAllData()
                 brokerManager.upstoxMarketDataService.disconnect()
                 updateStatus("Upstox", "Primary Market Data", BrokerAuthStatus.CONFIGURE, "Credentials removed")
             }
             "Fyers" -> {
-                sessionManager.clearFyersSession()
-                sessionManager.fyersAppId = ""
-                sessionManager.fyersSecretId = ""
+                sessionManager.clearFyersAllData()
                 brokerManager.fyersMarketDataService.disconnect()
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials removed")
             }

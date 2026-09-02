@@ -243,7 +243,7 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_LAST_COMPLETED_DHAN_FINGERPRINT, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LAST_COMPLETED_DHAN_FINGERPRINT, value).apply()
 
-    fun saveDhanCredentials(clientId: String, accessToken: String, apiKey: String = "", clientSecret: String = "") {
+    fun saveDhanCredentials(clientId: String, accessToken: String = "", apiKey: String = "", clientSecret: String = "") {
         if (clientId.isNotBlank()) dhanClientId = clientId.trim()
         if (accessToken.isNotBlank()) {
             dhanAccessToken = accessToken.trim()
@@ -252,6 +252,18 @@ class SessionManager(context: Context) {
         }
         if (apiKey.isNotBlank()) dhanApiKey = apiKey.trim()
         if (clientSecret.isNotBlank()) dhanClientSecret = clientSecret.trim()
+    }
+
+    fun clearDhanSessionTokens() {
+        prefs.edit()
+            .remove(KEY_DHAN_TOKEN)
+            .remove(KEY_DHAN_TOKEN_TIMESTAMP)
+            .remove(KEY_LAST_COMPLETED_DHAN_FINGERPRINT)
+            .putBoolean(KEY_IS_DHAN_CONNECTED, false)
+            .apply()
+        if (activeBroker == "Dhan") {
+            activeBroker = ""
+        }
     }
 
     fun clearDhanCredentials() {
@@ -428,6 +440,20 @@ class SessionManager(context: Context) {
         }
     }
 
+    fun clearUpstoxAllData() {
+        prefs.edit()
+            .remove(KEY_UPSTOX_API_KEY)
+            .remove(KEY_UPSTOX_API_SECRET)
+            .remove(KEY_UPSTOX_TOKEN)
+            .remove(KEY_UPSTOX_REFRESH_TOKEN)
+            .remove(KEY_UPSTOX_TOKEN_TIMESTAMP)
+            .putBoolean(KEY_IS_UPSTOX_CONNECTED, false)
+            .apply()
+        if (activeBroker == "Upstox") {
+            activeBroker = ""
+        }
+    }
+
     // ==========================================
     // FYERS CREDENTIALS & SESSIONS
     // ==========================================
@@ -486,6 +512,80 @@ class SessionManager(context: Context) {
             .apply()
         if (activeBroker == "Fyers") {
             activeBroker = ""
+        }
+    }
+
+    fun clearFyersAllData() {
+        prefs.edit()
+            .remove(KEY_FYERS_APP_ID)
+            .remove(KEY_FYERS_SECRET_ID)
+            .remove(KEY_FYERS_REDIRECT_URI)
+            .remove(KEY_FYERS_TOKEN)
+            .remove(KEY_FYERS_REFRESH_TOKEN)
+            .remove(KEY_FYERS_TOKEN_TIMESTAMP)
+            .remove(KEY_FYERS_PIN)
+            .putBoolean(KEY_IS_FYERS_CONNECTED, false)
+            .apply()
+        if (activeBroker == "Fyers") {
+            activeBroker = ""
+        }
+    }
+
+    // ==========================================
+    // UNIFIED BROKER CLEAR & STATUS HELPERS
+    // ==========================================
+
+    fun clearBrokerSessionTokens(brokerName: String) {
+        when (brokerName) {
+            "Dhan" -> clearDhanSessionTokens()
+            "Angel One" -> clearAngelSessionTokens()
+            "Upstox" -> clearUpstoxSession()
+            "Fyers" -> clearFyersSession()
+        }
+    }
+
+    fun clearSavedBrokerData(brokerName: String) {
+        when (brokerName) {
+            "Dhan" -> clearDhanCredentials()
+            "Angel One" -> clearAngelOneCredentials()
+            "Upstox" -> clearUpstoxAllData()
+            "Fyers" -> clearFyersAllData()
+        }
+    }
+
+    fun clearAllSavedBrokersData() {
+        clearDhanCredentials()
+        clearAngelOneCredentials()
+        clearUpstoxAllData()
+        clearFyersAllData()
+        clearActiveBrokerSession()
+        clearPendingOAuthSession()
+    }
+
+    fun isBrokerConfigured(brokerName: String): Boolean {
+        return when (brokerName) {
+            "Dhan" -> dhanClientId.isNotBlank() || dhanApiKey.isNotBlank()
+            "Angel One" -> angelClientId.isNotBlank() || angelApiKey.isNotBlank()
+            "Upstox" -> upstoxApiKey.isNotBlank()
+            "Fyers" -> fyersAppId.isNotBlank()
+            else -> false
+        }
+    }
+
+    fun isBrokerSessionValid(brokerName: String): Boolean {
+        return when (brokerName) {
+            "Dhan" -> isDhanConnected && dhanAccessToken.isNotBlank()
+            "Angel One" -> isAngelConnected && angelAuthToken.isNotBlank()
+            "Upstox" -> isUpstoxConnected && !upstoxAccessToken.isNullOrBlank()
+            "Fyers" -> {
+                if (!isFyersConnected || fyersAccessToken.isNullOrBlank()) return false
+                val calendar = java.util.Calendar.getInstance()
+                val currentDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+                calendar.timeInMillis = fyersTokenTimestamp
+                val authDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+                currentDay == authDay
+            }
+            else -> false
         }
     }
 
