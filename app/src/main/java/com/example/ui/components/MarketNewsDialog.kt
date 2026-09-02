@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -861,13 +863,13 @@ private fun PreMarketAnalysisSection(
                         }
 
                         Surface(
-                            color = ProfitGreen.copy(alpha = 0.15f),
+                            color = if (fiiDii.isDataAvailable) ProfitGreen.copy(alpha = 0.15f) else Color(0xFF232834),
                             shape = RoundedCornerShape(4.dp),
-                            border = BorderStroke(0.5.dp, ProfitGreen.copy(alpha = 0.4f))
+                            border = BorderStroke(0.5.dp, if (fiiDii.isDataAvailable) ProfitGreen.copy(alpha = 0.4f) else Color(0xFF3B4354))
                         ) {
                             Text(
                                 text = fiiDii.institutionalBias,
-                                color = ProfitGreen,
+                                color = if (fiiDii.isDataAvailable) ProfitGreen else Color(0xFFB0B7C6),
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -877,30 +879,61 @@ private fun PreMarketAnalysisSection(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        PreMarketMetric(
-                            label = "FII NET (CASH)",
-                            value = "${if (fiiDii.fiiNet >= 0) "+₹" else "-₹"}${String.format("%,.1f", fiiDii.fiiNet)} Cr",
-                            subValue = "Buy: ₹${fiiDii.fiiBuy.toInt()}Cr",
-                            isPositive = fiiDii.fiiNet >= 0
-                        )
+                    if (fiiDii.isDataAvailable && fiiDii.fiiNet != null && fiiDii.diiNet != null && fiiDii.totalNet != null) {
+                        val fn = fiiDii.fiiNet
+                        val dn = fiiDii.diiNet
+                        val tn = fiiDii.totalNet
+                        val fb = fiiDii.fiiBuy ?: 0.0
+                        val db = fiiDii.diiBuy ?: 0.0
 
-                        PreMarketMetric(
-                            label = "DII NET (CASH)",
-                            value = "${if (fiiDii.diiNet >= 0) "+₹" else "-₹"}${String.format("%,.1f", fiiDii.diiNet)} Cr",
-                            subValue = "Buy: ₹${fiiDii.diiBuy.toInt()}Cr",
-                            isPositive = fiiDii.diiNet >= 0
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            PreMarketMetric(
+                                label = "FII NET (CASH)",
+                                value = "${if (fn >= 0) "+₹" else "-₹"}${String.format("%,.1f", fn)} Cr",
+                                subValue = "Buy: ₹${fb.toInt()}Cr",
+                                isPositive = fn >= 0
+                            )
 
-                        PreMarketMetric(
-                            label = "NET TOTAL FLOW",
-                            value = "${if (fiiDii.totalNet >= 0) "+₹" else "-₹"}${String.format("%,.1f", fiiDii.totalNet)} Cr",
-                            subValue = "Combined Cash",
-                            isPositive = fiiDii.totalNet >= 0
-                        )
+                            PreMarketMetric(
+                                label = "DII NET (CASH)",
+                                value = "${if (dn >= 0) "+₹" else "-₹"}${String.format("%,.1f", dn)} Cr",
+                                subValue = "Buy: ₹${db.toInt()}Cr",
+                                isPositive = dn >= 0
+                            )
+
+                            PreMarketMetric(
+                                label = "NET TOTAL FLOW",
+                                value = "${if (tn >= 0) "+₹" else "-₹"}${String.format("%,.1f", tn)} Cr",
+                                subValue = "Combined Cash",
+                                isPositive = tn >= 0
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF181C26), RoundedCornerShape(6.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = PrimaryGold,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Institutional cash data published by NSE/BSE after 06:30 PM IST on trading days. Real data will be populated once exchange wire updates.",
+                                    color = TextGray,
+                                    fontSize = 9.5.sp,
+                                    lineHeight = 13.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1045,10 +1078,12 @@ private fun AiOptionBuyerViewSection(
         ?: signals.firstOrNull()
         ?: AiPreMarketOptionBuyerSignal(
             symbol = selectedSymbol,
-            preMarketBias = "BULLISH",
-            optionBuyerBias = "CE WATCH",
-            confidence = 78,
-            reason = "Positive global cues + GIFT NIFTY gap up + strong institutional cash accumulation."
+            preMarketBias = "NEUTRAL",
+            optionBuyerBias = "WAIT",
+            tradeConfirmation = "REQUIRED",
+            heuristicScore = 60,
+            confidence = 60,
+            reason = "Awaiting market opening range resolution. Monitor option chain OI buildup and 15m breakout before entering trades."
         )
 
     Surface(
@@ -1386,6 +1421,8 @@ private fun MarketNewsArticleCard(article: OptionBuyerNewsArticle) {
 
 @Composable
 private fun OptionBuyerImpactBadge(article: OptionBuyerNewsArticle) {
+    val context = LocalContext.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1408,7 +1445,7 @@ private fun OptionBuyerImpactBadge(article: OptionBuyerNewsArticle) {
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "• Impact: ${article.impact}",
+                        text = "• ${article.impact}",
                         color = if (article.impact == "BULLISH") ProfitGreen else if (article.impact == "BEARISH") LossRed else TextWhite,
                         fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold
@@ -1424,7 +1461,7 @@ private fun OptionBuyerImpactBadge(article: OptionBuyerNewsArticle) {
                     shape = RoundedCornerShape(4.dp)
                 ) {
                     Text(
-                        text = "${article.optionBuyerBias} (${article.confidencePercent}%)",
+                        text = "${article.optionBuyerBias} (${article.sentimentScore}%)",
                         color = when (article.optionBuyerBias) {
                             "CE WATCH" -> ProfitGreen
                             "PE WATCH" -> LossRed
@@ -1445,6 +1482,45 @@ private fun OptionBuyerImpactBadge(article: OptionBuyerNewsArticle) {
                 fontSize = 9.sp,
                 lineHeight = 12.5.sp
             )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Trade Confirmation & Source Link Strip
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = Color(0xFF242A38),
+                    shape = RoundedCornerShape(3.dp)
+                ) {
+                    Text(
+                        text = "TRADE CONFIRMATION: REQUIRED",
+                        color = Color(0xFFB0B7C6),
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp)
+                    )
+                }
+
+                if (!article.url.isNullOrBlank()) {
+                    Text(
+                        text = "Read Full Story ↗",
+                        color = PrimaryGold,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not open link", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }

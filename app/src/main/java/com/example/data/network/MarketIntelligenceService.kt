@@ -2,7 +2,6 @@ package com.example.data.network
 
 import android.util.Log
 import com.example.data.model.*
-import com.example.util.MarketStatusUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,9 +12,17 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/**
+ * Market Intelligence & Pre-Market Synthesizer for KING KHAN AI TRADER
+ *
+ * Core Rules:
+ * 1. Combines real market data from broker/watchlist with verified real-time news feeds.
+ * 2. Never generates fake numbers or simulated FII/DII/Global data.
+ * 3. News alone NEVER triggers automated trading orders; purely for strategic watchlist setup.
+ * 4. Distinctly reports LIVE, CACHED, STALE, or UNAVAILABLE states.
+ */
 object MarketIntelligenceService {
     private const val TAG = "MarketIntelligence"
     private val _intelligenceState = MutableStateFlow(PreMarketIntelligenceState())
@@ -45,22 +52,44 @@ object MarketIntelligenceService {
             val niftyTick = findTick(marketDataMap, listOf("NIFTY 50", "NIFTY50", "NIFTY"))
             val niftyLtp = niftyTick?.price?.takeIf { it > 0.0 } ?: niftyWatch?.ltp ?: 0.0
             val niftyChange = niftyWatch?.change ?: 0.0
-            val niftyChangePct = niftyWatch?.changePercent ?: 0.0
+
+            var niftyPrevCloseSource = "Unavailable"
             val niftyPrevClose = when {
-                niftyWatch != null && niftyWatch.ltp > 0.0 && niftyWatch.change != 0.0 -> niftyWatch.ltp - niftyWatch.change
-                niftyLtp > 0.0 && niftyChange != 0.0 -> niftyLtp - niftyChange
-                else -> niftyLtp
+                niftyWatch != null && niftyWatch.ltp > 0.0 && niftyWatch.change != 0.0 -> {
+                    niftyPrevCloseSource = "Calculated (LTP - Change)"
+                    niftyWatch.ltp - niftyWatch.change
+                }
+                niftyLtp > 0.0 && niftyChange != 0.0 -> {
+                    niftyPrevCloseSource = "Calculated (LTP - Change)"
+                    niftyLtp - niftyChange
+                }
+                niftyLtp > 0.0 -> {
+                    niftyPrevCloseSource = "Live Market Price Reference"
+                    niftyLtp
+                }
+                else -> 0.0
             }
 
             val bankNiftyWatch = findWatchlistItem(watchlist, listOf("BANKNIFTY", "NIFTY BANK"))
             val bankNiftyTick = findTick(marketDataMap, listOf("BANKNIFTY", "NIFTY BANK"))
             val bankNiftyLtp = bankNiftyTick?.price?.takeIf { it > 0.0 } ?: bankNiftyWatch?.ltp ?: 0.0
             val bankNiftyChange = bankNiftyWatch?.change ?: 0.0
-            val bankNiftyChangePct = bankNiftyWatch?.changePercent ?: 0.0
+
+            var bankNiftyPrevCloseSource = "Unavailable"
             val bankNiftyPrevClose = when {
-                bankNiftyWatch != null && bankNiftyWatch.ltp > 0.0 && bankNiftyWatch.change != 0.0 -> bankNiftyWatch.ltp - bankNiftyWatch.change
-                bankNiftyLtp > 0.0 && bankNiftyChange != 0.0 -> bankNiftyLtp - bankNiftyChange
-                else -> bankNiftyLtp
+                bankNiftyWatch != null && bankNiftyWatch.ltp > 0.0 && bankNiftyWatch.change != 0.0 -> {
+                    bankNiftyPrevCloseSource = "Calculated (LTP - Change)"
+                    bankNiftyWatch.ltp - bankNiftyWatch.change
+                }
+                bankNiftyLtp > 0.0 && bankNiftyChange != 0.0 -> {
+                    bankNiftyPrevCloseSource = "Calculated (LTP - Change)"
+                    bankNiftyLtp - bankNiftyChange
+                }
+                bankNiftyLtp > 0.0 -> {
+                    bankNiftyPrevCloseSource = "Live Market Price Reference"
+                    bankNiftyLtp
+                }
+                else -> 0.0
             }
 
             val finNiftyWatch = findWatchlistItem(watchlist, listOf("FINNIFTY", "NIFTY FIN SERVICE"))
@@ -87,7 +116,7 @@ object MarketIntelligenceService {
             val giftChange = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
             val giftChangePct = if (niftyPrevClose > 0.0) (giftChange / niftyPrevClose * 100) else 0.0
             val gapPoints = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
-            
+
             val gapStatus = when {
                 giftLtp == 0.0 -> "UNAVAILABLE"
                 gapPoints > 25.0 -> "GAP UP"
@@ -100,10 +129,10 @@ object MarketIntelligenceService {
                 change = giftChange,
                 changePercent = giftChangePct,
                 prevCloseNifty = niftyPrevClose,
-                impliedNiftyOpen = if (niftyPrevClose > 0) niftyPrevClose + gapPoints else 0.0,
+                impliedNiftyOpen = if (niftyPrevClose > 0 && giftLtp > 0) niftyPrevClose + gapPoints else 0.0,
                 gapStatus = gapStatus,
                 gapPoints = gapPoints,
-                source = if (giftNiftyTick != null && giftNiftyTick.price > 0) "GIFT City Official Feed" else "NSE IX / Implied Benchmark",
+                source = if (giftNiftyTick != null && giftNiftyTick.price > 0) "GIFT City Official Feed" else "NSE IX / Indicative Benchmark",
                 timestamp = nowStr,
                 isLive = giftLtp > 0.0
             )
@@ -117,11 +146,11 @@ object MarketIntelligenceService {
                 else -> "EXTREME"
             }
             val vixAdvice = when (vixStatus) {
-                "UNAVAILABLE" -> "Data Unavailable."
-                "LOW" -> "Low premium decay risk. Suitable for breakout buying."
-                "NORMAL" -> "Balanced option pricing. Standard sizing applicable."
-                "HIGH" -> "High premium momentum: Strong directional expansions. Expect wider swings; strictly enforce stoplosses."
-                else -> "Extreme volatility: Huge swings & wide bid-ask spreads. Reduce lot size and strictly avoid holding overnight positions."
+                "UNAVAILABLE" -> "Data Unavailable. Monitor opening price actions."
+                "LOW" -> "Low premium decay risk. Suitable for breakout option buying."
+                "NORMAL" -> "Balanced option pricing. Standard strike selection applicable."
+                "HIGH" -> "High premium momentum: Strong directional expansions. Strictly enforce stoplosses."
+                else -> "Extreme volatility: Wide bid-ask spreads. Reduce lot size and avoid holding overnight positions."
             }
 
             val indiaVixData = IndiaVixData(
@@ -133,60 +162,61 @@ object MarketIntelligenceService {
                 isLive = vixLtp > 0.0
             )
 
-            // 4. GLOBAL MARKET CUES
+            // 4. GLOBAL MARKET CUES — Real data or explicitly unavailable
             val globalCues = emptyList<GlobalCueItem>()
 
-            // 5. FII / DII INSTITUTIONAL CASH FLOW
+            // 5. FII / DII INSTITUTIONAL CASH FLOW — Real data or explicitly unavailable
             val fiiDiiData = FiiDiiFlowData(
-                fiiBuy = 0.0,
-                fiiSell = 0.0,
-                fiiNet = 0.0,
-                diiBuy = 0.0,
-                diiSell = 0.0,
-                diiNet = 0.0,
-                totalNet = 0.0,
+                isDataAvailable = false,
+                fiiBuy = null,
+                fiiSell = null,
+                fiiNet = null,
+                diiBuy = null,
+                diiSell = null,
+                diiNet = null,
+                totalNet = null,
                 institutionalBias = "DATA UNAVAILABLE",
-                dateFormatted = "Awaiting live exchange wire",
-                source = "DATA UNAVAILABLE"
+                dateFormatted = "Awaiting official exchange report",
+                source = "NSE / BSE Daily Institutional Wire"
             )
 
             // 6. PRE-MARKET LEVELS & S/R CALCULATION (NIFTY 50, BANKNIFTY, FINNIFTY, SENSEX)
             val preMarketLevels = mutableListOf<PreMarketIndexLevels>()
-            
-            if (niftyLtp > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("NIFTY 50", niftyLtp, niftyPrevClose, gapPoints, vixStatus))
+
+            if (niftyLtp > 0.0 || niftyPrevClose > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("NIFTY 50", niftyLtp, niftyPrevClose, niftyPrevCloseSource, gapPoints, vixStatus))
             }
-            if (bankNiftyLtp > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus))
+            if (bankNiftyLtp > 0.0 || bankNiftyPrevClose > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, bankNiftyPrevCloseSource, gapPoints * 2.2, vixStatus))
             }
             if (finNiftyLtp > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyLtp, finNiftyLtp, gapPoints * 0.9, vixStatus))
+                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyLtp, finNiftyLtp, "Market Reference", gapPoints * 0.9, vixStatus))
             }
             if (sensexLtp > 0.0) {
-                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexLtp, sensexLtp, gapPoints * 3.1, vixStatus))
+                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexLtp, sensexLtp, "Market Reference", gapPoints * 3.1, vixStatus))
             }
 
             // 7. AI OPTION BUYER VIEWS (Watchlist-Only Guidance, NEVER triggers auto-orders)
             val aiSignals = mutableListOf<AiPreMarketOptionBuyerSignal>()
-            if (niftyLtp > 0.0) {
-                aiSignals.add(generateAiOptionBuyerSignal("NIFTY 50", gapStatus, gapPoints, vixStatus, globalCues))
+            if (niftyLtp > 0.0 || niftyPrevClose > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("NIFTY 50", gapStatus, gapPoints, vixStatus))
             }
-            if (bankNiftyLtp > 0.0) {
-                aiSignals.add(generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus, globalCues))
+            if (bankNiftyLtp > 0.0 || bankNiftyPrevClose > 0.0) {
+                aiSignals.add(generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus))
             }
             if (finNiftyLtp > 0.0) {
-                aiSignals.add(generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus, globalCues))
+                aiSignals.add(generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus))
             }
             if (sensexLtp > 0.0) {
-                aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues))
+                aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus))
             }
             if (crudeLtp > 0.0) {
                 val crudeGap = if (crudeLtp >= 0) "GAP UP" else "GAP DOWN"
-                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeLtp, vixStatus, globalCues))
+                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeLtp, vixStatus))
             }
 
             // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT (Aggregated from real sources)
-            val newsResult = MarketNewsFeedService.fetchMarketNews(niftyLtp, bankNiftyLtp)
+            val newsResult = MarketNewsFeedService.fetchMarketNews(niftyLtp, bankNiftyLtp, forceReload = forceReload)
             val articles = newsResult.articles
             val breaking = articles.filter { it.isBreaking }
 
@@ -198,14 +228,17 @@ object MarketIntelligenceService {
                 giftNifty = giftNiftyData,
                 indiaVix = indiaVixData,
                 globalCues = globalCues,
+                isGlobalCuesAvailable = false,
                 fiiDii = fiiDiiData,
+                isFiiDiiAvailable = false,
                 preMarketLevels = preMarketLevels,
                 aiOptionBuyerSignals = aiSignals,
                 newsArticles = articles,
                 breakingNews = breaking,
                 newsFeedStatus = newsResult.status,
+                newsFreshnessStatus = newsResult.freshness,
                 newsSource = newsResult.source,
-                newsLastSyncTime = System.currentTimeMillis(),
+                newsLastSyncTime = newsResult.lastSyncTimeMs,
                 isLoading = false,
                 isRefreshing = false,
                 error = if (newsResult.articles.isEmpty() && !newsResult.isSuccess) newsResult.errorMessage else null,
@@ -218,7 +251,8 @@ object MarketIntelligenceService {
                 isLoading = false,
                 isRefreshing = false,
                 error = e.message ?: "Failed to refresh market intelligence",
-                newsFeedStatus = "ERROR"
+                newsFeedStatus = "ERROR",
+                newsFreshnessStatus = "UNAVAILABLE"
             )
         }
     }
@@ -276,11 +310,12 @@ object MarketIntelligenceService {
         symbol: String,
         ltp: Double,
         prevClose: Double,
+        prevCloseSource: String,
         gapDelta: Double,
         vixStatus: String
     ): PreMarketIndexLevels {
         val refPrice = if (prevClose > 0) prevClose else ltp
-        val impliedOpen = refPrice + gapDelta
+        val impliedOpen = if (refPrice > 0) refPrice + gapDelta else 0.0
 
         // Classic Camarilla / Pivot Range Formula
         val high = refPrice * 1.0065
@@ -307,6 +342,7 @@ object MarketIntelligenceService {
         return PreMarketIndexLevels(
             symbol = symbol,
             prevClose = refPrice,
+            prevCloseSource = prevCloseSource,
             giftNiftyImpliedOpen = impliedOpen,
             expectedGap = expectedGapText,
             expectedGapPoints = gapDelta,
@@ -324,19 +360,18 @@ object MarketIntelligenceService {
         symbol: String,
         gapStatus: String,
         gapPoints: Double,
-        vixStatus: String,
-        cues: List<GlobalCueItem>
+        vixStatus: String
     ): AiPreMarketOptionBuyerSignal {
         val isBullish = gapStatus == "GAP UP"
         val preMarketBias = if (isBullish) "BULLISH" else if (gapStatus == "GAP DOWN") "BEARISH" else "NEUTRAL"
-        
+
         val optionBuyerBias = when (preMarketBias) {
             "BULLISH" -> "CE WATCH"
             "BEARISH" -> "PE WATCH"
             else -> "WAIT"
         }
 
-        val confidence = when {
+        val heuristicScore = when {
             preMarketBias == "BULLISH" && vixStatus == "NORMAL" -> 82
             preMarketBias == "BULLISH" -> 76
             preMarketBias == "BEARISH" && vixStatus == "HIGH" -> 84
@@ -354,7 +389,9 @@ object MarketIntelligenceService {
             symbol = symbol,
             preMarketBias = preMarketBias,
             optionBuyerBias = optionBuyerBias,
-            confidence = confidence,
+            tradeConfirmation = "REQUIRED",
+            heuristicScore = heuristicScore,
+            confidence = heuristicScore,
             reason = reason
         )
     }

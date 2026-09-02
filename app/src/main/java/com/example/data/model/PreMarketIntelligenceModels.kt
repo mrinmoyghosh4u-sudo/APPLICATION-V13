@@ -45,15 +45,16 @@ data class GlobalCueItem(
 
 @Immutable
 data class FiiDiiFlowData(
-    val fiiBuy: Double,
-    val fiiSell: Double,
-    val fiiNet: Double,
-    val diiBuy: Double,
-    val diiSell: Double,
-    val diiNet: Double,
-    val totalNet: Double,
-    val institutionalBias: String, // "BULLISH ACCUMULATION", "BEARISH DISTRIBUTION", "NEUTRAL"
-    val dateFormatted: String,
+    val isDataAvailable: Boolean = false,
+    val fiiBuy: Double? = null,
+    val fiiSell: Double? = null,
+    val fiiNet: Double? = null,
+    val diiBuy: Double? = null,
+    val diiSell: Double? = null,
+    val diiNet: Double? = null,
+    val totalNet: Double? = null,
+    val institutionalBias: String = "DATA UNAVAILABLE", // "BULLISH ACCUMULATION", "BEARISH DISTRIBUTION", "NEUTRAL", "DATA UNAVAILABLE"
+    val dateFormatted: String = "Awaiting official exchange report",
     val source: String = "NSE / BSE Daily Institutional Wire"
 )
 
@@ -61,6 +62,7 @@ data class FiiDiiFlowData(
 data class PreMarketIndexLevels(
     val symbol: String,
     val prevClose: Double,
+    val prevCloseSource: String = "Verified Market Close",
     val giftNiftyImpliedOpen: Double,
     val expectedGap: String,
     val expectedGapPoints: Double,
@@ -78,7 +80,9 @@ data class AiPreMarketOptionBuyerSignal(
     val symbol: String,
     val preMarketBias: String, // "BULLISH", "BEARISH", "NEUTRAL"
     val optionBuyerBias: String, // "CE WATCH", "PE WATCH", "WAIT"
-    val confidence: Int, // e.g. 78
+    val tradeConfirmation: String = "REQUIRED",
+    val heuristicScore: Int, // e.g. 78 (Heuristic score, not statistical win probability)
+    val confidence: Int = heuristicScore, // Backwards compatibility
     val reason: String,
     val disclaimer: String = "Pre-market bias is for watchlist setup only. It MUST NOT automatically create an order. Live order requires live market price + option chain OI confirmation."
 )
@@ -89,6 +93,7 @@ data class OptionBuyerNewsArticle(
     val headline: String,
     val source: String,
     val publishedTime: String,
+    val publishedTimestampMs: Long = 0L,
     val summary: String,
     val category: String, // "ALL", "BREAKING", "HIGH IMPACT", "NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX", "GLOBAL", "RBI / INDIA", "CRUDEOIL", "FII / DII", "VOLATILITY", "STOCK NEWS"
     val isBreaking: Boolean = false,
@@ -96,9 +101,12 @@ data class OptionBuyerNewsArticle(
     val impact: String, // "BULLISH", "BEARISH", "NEUTRAL"
     val impactStrength: String, // "LOW", "MEDIUM", "HIGH"
     val optionBuyerBias: String, // "CE WATCH", "PE WATCH", "WAIT"
-    val confidencePercent: Int,
+    val tradeConfirmation: String = "REQUIRED",
+    val sentimentScore: Int = 70, // Heuristic Sentiment Strength (0-100), not statistical probability
+    val confidencePercent: Int = sentimentScore,
     val impactReason: String,
-    val url: String? = null
+    val url: String? = null,
+    val freshness: String = "LIVE" // "LIVE", "CACHED", "STALE", "UNAVAILABLE"
 )
 
 @Immutable
@@ -110,12 +118,15 @@ data class PreMarketIntelligenceState(
     val giftNifty: GiftNiftyData? = null,
     val indiaVix: IndiaVixData? = null,
     val globalCues: List<GlobalCueItem> = emptyList(),
+    val isGlobalCuesAvailable: Boolean = false,
     val fiiDii: FiiDiiFlowData? = null,
+    val isFiiDiiAvailable: Boolean = false,
     val preMarketLevels: List<PreMarketIndexLevels> = emptyList(),
     val aiOptionBuyerSignals: List<AiPreMarketOptionBuyerSignal> = emptyList(),
     val newsArticles: List<OptionBuyerNewsArticle> = emptyList(),
     val breakingNews: List<OptionBuyerNewsArticle> = emptyList(),
     val newsFeedStatus: String = "UNAVAILABLE", // "HEALTHY", "DEGRADED", "UNAVAILABLE", "NETWORK_ERROR"
+    val newsFreshnessStatus: String = "UNAVAILABLE", // "LIVE", "CACHED", "STALE", "UNAVAILABLE"
     val newsSource: String = "UNAVAILABLE",
     val newsLastSyncTime: Long = 0L,
     val isLoading: Boolean = false,

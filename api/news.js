@@ -176,8 +176,25 @@ function parseRssXml(xml, sourceName) {
     let isHighImpact = highImpactWords.some(w => textToAnalyze.includes(w));
     let impactStrength = isHighImpact ? 'HIGH' : (bullishCount + bearishCount >= 2 ? 'MEDIUM' : 'LOW');
 
-    const breakingKeywords = ['breaking', 'flash', 'alert', 'just in', 'surges over', 'plunges over', 'records massive', 'emergency'];
-    let isBreaking = breakingKeywords.some(w => textToAnalyze.includes(w));
+    // Format display time & timestamp
+    let displayTime = 'Today';
+    let pubTimestampMs = 0;
+    if (rawDate) {
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          pubTimestampMs = d.getTime();
+          displayTime = d.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+        }
+      } catch (e) {
+        displayTime = 'Today';
+      }
+    }
+
+    // Breaking news strict freshness: Must be within last 60 minutes
+    const isRecent = pubTimestampMs > 0 && (Date.now() - pubTimestampMs) <= 3600000;
+    const breakingKeywords = ['breaking', 'flash', 'alert', 'just in', 'surges over', 'plunges over', 'emergency', 'circuit breaker', 'rate hike', 'rate cut'];
+    let isBreaking = isRecent && breakingKeywords.some(w => textToAnalyze.includes(w));
 
     let confidence = 70 + Math.min(25, (bullishCount + bearishCount) * 5 + (isHighImpact ? 10 : 0));
     if (confidence > 94) confidence = 94;
@@ -191,19 +208,6 @@ function parseRssXml(xml, sourceName) {
       impactReason = `Balanced sentiment. Wait for opening range resolution and Option Chain OI accumulation before entering.`;
     }
 
-    // Format display time
-    let displayTime = 'Just now';
-    if (rawDate) {
-      try {
-        const d = new Date(rawDate);
-        if (!isNaN(d.getTime())) {
-          displayTime = d.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
-        }
-      } catch (e) {
-        displayTime = 'Today';
-      }
-    }
-
     // Hash ID
     const id = Buffer.from(rawTitle).toString('base64').substring(0, 24).replace(/[^a-zA-Z0-9]/g, '');
 
@@ -212,6 +216,7 @@ function parseRssXml(xml, sourceName) {
       headline: rawTitle,
       source: sourceName,
       publishedTime: displayTime,
+      publishedTimestampMs: pubTimestampMs,
       summary: rawDesc ? rawDesc.substring(0, 260) + (rawDesc.length > 260 ? '...' : '') : rawTitle,
       category: category,
       isBreaking: isBreaking,
@@ -219,9 +224,12 @@ function parseRssXml(xml, sourceName) {
       impact: impact,
       impactStrength: impactStrength,
       optionBuyerBias: optionBuyerBias,
+      tradeConfirmation: 'REQUIRED',
+      sentimentScore: confidence,
       confidencePercent: confidence,
       impactReason: impactReason,
-      url: rawLink || null
+      url: rawLink || null,
+      freshness: 'LIVE'
     });
   }
 

@@ -4,6 +4,8 @@ import android.util.Log
 import android.util.Xml
 import com.example.data.model.OptionBuyerNewsArticle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,15 +21,24 @@ import java.util.concurrent.TimeUnit
 /**
  * Real-Time Market News & Intelligence Aggregator for KING KHAN AI TRADER
  *
- * Architecture:
+ * Requirements & Constraints:
  * 1. Primary: Remote Backend Aggregator Proxy (Vercel serverless /api/news)
  * 2. Fallback: Direct Public Indian Financial RSS Feeds (The Economic Times, Moneycontrol, Livemint)
  * 3. Never returns fake / mock / hardcoded articles.
- * 4. If network fails or no source reachable: returns emptyList() and sets status to UNAVAILABLE.
+ * 4. Cache & Cooldown: Minimum 180s between network requests (unless forceReload).
+ * 5. Freshness: LIVE (<=10m), CACHED (10-30m), STALE (>30m), UNAVAILABLE (no articles).
+ * 6. Breaking News: Only articles within the last 60 minutes with high-impact catalysts.
+ * 7. Deduplication: By URL hash or normalized title key.
+ * 8. Zero secret or token logging.
  */
 object MarketNewsFeedService {
     private const val TAG = "MarketNewsFeedService"
     private const val BACKEND_NEWS_URL = "https://application-beige-psi.vercel.app/api/news"
+
+    private const val COOLDOWN_INTERVAL_MS = 180_000L // 3 minutes cooldown
+    private const val FRESHNESS_LIVE_MS = 600_000L    // 10 minutes
+    private const val FRESHNESS_STALE_MS = 1_800_000L  // 30 minutes
+    private const val BREAKING_WINDOW_MS = 3_600_000L  // 60 minutes max age for breaking news
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -41,48 +52,113 @@ object MarketNewsFeedService {
         Pair("Livemint", "https://www.livemint.com/rss/markets")
     )
 
+    private val fetchMutex = Mutex()
+    private var cachedResult: NewsFetchResult? = null
+    private var lastFetchTimestampMs: Long = 0L
+
     data class NewsFetchResult(
         val articles: List<OptionBuyerNewsArticle>,
         val source: String,
         val isSuccess: Boolean,
-        val status: String,
-        val errorMessage: String? = null
+        val status: String, // "HEALTHY", "DEGRADED", "UNAVAILABLE"
+        val freshness: String = "UNAVAILABLE", // "LIVE", "CACHED", "STALE", "UNAVAILABLE"
+        val errorMessage: String? = null,
+        val lastSyncTimeMs: Long = System.currentTimeMillis()
     )
 
+    /**
+     * Primary entry point for news retrieval.
+     */
     suspend fun fetchMarketNews(
         niftyLtp: Double = 0.0,
-        bankNiftyLtp: Double = 0.0
+        bankNiftyLtp: Double = 0.0,
+        forceReload: Boolean = false
     ): NewsFetchResult = withContext(Dispatchers.IO) {
-        // Step 1: Try Remote Backend Proxy (Primary)
-        try {
-            val backendResult = fetchFromBackendProxy()
-            if (backendResult.isSuccess && backendResult.articles.isNotEmpty()) {
-                Log.i(TAG, "Successfully fetched ${backendResult.articles.size} news articles from backend proxy")
-                return@withContext backendResult
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Backend news proxy fetch failed, falling back to direct RSS: ${e.message}")
-        }
+        fetchMutex.withLock {
+            val now = System.currentTimeMillis()
+            val timeSinceLastFetch = now - lastFetchTimestampMs
 
-        // Step 2: Fallback to Direct Public RSS Feeds
-        try {
-            val rssResult = fetchFromDirectRssFeeds()
-            if (rssResult.isSuccess && rssResult.articles.isNotEmpty()) {
-                Log.i(TAG, "Successfully fetched ${rssResult.articles.size} news articles from direct RSS")
-                return@withContext rssResult
+            // Serve from cache if within cooldown and forceReload is not requested
+            val existingCache = cachedResult
+            if (!forceReload && existingCache != null && existingCache.articles.isNotEmpty() && timeSinceLastFetch < COOLDOWN_INTERVAL_MS) {
+                val currentFreshness = calculateFreshness(existingCache.lastSyncTimeMs, now)
+                val updatedArticles = existingCache.articles.map { it.copy(freshness = currentFreshness) }
+                return@withContext existingCache.copy(
+                    articles = updatedArticles,
+                    freshness = currentFreshness
+                )
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Direct RSS news fetch failed: ${e.message}", e)
-        }
 
-        // Step 3: Failure State (No fake news!)
-        return@withContext NewsFetchResult(
-            articles = emptyList(),
-            source = "UNAVAILABLE",
-            isSuccess = false,
-            status = "UNAVAILABLE",
-            errorMessage = "No active news feeds reachable. Check internet connection."
-        )
+            // Step 1: Try Remote Backend Proxy (Primary)
+            try {
+                val backendResult = fetchFromBackendProxy()
+                if (backendResult.isSuccess && backendResult.articles.isNotEmpty()) {
+                    Log.i(TAG, "Fetched ${backendResult.articles.size} news articles from backend proxy")
+                    lastFetchTimestampMs = now
+                    val evaluated = backendResult.copy(
+                        freshness = "LIVE",
+                        lastSyncTimeMs = now,
+                        articles = backendResult.articles.map { it.copy(freshness = "LIVE") }
+                    )
+                    cachedResult = evaluated
+                    return@withContext evaluated
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Backend news proxy fetch failed, falling back to direct RSS: ${e.message}")
+            }
+
+            // Step 2: Fallback to Direct Public RSS Feeds
+            try {
+                val rssResult = fetchFromDirectRssFeeds()
+                if (rssResult.isSuccess && rssResult.articles.isNotEmpty()) {
+                    Log.i(TAG, "Fetched ${rssResult.articles.size} news articles from direct RSS")
+                    lastFetchTimestampMs = now
+                    val evaluated = rssResult.copy(
+                        freshness = "LIVE",
+                        lastSyncTimeMs = now,
+                        articles = rssResult.articles.map { it.copy(freshness = "LIVE") }
+                    )
+                    cachedResult = evaluated
+                    return@withContext evaluated
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Direct RSS news fetch failed: ${e.message}", e)
+            }
+
+            // Step 3: Handle Failure — fallback to cached data if available
+            if (existingCache != null && existingCache.articles.isNotEmpty()) {
+                val currentFreshness = calculateFreshness(existingCache.lastSyncTimeMs, now)
+                Log.w(TAG, "Network failed; serving ${existingCache.articles.size} cached articles with freshness: $currentFreshness")
+                val updatedArticles = existingCache.articles.map { it.copy(freshness = currentFreshness) }
+                return@withContext existingCache.copy(
+                    articles = updatedArticles,
+                    isSuccess = true,
+                    status = if (currentFreshness == "STALE") "DEGRADED" else "HEALTHY",
+                    freshness = currentFreshness,
+                    errorMessage = "Network refresh failed. Showing ${currentFreshness.lowercase(Locale.ROOT)} news."
+                )
+            }
+
+            // Step 4: Complete Failure State (No fake news!)
+            return@withContext NewsFetchResult(
+                articles = emptyList(),
+                source = "UNAVAILABLE",
+                isSuccess = false,
+                status = "UNAVAILABLE",
+                freshness = "UNAVAILABLE",
+                errorMessage = "News feeds currently unreachable. Check network connection."
+            )
+        }
+    }
+
+    private fun calculateFreshness(syncTimeMs: Long, currentTimeMs: Long): String {
+        val age = currentTimeMs - syncTimeMs
+        return when {
+            syncTimeMs == 0L -> "UNAVAILABLE"
+            age <= FRESHNESS_LIVE_MS -> "LIVE"
+            age <= FRESHNESS_STALE_MS -> "CACHED"
+            else -> "STALE"
+        }
     }
 
     private fun fetchFromBackendProxy(): NewsFetchResult {
@@ -94,37 +170,49 @@ object MarketNewsFeedService {
 
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                return NewsFetchResult(emptyList(), "Backend Proxy", false, "HTTP_${response.code}", "HTTP error ${response.code}")
+                return NewsFetchResult(emptyList(), "Backend Proxy", false, "HTTP_${response.code}", errorMessage = "HTTP error ${response.code}")
             }
 
             val body = response.body?.string() ?: return NewsFetchResult(emptyList(), "Backend Proxy", false, "EMPTY_BODY")
             val json = JSONObject(body)
             val status = json.optString("status", "")
             if (status != "success") {
-                return NewsFetchResult(emptyList(), "Backend Proxy", false, "ERROR", json.optString("message", "Unknown error"))
+                return NewsFetchResult(emptyList(), "Backend Proxy", false, "ERROR", errorMessage = json.optString("message", "Unknown error"))
             }
 
             val articlesArray = json.optJSONArray("articles") ?: return NewsFetchResult(emptyList(), "Backend Proxy", false, "NO_ARTICLES")
             val articles = mutableListOf<OptionBuyerNewsArticle>()
+            val now = System.currentTimeMillis()
 
             for (i in 0 until articlesArray.length()) {
                 val item = articlesArray.getJSONObject(i)
+                val pubMs = item.optLong("publishedTimestampMs", 0L)
+                val isRecent = pubMs > 0 && (now - pubMs) <= BREAKING_WINDOW_MS
+                val rawBreaking = item.optBoolean("isBreaking", false)
+                val isBreaking = rawBreaking && isRecent
+
+                val sentimentScore = if (item.has("sentimentScore")) item.optInt("sentimentScore", 70) else item.optInt("confidencePercent", 70)
+
                 articles.add(
                     OptionBuyerNewsArticle(
                         id = item.optString("id", "news_$i"),
                         headline = item.optString("headline", ""),
                         source = item.optString("source", "Market Wire"),
                         publishedTime = item.optString("publishedTime", "Today"),
+                        publishedTimestampMs = pubMs,
                         summary = item.optString("summary", ""),
                         category = item.optString("category", "ALL"),
-                        isBreaking = item.optBoolean("isBreaking", false),
+                        isBreaking = isBreaking,
                         affectedMarket = item.optString("affectedMarket", "NIFTY 50"),
                         impact = item.optString("impact", "NEUTRAL"),
                         impactStrength = item.optString("impactStrength", "MEDIUM"),
                         optionBuyerBias = item.optString("optionBuyerBias", "WAIT"),
-                        confidencePercent = item.optInt("confidencePercent", 75),
-                        impactReason = item.optString("impactReason", "Watch for price confirmation"),
-                        url = if (item.has("url") && !item.isNull("url")) item.optString("url") else null
+                        tradeConfirmation = "REQUIRED",
+                        sentimentScore = sentimentScore,
+                        confidencePercent = sentimentScore,
+                        impactReason = item.optString("impactReason", "Watch for 15m candle breakout confirmation"),
+                        url = if (item.has("url") && !item.isNull("url")) item.optString("url") else null,
+                        freshness = "LIVE"
                     )
                 )
             }
@@ -133,7 +221,8 @@ object MarketNewsFeedService {
                 articles = articles,
                 source = json.optString("source", "Aggregated Financial Proxy"),
                 isSuccess = true,
-                status = "HEALTHY"
+                status = "HEALTHY",
+                freshness = "LIVE"
             )
         }
     }
@@ -167,14 +256,19 @@ object MarketNewsFeedService {
             }
         }
 
-        // Deduplicate articles by normalized title
-        val seenTitles = mutableSetOf<String>()
+        // Deduplicate articles by normalized key or URL
+        val seenKeys = mutableSetOf<String>()
         val uniqueArticles = mutableListOf<OptionBuyerNewsArticle>()
 
         for (article in allArticles) {
-            val key = article.headline.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "").take(35)
-            if (key.isNotEmpty() && !seenTitles.contains(key)) {
-                seenTitles.add(key)
+            val key = if (!article.url.isNullOrBlank()) {
+                article.url
+            } else {
+                article.headline.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "").take(35)
+            }
+
+            if (key.isNotEmpty() && !seenKeys.contains(key)) {
+                seenKeys.add(key)
                 uniqueArticles.add(article)
             }
         }
@@ -184,7 +278,8 @@ object MarketNewsFeedService {
                 articles = uniqueArticles,
                 source = "Direct RSS (${successfulSources.joinToString(", ")})",
                 isSuccess = true,
-                status = "HEALTHY"
+                status = "HEALTHY",
+                freshness = "LIVE"
             )
         } else {
             NewsFetchResult(
@@ -192,6 +287,7 @@ object MarketNewsFeedService {
                 source = "Direct RSS",
                 isSuccess = false,
                 status = "UNAVAILABLE",
+                freshness = "UNAVAILABLE",
                 errorMessage = "All direct RSS feeds failed"
             )
         }
@@ -358,43 +454,45 @@ object MarketNewsFeedService {
         val isHighImpact = highImpactKeywords.any { text.contains(it) }
         val impactStrength = if (isHighImpact) "HIGH" else if (bullishCount + bearishCount >= 2) "MEDIUM" else "LOW"
 
-        val breakingKeywords = listOf("breaking", "flash", "alert", "just in", "surges over", "plunges over", "emergency", "record high")
-        val isBreaking = breakingKeywords.any { text.contains(it) }
+        // Parse date and compute timestamp ms
+        var formattedTime = "Today"
+        var pubTimestampMs = 0L
 
-        var confidence = 70 + kotlin.math.min(25, (bullishCount + bearishCount) * 5 + (if (isHighImpact) 10 else 0))
-        if (confidence > 94) confidence = 94
+        if (pubDate.isNotBlank()) {
+            val inputFormats = listOf(
+                SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US),
+                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
+                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
+                SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
+            )
+            var parsedDate: Date? = null
+            for (fmt in inputFormats) {
+                try {
+                    parsedDate = fmt.parse(pubDate)
+                    if (parsedDate != null) break
+                } catch (_: Exception) {}
+            }
+            if (parsedDate != null) {
+                pubTimestampMs = parsedDate.time
+                val outFmt = SimpleDateFormat("hh:mm a", Locale.getDefault()).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+                }
+                formattedTime = "${outFmt.format(parsedDate)} IST"
+            }
+        }
+
+        // Breaking News Rule: Must be within last 60 mins AND have breaking keywords
+        val isRecent = pubTimestampMs > 0 && (System.currentTimeMillis() - pubTimestampMs) <= BREAKING_WINDOW_MS
+        val breakingKeywords = listOf("breaking", "flash", "alert", "just in", "surges over", "plunges over", "emergency", "rate hike", "rate cut", "circuit breaker")
+        val isBreaking = isRecent && breakingKeywords.any { text.contains(it) }
+
+        var sentimentScore = 70 + kotlin.math.min(25, (bullishCount + bearishCount) * 5 + (if (isHighImpact) 10 else 0))
+        if (sentimentScore > 94) sentimentScore = 94
 
         val impactReason = when (impact) {
             "BULLISH" -> "Positive momentum catalyst in $affectedMarket. Option buyers may monitor for CE entry setup on 15m candle breakout above resistance."
             "BEARISH" -> "Overhead supply pressure in $affectedMarket. Option buyers may monitor for PE entry setup if key support fails."
             else -> "Balanced sentiment. Wait for opening range resolution and Option Chain OI accumulation before entering."
-        }
-
-        var formattedTime = "Today"
-        if (pubDate.isNotBlank()) {
-            try {
-                val inputFormats = listOf(
-                    SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US),
-                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
-                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
-                    SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
-                )
-                var parsedDate: Date? = null
-                for (fmt in inputFormats) {
-                    try {
-                        parsedDate = fmt.parse(pubDate)
-                        if (parsedDate != null) break
-                    } catch (_: Exception) {}
-                }
-                if (parsedDate != null) {
-                    val outFmt = SimpleDateFormat("hh:mm a", Locale.getDefault()).apply {
-                        timeZone = TimeZone.getTimeZone("Asia/Kolkata")
-                    }
-                    formattedTime = "${outFmt.format(parsedDate)} IST"
-                }
-            } catch (_: Exception) {
-                formattedTime = "Today"
-            }
         }
 
         val id = "news_" + title.hashCode().toString().replace("-", "n")
@@ -404,6 +502,7 @@ object MarketNewsFeedService {
             headline = title,
             source = sourceName,
             publishedTime = formattedTime,
+            publishedTimestampMs = pubTimestampMs,
             summary = if (desc.length > 260) desc.take(257) + "..." else if (desc.isNotBlank()) desc else title,
             category = category,
             isBreaking = isBreaking,
@@ -411,9 +510,12 @@ object MarketNewsFeedService {
             impact = impact,
             impactStrength = impactStrength,
             optionBuyerBias = optionBuyerBias,
-            confidencePercent = confidence,
+            tradeConfirmation = "REQUIRED",
+            sentimentScore = sentimentScore,
+            confidencePercent = sentimentScore,
             impactReason = impactReason,
-            url = link.ifBlank { null }
+            url = link.ifBlank { null },
+            freshness = "LIVE"
         )
     }
 }
