@@ -192,7 +192,7 @@ class DhanBrokerService(
     }
 
     override suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> {
-        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.success(emptyList())
+        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.failure(Exception("Dhan account is not connected."))
 
         return runCatching {
             val response = api.getHoldings()
@@ -217,7 +217,7 @@ class DhanBrokerService(
                 } ?: emptyList()
             } else if (response.code() == 401 || response.code() == 403) {
                 android.util.Log.w("DhanBrokerService", "Holdings fetch: Dhan token expired (HTTP ${response.code()})")
-                emptyList()
+                throw Exception("Token expired (HTTP ${response.code()})")
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")
@@ -226,7 +226,7 @@ class DhanBrokerService(
     }
 
     override suspend fun getOrders(): Result<List<OrderEntity>> {
-        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.success(emptyList())
+        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.failure(Exception("Dhan account is not connected."))
 
         return runCatching {
             val response = api.getOrders()
@@ -257,7 +257,7 @@ class DhanBrokerService(
                 } ?: emptyList()
             } else if (response.code() == 401 || response.code() == 403) {
                 android.util.Log.w("DhanBrokerService", "Orders fetch: Dhan token expired (HTTP ${response.code()})")
-                emptyList()
+                throw Exception("Token expired (HTTP ${response.code()})")
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 throw Exception("API Error ${response.code()}: $errorBody")
@@ -266,7 +266,7 @@ class DhanBrokerService(
     }
 
     suspend fun getTrades(): Result<List<DhanTradeItem>> {
-        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.success(emptyList())
+        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.failure(Exception("Dhan account is not connected."))
 
         return runCatching {
             val response = api.getTrades()
@@ -471,7 +471,7 @@ class DhanBrokerService(
     }
 
     override suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> {
-        return Result.success(emptyList())
+        return Result.failure(Exception("Operation not supported or not implemented by Dhan integration"))
     }
 
     override suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> {
@@ -483,10 +483,10 @@ class DhanBrokerService(
     }
     
     suspend fun searchInstrument(query: String): Result<List<WatchlistItem>> {
-        return Result.success(emptyList())
+        return Result.failure(Exception("Operation not supported or not implemented by Dhan integration"))
     }
 
-    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> {
-        return Result.success(emptyList())
+    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.data.model.HistoricalCandle>> {
+        return Result.failure(Exception("Operation not supported or not implemented by Dhan integration"))
     }
 }

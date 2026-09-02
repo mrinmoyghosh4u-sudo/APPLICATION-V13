@@ -44,7 +44,7 @@ class UpstoxMarketDataService(
         private const val RECONNECT_STALE_MS = 45_000L // Reconnect if stale > 45s
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + Job())
+    private val scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var webSocket: WebSocket? = null
     private val wsMutex = Mutex()
 
@@ -187,51 +187,6 @@ class UpstoxMarketDataService(
         return if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
     }
 
-    private fun startRestPolling() {
-        if (restPollingJob?.isActive == true) return
-        restPollingJob = scope.launch {
-            while (isConfigured()) {
-                if (!isConnectionLive()) {
-                    try {
-                        val symbolsToFetch = if (subscribedInstrumentKeys.isNotEmpty()) {
-                            subscribedInstrumentKeys.map { UpstoxSymbolMapper.fromUpstoxInstrumentKey(it).first }
-                        } else {
-                            listOf(
-                                UpstoxSymbolMapper.KEY_NIFTY_50,
-                                UpstoxSymbolMapper.KEY_BANK_NIFTY,
-                                UpstoxSymbolMapper.KEY_FIN_NIFTY,
-                                UpstoxSymbolMapper.KEY_MIDCP_NIFTY
-                            )
-                        }
-                        val quotes = getMarketQuotes(symbolsToFetch).getOrNull()
-                        if (quotes != null) {
-                            val now = System.currentTimeMillis()
-                            for (q in quotes) {
-                                if (q.ltp > 0.0) {
-                                    // REST Quote Fallback isolation: update tick store with REST state (snapshot only)
-                                    com.example.data.model.MarketDataStore.updateTick(
-                                        com.example.data.model.RealTimePriceTick(
-                                            symbol = q.symbol, 
-                                            price = q.ltp, 
-                                            timestamp = now, 
-                                            source = "upstox",
-                                            state = "SNAPSHOT",
-                                            isSnapshot = true
-                                        )
-                                    )
-                                }
-                            }
-                            // REST polling MUST NOT mark WebSocket state as LIVE or set hasFirstTick = true
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "[UPSTOX_REST_POLL_WARN] Upstox REST polling error: ${e.message}")
-                    }
-                }
-                delay(5000L)
-            }
-        }
-    }
-
     suspend fun connect() = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             _connectionState.value = "NOT_CONFIGURED"
@@ -239,11 +194,11 @@ class UpstoxMarketDataService(
             return@withContext
         }
         reconnectJob?.cancel()
-        restPollingJob?.cancel()
+        
         backoffDelayMs = 1000L
         hasFirstTick = false
         lastTickReceivedTime = 0L
-        startRestPolling()
+        
         connectWebSocket()
     }
 
@@ -526,7 +481,7 @@ class UpstoxMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
-        restPollingJob?.cancel()
+        
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         isConnected = false
@@ -602,7 +557,11 @@ class UpstoxMarketDataService(
             chainData.forEach { item ->
                 val strike = item.strikePrice ?: return@forEach
                 val strikeItem = strikesMap.getOrPut(strike) {
-                    OptionStrikeItem(strikePrice = strike)
+                    OptionStrikeItem(
+                        strikePrice = strike,
+                        expiry = item.expiry ?: expiry,
+                        underlying = symbol
+                    )
                 }
 
                 val callOpt = item.callOptions
@@ -674,34 +633,36 @@ class UpstoxMarketDataService(
         interval: String = "15m",
         fromDate: String = "",
         toDate: String = ""
-    ): Result<List<CandleData>> = withContext(Dispatchers.IO) {
+    ): Result<List<com.example.data.model.HistoricalCandle>> = withContext(Dispatchers.IO) {
         runCatching {
             if (!isConfigured()) throw Exception("Upstox credentials not configured")
             val auth = getAuthHeader()
             val instKey = UpstoxSymbolMapper.toUpstoxInstrumentKey(symbol)
 
+            var apiUnit = "minute"
             val apiInterval = when (interval.lowercase(Locale.ENGLISH)) {
-                "1m", "1min", "1minute" -> "1minute"
-                "5m", "5min", "5minute" -> "5minute"
-                "15m", "15min", "15minute" -> "15minute"
-                "30m", "30min", "30minute" -> "30minute"
-                "1d", "day", "daily" -> "day"
-                "1w", "week", "weekly" -> "week"
-                "1mth", "month", "monthly" -> "month"
-                else -> "15minute"
+                "1m", "1min", "1minute" -> { apiUnit = "minute"; "1" }
+                "5m", "5min", "5minute" -> { apiUnit = "minute"; "5" }
+                "15m", "15min", "15minute" -> { apiUnit = "minute"; "15" }
+                "30m", "30min", "30minute" -> { apiUnit = "minute"; "30" }
+                "1d", "day", "daily" -> { apiUnit = "day"; "1" }
+                "1w", "week", "weekly" -> { apiUnit = "week"; "1" }
+                "1mth", "month", "monthly" -> { apiUnit = "month"; "1" }
+                else -> { apiUnit = "minute"; "15" }
             }
 
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val toDateStr = if (toDate.isNotBlank()) toDate else sdf.format(Date())
             val fromDateStr = if (fromDate.isNotBlank()) fromDate else {
                 val cal = java.util.Calendar.getInstance()
-                cal.add(java.util.Calendar.DAY_OF_YEAR, -10)
+                cal.add(java.util.Calendar.DAY_OF_YEAR, -5)
                 sdf.format(cal.time)
             }
 
             val response = upstoxApi.getHistoricalCandles(
                 token = auth,
                 instrumentKey = instKey,
+                unit = apiUnit,
                 interval = apiInterval,
                 toDate = toDateStr,
                 fromDate = fromDateStr
@@ -713,12 +674,25 @@ class UpstoxMarketDataService(
 
             body.data.candles.mapNotNull { row ->
                 if (row.size >= 5) {
-                    val open = (row[1] as? Number)?.toFloat() ?: 0f
-                    val high = (row[2] as? Number)?.toFloat() ?: 0f
-                    val low = (row[3] as? Number)?.toFloat() ?: 0f
-                    val close = (row[4] as? Number)?.toFloat() ?: 0f
-                    val volume = if (row.size >= 6) (row[5] as? Number)?.toFloat() ?: 0f else 0f
-                    CandleData(open = open, high = high, low = low, close = close, volume = volume)
+                    val timeStr = row[0].toString()
+                    var timestamp = 0L
+                    try {
+                        val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.getDefault())
+                        val d = format.parse(timeStr)
+                        if (d != null) timestamp = d.time
+                    } catch (e: Exception) {
+                        try {
+                            val format = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                            val d = format.parse(timeStr)
+                            if (d != null) timestamp = d.time
+                        } catch (e2: Exception) {}
+                    }
+                    val open = (row[1] as? Number)?.toDouble() ?: 0.0
+                    val high = (row[2] as? Number)?.toDouble() ?: 0.0
+                    val low = (row[3] as? Number)?.toDouble() ?: 0.0
+                    val close = (row[4] as? Number)?.toDouble() ?: 0.0
+                    val volume = if (row.size >= 6) (row[5] as? Number)?.toLong() ?: 0L else 0L
+                    com.example.data.model.HistoricalCandle(time = timeStr, timestamp = timestamp, open = open, high = high, low = low, close = close, volume = volume)
                 } else null
             }.reversed()
         }

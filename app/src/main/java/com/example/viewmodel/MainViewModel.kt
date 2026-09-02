@@ -229,9 +229,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repository.checkAndSeedInitialData()
                 brokerAuthManager.initialize()
-                if (sessionManager.isFyersConnected && !sessionManager.fyersAccessToken.isNullOrBlank()) {
-                    runCatching { brokerManager.fyersMarketDataService.connect() }
-                }
+                runCatching { brokerManager.marketDataEngine.retryConnection() }
             } catch(e: Exception) { 
                 e.printStackTrace() 
             } finally {
@@ -344,6 +342,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (onlyWithLtp.isNotEmpty()) {
                         repository.updateWatchlistQuotes(onlyWithLtp)
                     }
+                }
+            }
+        }
+        
+        viewModelScope.launch {
+            com.example.data.model.MarketDataStore.ticks.collect { liveData ->
+                val currentStrikes = _optionStrikes.value
+                if (currentStrikes.isEmpty()) return@collect
+                var changed = false
+                val newStrikes = currentStrikes.map { strike ->
+                    var newStrike = strike
+                    
+                    val callLive = liveData.values.find { liveItem ->
+                        val liveSymbol = liveItem.symbol.uppercase().trim()
+                        val callSymbol = strike.callSymbol.uppercase().trim()
+                        liveSymbol == callSymbol || liveSymbol.endsWith("|$callSymbol") || liveSymbol.substringAfter("|") == callSymbol
+                    }
+                    if (callLive != null && callLive.price > 0.0 && callLive.price != strike.callLtp) {
+                        newStrike = newStrike.copy(callLtp = callLive.price)
+                        changed = true
+                    }
+                    
+                    val putLive = liveData.values.find { liveItem ->
+                        val liveSymbol = liveItem.symbol.uppercase().trim()
+                        val putSymbol = strike.putSymbol.uppercase().trim()
+                        liveSymbol == putSymbol || liveSymbol.endsWith("|$putSymbol") || liveSymbol.substringAfter("|") == putSymbol
+                    }
+                    if (putLive != null && putLive.price > 0.0 && putLive.price != newStrike.putLtp) {
+                        newStrike = newStrike.copy(putLtp = putLive.price)
+                        changed = true
+                    }
+                    
+                    newStrike
+                }
+                
+                if (changed) {
+                    _optionStrikes.value = newStrikes
                 }
             }
         }
@@ -1398,10 +1433,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
-
+            
+            // P0-3: Removed 5-second REST API Hammering
+            // Initial snapshot only, then fallback to slow periodic background sync for non-live data
+            syncMarketDataPipeline()
+            
             while (true) {
-                syncMarketDataPipeline()
-                kotlinx.coroutines.delay(5000L)
+                kotlinx.coroutines.delay(60000L) // 1 minute background sync interval for account/broker status
+                if (sessionManager.hasValidSession()) {
+                    runCatching { repository.syncWithBroker() }
+                }
             }
         }
     }
@@ -1413,8 +1454,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.syncWithBroker()
             }
 
-//             1. Fetch live quotes across all tracking symbols
+//             1. Fetch live quotes across all tracking symbols and SUBSCRIBE to live web sockets
             val symbols = getAllLiveTrackingSymbols()
+            
+            // Subscribe to live WebSocket feeds to replace the 5-second REST polling
+            brokerManager.marketDataEngine.subscribeToMarketData(symbols)
+            
+            // Only do one immediate REST snapshot on start to seed the UI immediately before WebSocket ticks arrive
             val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
             quotesRes.getOrNull()?.let { quotes ->
                 if (quotes.isNotEmpty()) {
@@ -1436,7 +1482,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val histRes = brokerManager.getHistoricalCandles(activeAlgoIndex, candleInterval)
                 histRes.getOrNull()?.let { candles ->
                     if (candles.isNotEmpty()) {
-                        com.example.util.indicators.CandleStore.setHistoricalCandleData(activeAlgoIndex, strategyTimeframe, candles)
+                        com.example.util.indicators.CandleStore.setRealHistoricalCandles(activeAlgoIndex, strategyTimeframe, candles)
                     }
                 }
             }
@@ -1449,6 +1495,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val strikes = optChainRes.getOrNull()
 
             if (!strikes.isNullOrEmpty()) {
+                strikes.forEach { strike ->
+                    if (strike.callSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.callSymbol.uppercase()] = targetOptionIndex
+                    if (strike.putSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.putSymbol.uppercase()] = targetOptionIndex
+                }
                 _optionStrikes.value = strikes
             }
 
@@ -1475,11 +1525,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val symbols = getAllLiveTrackingSymbols()
                 val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
-//                 quotesRes.getOrNull()?.let { quotes ->
-//                     if (quotes.isNotEmpty()) {
-//                         repository.updateWatchlistQuotes(quotes)
-//                     }
-//                 }
+                
+                // Force refresh the active option chain if selected
+                val activeOptIdx = _selectedOptionIndex.value
+                val activeOptExp = _selectedOptionExpiry.value
+                if (activeOptIdx.isNotBlank()) {
+                    val optChainRes = brokerManager.getOptionChain(activeOptIdx, activeOptExp, forceRefresh = true)
+                    val strikes = optChainRes.getOrNull()
+                    if (!strikes.isNullOrEmpty()) {
+                        strikes.forEach { strike ->
+                            if (strike.callSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.callSymbol.uppercase()] = activeOptIdx
+                            if (strike.putSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.putSymbol.uppercase()] = activeOptIdx
+                        }
+                        _optionStrikes.value = strikes
+                    }
+                }
+                
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             }
         }
@@ -1512,11 +1573,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val symbols = getAllLiveTrackingSymbols()
                 val quotesRes = brokerManager.marketDataEngine.getMarketQuotes(symbols)
-//                 quotesRes.getOrNull()?.let { quotes ->
-//                     if (quotes.isNotEmpty()) {
-//                         repository.updateWatchlistQuotes(quotes)
-//                     }
-//                 }
+                
+                // Force refresh the active option chain if selected
+                val activeOptIdx = _selectedOptionIndex.value
+                val activeOptExp = _selectedOptionExpiry.value
+                if (activeOptIdx.isNotBlank()) {
+                    val optChainRes = brokerManager.getOptionChain(activeOptIdx, activeOptExp, forceRefresh = true)
+                    val strikes = optChainRes.getOrNull()
+                    if (!strikes.isNullOrEmpty()) {
+                        strikes.forEach { strike ->
+                            if (strike.callSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.callSymbol.uppercase()] = activeOptIdx
+                            if (strike.putSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.putSymbol.uppercase()] = activeOptIdx
+                        }
+                        _optionStrikes.value = strikes
+                    }
+                }
+                
                 _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
             } finally {
                 _isRefreshing.value = false
@@ -1551,15 +1623,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         fetchOptionChain()
     }
 
-    private fun fetchOptionChain() {
+    private fun fetchOptionChain(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             val indexName = _selectedOptionIndex.value
             val expiry = _selectedOptionExpiry.value
-            val res = brokerManager.getOptionChain(indexName, expiry)
+            val res = brokerManager.getOptionChain(indexName, expiry, forceRefresh)
             val strikes = res.getOrNull()
             
             if (strikes != null) {
+                strikes.forEach { strike ->
+                    if (strike.callSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.callSymbol.uppercase()] = indexName
+                    if (strike.putSymbol.isNotBlank()) com.example.util.InstrumentMapUtil.symbolToUnderlyingCache[strike.putSymbol.uppercase()] = indexName
+                }
                 _optionStrikes.value = strikes
+                
+                // Subscribe to live WebSocket feeds for these options
+                val optionSymbols = strikes.flatMap { strike ->
+                    listOfNotNull(
+                        strike.callSymbol.takeIf { it.isNotBlank() },
+                        strike.putSymbol.takeIf { it.isNotBlank() }
+                    )
+                }
+                if (optionSymbols.isNotEmpty()) {
+                    brokerManager.marketDataEngine.subscribeToMarketData(optionSymbols)
+                }
             } else {
                 _optionStrikes.value = emptyList()
             }
@@ -1572,9 +1659,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (res.isSuccess) {
                 val candles = res.getOrDefault(emptyList())
                 if (candles.isNotEmpty()) {
-                    com.example.util.indicators.CandleStore.setHistoricalCandleData(indexName, interval, candles)
+                    com.example.util.indicators.CandleStore.setRealHistoricalCandles(indexName, interval, candles)
                 }
-                onResult(candles)
+                val uiCandles = candles.map { 
+                    com.example.ui.components.CandleData(open = it.open.toFloat(), high = it.high.toFloat(), low = it.low.toFloat(), close = it.close.toFloat(), volume = it.volume.toFloat())
+                }
+                onResult(uiCandles)
             } else {
                 onResult(emptyList())
             }
@@ -1586,7 +1676,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         side: String,
         orderType: String,
         qty: Int,
-        price: Double
+        price: Double,
+        strikePrice: Double = 0.0,
+        expiry: String = "",
+        underlying: String = ""
     ) {
         if (_isPlacingOrder.value) return
         _isPlacingOrder.value = true
@@ -1657,7 +1750,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     status = "PENDING",
                     time = timeStr,
                     securityId = secId,
-                    symbolToken = token
+                    symbolToken = token,
+                    strike = strikePrice,
+                    expiry = expiry,
+                    underlying = underlying,
+                    
                 )
                 val realOrderId = repository.placeOrder(order)
                 val notif = appPrefs.getNotificationSettings()

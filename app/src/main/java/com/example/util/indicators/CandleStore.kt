@@ -97,6 +97,21 @@ fun normalizeTimeframe(timeframe: String): String {
     /**
      * Converts UI CandleData list to RealCandle list and stores it.
      */
+    fun setRealHistoricalCandles(symbolOrKey: String, timeframe: String, candles: List<com.example.data.model.HistoricalCandle>) {
+        if (candles.isEmpty()) return
+        val realCandles = candles.map { c ->
+            RealCandle(
+                timestamp = c.timestamp,
+                open = c.open,
+                high = c.high,
+                low = c.low,
+                close = c.close,
+                volume = c.volume.toDouble()
+            )
+        }
+        setHistoricalCandles(symbolOrKey, timeframe, realCandles)
+    }
+
     fun setHistoricalCandleData(symbolOrKey: String, timeframe: String, candles: List<CandleData>) {
         if (candles.isEmpty()) return
         val intervalMs = getTimeframeIntervalMs(timeframe)

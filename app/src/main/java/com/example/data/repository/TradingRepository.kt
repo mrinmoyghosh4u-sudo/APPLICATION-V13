@@ -347,9 +347,9 @@ class TradingRepository(
         return com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(symbol, liveExpiries)
     }
 
-    suspend fun getOptionChainStrikes(symbol: String = "NIFTY", expiry: String = ""): List<OptionStrikeItem> {
+    suspend fun getOptionChainStrikes(symbol: String = "NIFTY", expiry: String = "", forceRefresh: Boolean = false): List<OptionStrikeItem> {
         val live = runCatching {
-            brokerManager?.getOptionChain(symbol, expiry)?.getOrNull()
+            brokerManager?.getOptionChain(symbol, expiry, forceRefresh)?.getOrNull()
         }.getOrNull()
         if (!live.isNullOrEmpty()) return live
         return emptyList()

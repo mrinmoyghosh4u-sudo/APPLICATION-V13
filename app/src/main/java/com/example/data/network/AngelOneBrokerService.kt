@@ -92,74 +92,11 @@ class AngelOneBrokerService(
         }
     }
 
-    override suspend fun placeOrder(order: OrderEntity): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
-            val token = if (order.symbolToken.isNotBlank()) order.symbolToken else {
-                instrumentMaster.resolveAngelToken(order.symbol, order.exchange) ?: ""
-            }
-            if (token.isBlank()) {
-                throw Exception("Cannot resolve Angel One symbol token for ${order.symbol} on ${order.exchange}")
-            }
+    override suspend fun placeOrder(order: OrderEntity): Result<String> = Result.failure(Exception("Orders must be executed via Dhan only."))
 
-            val req = AngelPlaceOrderRequest(
-                variety = "NORMAL",
-                tradingSymbol = order.symbol,
-                symbolToken = token,
-                transactionType = order.side.uppercase(),
-                exchange = InstrumentMasterService.normalizeExchange(order.exchange),
-                orderType = order.orderType.uppercase(),
-                productType = order.productType.uppercase(),
-                duration = "DAY",
-                price = order.price.toString(),
-                quantity = order.qty.toString()
-            )
-            val res = api.placeOrder(req)
-            if (res.isSuccessful && res.body()?.status == true) {
-                res.body()?.data?.orderId ?: throw Exception("No order ID returned by Angel One API")
-            } else {
-                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Order placement failed"
-                Log.e("AngelOneBrokerService", "PlaceOrder API Error (Status ${res.code()}): $errorMsg")
-                throw Exception("API Error ${res.code()}: $errorMsg")
-            }
-        }
-    }
+    override suspend fun modifyOrder(orderId: String, newPrice: Double, newQty: Int, orderType: String): Result<Boolean> = Result.failure(Exception("Orders must be modified via Dhan only."))
 
-    override suspend fun modifyOrder(orderId: String, newPrice: Double, newQty: Int, orderType: String): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
-            val req = AngelModifyOrderRequest(
-                orderId = orderId,
-                variety = "NORMAL",
-                orderType = orderType.uppercase(),
-                price = newPrice.toString(),
-                quantity = newQty.toString()
-            )
-            val res = api.modifyOrder(req)
-            if (res.isSuccessful && res.body()?.status == true) {
-                true
-            } else {
-                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Modify order failed"
-                Log.e("AngelOneBrokerService", "ModifyOrder API Error (Status ${res.code()}): $errorMsg")
-                throw Exception("API Error ${res.code()}: $errorMsg")
-            }
-        }
-    }
-
-    override suspend fun cancelOrder(orderId: String): Result<Boolean> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
-            val req = mapOf("variety" to "NORMAL", "orderId" to orderId)
-            val res = api.cancelOrder(req)
-            if (res.isSuccessful && res.body()?.status == true) {
-                true
-            } else {
-                val errorMsg = res.body()?.message ?: res.errorBody()?.string() ?: "Cancel order failed"
-                Log.e("AngelOneBrokerService", "CancelOrder API Error (Status ${res.code()}): $errorMsg")
-                throw Exception("API Error ${res.code()}: $errorMsg")
-            }
-        }
-    }
+    override suspend fun cancelOrder(orderId: String): Result<Boolean> = Result.failure(Exception("Orders must be cancelled via Dhan only."))
 
     override suspend fun getHoldings(): Result<List<PortfolioHoldingEntity>> = withContext(Dispatchers.IO) {
         runCatching {
@@ -355,7 +292,7 @@ class AngelOneBrokerService(
         }
     }
 
-    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.ui.components.CandleData>> = withContext(Dispatchers.IO) {
+    override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.data.model.HistoricalCandle>> = withContext(Dispatchers.IO) {
         runCatching {
             if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
             val ex = when {
@@ -390,12 +327,27 @@ class AngelOneBrokerService(
                 val candles = data.mapNotNull { row ->
                     try {
                         if (row.size >= 6) {
-                            com.example.ui.components.CandleData(
-                                open = row[1].toString().toFloat(),
-                                high = row[2].toString().toFloat(),
-                                low = row[3].toString().toFloat(),
-                                close = row[4].toString().toFloat(),
-                                volume = row[5].toString().toFloat()
+                            val timeStr = row[0].toString()
+                            var timestamp = 0L
+                            try {
+                                val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.getDefault())
+                                val d = format.parse(timeStr)
+                                if (d != null) timestamp = d.time
+                            } catch (e: Exception) {
+                                try {
+                                    val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                    val d = format.parse(timeStr)
+                                    if (d != null) timestamp = d.time
+                                } catch (e2: Exception) {}
+                            }
+                            com.example.data.model.HistoricalCandle(
+                                time = timeStr,
+                                timestamp = timestamp,
+                                open = row[1].toString().toDouble(),
+                                high = row[2].toString().toDouble(),
+                                low = row[3].toString().toDouble(),
+                                close = row[4].toString().toDouble(),
+                                volume = row[5].toString().toLong()
                             )
                         } else null
                     } catch (e: Exception) {

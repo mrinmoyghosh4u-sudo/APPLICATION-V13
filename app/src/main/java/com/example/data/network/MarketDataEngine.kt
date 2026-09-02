@@ -108,7 +108,19 @@ class MarketDataEngine(
     // 1. LIVE OPTION CHAIN
     // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One)
     // =========================================================================
-    suspend fun getOptionChain(symbol: String, expiry: String? = null): Result<OptionChain> {
+    suspend fun getOptionChain(symbol: String, expiry: String? = null, forceRefresh: Boolean = false): Result<OptionChain> {
+        val activeProvider = com.example.data.model.MarketDataStore.providerState.value.provider
+        val targetExpiry = expiry ?: ""
+        
+        if (!forceRefresh) {
+            val cached = com.example.data.model.OptionChainCache.get(symbol, targetExpiry, activeProvider)
+            if (cached != null) {
+                return Result.success(cached)
+            }
+        }
+        
+        com.example.data.model.OptionChainCache.setLoading()
+        
         val providers = getProviderPriorityOrder()
         
         for (provider in providers) {
@@ -116,12 +128,14 @@ class MarketDataEngine(
                 com.example.data.model.MarketDataProviders.UPSTOX -> {
                     val upstoxService = upstoxMarketDataService
                     if (upstoxService?.isConfigured() == true) {
-                        val upstoxRes = upstoxService.getOptionChain(symbol, expiry ?: "")
+                        val upstoxRes = upstoxService.getOptionChain(symbol, targetExpiry)
                         if (upstoxRes.isSuccess) {
                             val strikes = upstoxRes.getOrDefault(emptyList())
                             if (strikes.isNotEmpty()) {
-                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                                val underlyingPrice = com.example.data.model.MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                val chain = OptionChain(symbol = symbol, expiry = targetExpiry, underlyingLtp = underlyingPrice, strikes = strikes)
+                                com.example.data.model.OptionChainCache.update(chain, provider)
+                                return Result.success(chain)
                             }
                         }
                     }
@@ -129,12 +143,14 @@ class MarketDataEngine(
                 com.example.data.model.MarketDataProviders.FYERS -> {
                     val fyersService = fyersMarketDataService
                     if (fyersService?.isConfigured() == true) {
-                        val fyersRes = fyersService.getOptionChain(symbol, expiry ?: "")
+                        val fyersRes = fyersService.getOptionChain(symbol, targetExpiry)
                         if (fyersRes.isSuccess) {
                             val strikes = fyersRes.getOrDefault(emptyList())
                             if (strikes.isNotEmpty()) {
-                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                                val underlyingPrice = com.example.data.model.MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                val chain = OptionChain(symbol = symbol, expiry = targetExpiry, underlyingLtp = underlyingPrice, strikes = strikes)
+                                com.example.data.model.OptionChainCache.update(chain, provider)
+                                return Result.success(chain)
                             }
                         }
                     }
@@ -142,19 +158,22 @@ class MarketDataEngine(
                 com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
                     val angelService = angelMarketDataService
                     if (angelService != null) {
-                        val angelRes = angelService.getOptionChain(symbol, expiry ?: "")
+                        val angelRes = angelService.getOptionChain(symbol, targetExpiry)
                         if (angelRes.isSuccess) {
                             val strikes = angelRes.getOrDefault(emptyList())
                             if (strikes.isNotEmpty()) {
-                                val underlyingPrice = MarketDataStore.getTick(symbol)?.price ?: 0.0
-                                return Result.success(OptionChain(symbol = symbol, expiry = expiry ?: "", underlyingLtp = underlyingPrice, strikes = strikes))
+                                val underlyingPrice = com.example.data.model.MarketDataStore.getTick(symbol)?.price ?: 0.0
+                                val chain = OptionChain(symbol = symbol, expiry = targetExpiry, underlyingLtp = underlyingPrice, strikes = strikes)
+                                com.example.data.model.OptionChainCache.update(chain, provider)
+                                return Result.success(chain)
                             }
                         }
                     }
                 }
             }
         }
-
+        
+        com.example.data.model.OptionChainCache.setError()
         return Result.failure(Exception("REAL OPTION CHAIN UNAVAILABLE"))
     }
 
@@ -164,7 +183,6 @@ class MarketDataEngine(
     // =========================================================================
     suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
         val providers = getProviderPriorityOrder()
-
         for (provider in providers) {
             when (provider) {
                 com.example.data.model.MarketDataProviders.UPSTOX -> {
@@ -172,17 +190,7 @@ class MarketDataEngine(
                     if (upstoxService?.isConfigured() == true) {
                         val upstoxRes = upstoxService.getHistoricalCandles(symbol, interval)
                         if (upstoxRes.isSuccess) {
-                            val candles = upstoxRes.getOrDefault(emptyList()).map {
-                                HistoricalCandle(
-                                    time = "",
-                                    timestamp = 0L,
-                                    open = it.open.toDouble(),
-                                    high = it.high.toDouble(),
-                                    low = it.low.toDouble(),
-                                    close = it.close.toDouble(),
-                                    volume = it.volume.toLong()
-                                )
-                            }
+                            val candles = upstoxRes.getOrDefault(emptyList())
                             if (candles.isNotEmpty()) {
                                 return Result.success(candles)
                             }
@@ -194,17 +202,7 @@ class MarketDataEngine(
                     if (fyersService?.isConfigured() == true) {
                         val fyersRes = fyersService.getHistoricalCandles(symbol, interval, "", "")
                         if (fyersRes.isSuccess) {
-                            val candles = fyersRes.getOrDefault(emptyList()).map {
-                                HistoricalCandle(
-                                    time = "",
-                                    timestamp = 0L,
-                                    open = it.open.toDouble(),
-                                    high = it.high.toDouble(),
-                                    low = it.low.toDouble(),
-                                    close = it.close.toDouble(),
-                                    volume = it.volume.toLong()
-                                )
-                            }
+                            val candles = fyersRes.getOrDefault(emptyList())
                             if (candles.isNotEmpty()) {
                                 return Result.success(candles)
                             }
@@ -213,20 +211,10 @@ class MarketDataEngine(
                 }
                 com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
                     val angelService = angelMarketDataService
-                    if (angelService != null) {
+                    if (angelService?.isConfigured() == true) {
                         val angelRes = angelService.getHistoricalCandles(symbol, interval)
                         if (angelRes.isSuccess) {
-                            val candles = angelRes.getOrDefault(emptyList()).map {
-                                HistoricalCandle(
-                                    time = "",
-                                    timestamp = 0L,
-                                    open = it.open.toDouble(),
-                                    high = it.high.toDouble(),
-                                    low = it.low.toDouble(),
-                                    close = it.close.toDouble(),
-                                    volume = it.volume.toLong()
-                                )
-                            }
+                            val candles = angelRes.getOrDefault(emptyList())
                             if (candles.isNotEmpty()) {
                                 return Result.success(candles)
                             }
@@ -235,22 +223,17 @@ class MarketDataEngine(
                 }
             }
         }
-
-        return Result.failure(Exception("REAL HISTORICAL DATA UNAVAILABLE"))
+        return Result.failure(Exception("Historical data fetch failed from all providers"))
     }
 
-    // =========================================================================
-    // 3. MARKET BREADTH
-    // =========================================================================
     suspend fun getMarketBreadth(): Result<MarketBreadth> {
-        val symbols = listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "CRUDEOIL M")
-        val quotesRes = getMarketQuotes(symbols)
-        if (quotesRes.isSuccess && quotesRes.getOrDefault(emptyList()).isNotEmpty()) {
+        val quotesRes = getMarketQuotes(listOf("NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"))
+        if (quotesRes.isSuccess) {
             val quotes = quotesRes.getOrDefault(emptyList())
             var adv = 0
             var dec = 0
             var unch = 0
-            quotes.forEach { item ->
+            for (item in quotes) {
                 when {
                     item.change > 0.0 -> adv++
                     item.change < 0.0 -> dec++
@@ -383,6 +366,36 @@ class MarketDataEngine(
             CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
         }
         angelMarketDataService?.reconnect()
+    }
+
+    suspend fun subscribeToMarketData(symbols: List<String>) {
+        if (symbols.isEmpty()) return
+        val providers = getProviderPriorityOrder()
+        for (provider in providers) {
+            when (provider) {
+                com.example.data.model.MarketDataProviders.UPSTOX -> {
+                    if (upstoxMarketDataService?.isConfigured() == true) {
+                        upstoxMarketDataService?.subscribeToMarketData(symbols)
+                    }
+                }
+                com.example.data.model.MarketDataProviders.FYERS -> {
+                    if (fyersMarketDataService?.isConfigured() == true) {
+                        fyersMarketDataService?.subscribeToMarketData(symbols)
+                    }
+                }
+                com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
+                    val angelService = angelMarketDataService
+                    if (angelService != null) {
+                        val tokenList = symbols.mapNotNull {
+                            angelService.instrumentMaster.resolveAngelToken(it, "NSE")
+                        }
+                        if (tokenList.isNotEmpty()) {
+                            angelService.subscribeToTokens(1, tokenList)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // =========================================================================

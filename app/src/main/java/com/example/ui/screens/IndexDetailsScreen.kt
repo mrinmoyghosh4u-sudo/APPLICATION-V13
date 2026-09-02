@@ -711,7 +711,10 @@ fun OptionChainTabContent(
                                             side = "BUY",
                                             orderType = "MARKET",
                                             qty = lotSize * scalpLotMultiplier,
-                                            price = strike.callLtp
+                                            price = strike.callLtp,
+                                            strikePrice = strike.strikePrice,
+                                            expiry = strike.expiry,
+                                            underlying = indexName
                                         )
                                     } else {
                                         onOpenOrderDialog(symbol, "BUY", strike.callLtp, lotSize)
@@ -785,7 +788,10 @@ fun OptionChainTabContent(
                                                 side = "BUY",
                                                 orderType = "MARKET",
                                                 qty = lotSize * scalpLotMultiplier,
-                                                price = strike.putLtp
+                                                price = strike.putLtp,
+                                                strikePrice = strike.strikePrice,
+                                                expiry = strike.expiry,
+                                                underlying = indexName
                                             )
                                         } else {
                                             onOpenOrderDialog(symbol, "BUY", strike.putLtp, lotSize)

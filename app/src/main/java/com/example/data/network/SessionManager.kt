@@ -269,12 +269,22 @@ class SessionManager(context: Context) {
         }
     }
 
+    private fun hashToken(input: String): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            val digest = md.digest(input.toByteArray(Charsets.UTF_8))
+            digest.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            input.hashCode().toString()
+        }
+    }
+
     fun markDhanTokenIdConsumed(token: String) {
-        prefs.edit().putBoolean("dhan_token_consumed_$token", true).apply()
+        prefs.edit().putBoolean("dhan_token_consumed_${hashToken(token)}", true).apply()
     }
 
     fun isDhanTokenIdConsumed(token: String): Boolean {
-        return prefs.getBoolean("dhan_token_consumed_$token", false)
+        return prefs.getBoolean("dhan_token_consumed_${hashToken(token)}", false)
     }
 
     // ==========================================

@@ -543,18 +543,31 @@ class InstrumentMasterService(
     fun resolveDhanSecurityId(symbol: String, exchange: String = "NSE"): String? {
         val uppercaseSymbol = symbol.uppercase().trim()
         
-        // Official Dhan Index Scrip IDs
-        when (uppercaseSymbol) {
+        val cleanSymbol = uppercaseSymbol
+            .removePrefix("NSE:")
+            .removePrefix("BSE:")
+            .removePrefix("MCX:")
+            .removePrefix("NFO:")
+            .removePrefix("BFO:")
+            .trim()
+           
+        when (cleanSymbol) {
             "NIFTY", "NIFTY 50", "NIFTY50", "13" -> return "13"
             "BANKNIFTY", "25" -> return "25"
             "FINNIFTY", "27" -> return "27"
             "MIDCPNIFTY", "31" -> return "31"
+            "SENSEX", "51" -> return "51"
+            "BANKEX", "17" -> return "17"
+            "CRUDEOIL" -> return "418042"
+            "CRUDEOIL M", "CRUDEOILM" -> return "418043"
         }
 
-        if (uppercaseSymbol.all { it.isDigit() }) return uppercaseSymbol
+        if (cleanSymbol.all { it.isDigit() }) return cleanSymbol
 
         val match = instrumentMap.values.find {
-            it.symbol.equals(uppercaseSymbol, ignoreCase = true) || it.name.equals(uppercaseSymbol, ignoreCase = true)
+            it.symbol.equals(cleanSymbol, ignoreCase = true) || it.name.equals(cleanSymbol, ignoreCase = true) ||
+            it.symbol.equals(cleanSymbol.replace(" ", ""), ignoreCase = true) ||
+            it.symbol.equals(cleanSymbol.replace(" ", "").replace("-", ""), ignoreCase = true)
         }
         return match?.token
     }

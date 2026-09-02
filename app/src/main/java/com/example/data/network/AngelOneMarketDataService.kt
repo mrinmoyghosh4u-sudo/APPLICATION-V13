@@ -28,14 +28,14 @@ import java.util.concurrent.TimeUnit
 class AngelOneMarketDataService(
     private val angelOneService: AngelOneBrokerService,
     private val sessionManager: SessionManager,
-    private val instrumentMaster: InstrumentMasterService,
+    val instrumentMaster: InstrumentMasterService,
     private val healthManager: ProviderHealthManager? = null
 ) {
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .build()
-    private val scope = CoroutineScope(Dispatchers.IO + Job())
+    private val scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     
     private val _connectionState = MutableStateFlow("DISCONNECTED")
     val connectionState: StateFlow<String> = _connectionState.asStateFlow()
@@ -297,7 +297,9 @@ class AngelOneMarketDataService(
                 })
             })
         }
-        ws.send(req.toString())
+                ws.send(req.toString())
+        isSubscribed = true
+        healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_ANGEL_ONE, currentSet.size)
         Log.d("SmartStream", "[SUBSCRIPTION_SENT] dynamic_tokens=${newTokens.size} exchangeType=$exchangeType")
     }
 
@@ -461,7 +463,7 @@ class AngelOneMarketDataService(
         connectWebSocket(force = true)
     }
 
-    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.ui.components.CandleData>> {
+    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.data.model.HistoricalCandle>> {
         val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         val cal = java.util.Calendar.getInstance()
         val toDate = format.format(cal.time)
@@ -516,7 +518,9 @@ class AngelOneMarketDataService(
                             callToken = ceOpt?.token ?: "",
                             putToken = peOpt?.token ?: "",
                             callSymbol = ceOpt?.symbol ?: "",
-                            putSymbol = peOpt?.symbol ?: ""
+                            putSymbol = peOpt?.symbol ?: "",
+                            expiry = expiry,
+                            underlying = symbol
                         )
                     }
                     return Result.success(strikes)
@@ -547,7 +551,9 @@ class AngelOneMarketDataService(
                             callToken = ceOpt?.token ?: "",
                             putToken = peOpt?.token ?: "",
                             callSymbol = ceOpt?.symbol ?: "",
-                            putSymbol = peOpt?.symbol ?: ""
+                            putSymbol = peOpt?.symbol ?: "",
+                            expiry = expiry,
+                            underlying = symbol
                         )
                     }.sortedBy { it.strikePrice }
                     return Result.success(strikes)

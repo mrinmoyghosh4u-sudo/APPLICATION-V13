@@ -195,6 +195,12 @@ object MarketDataStore {
         if (isFailoverActive && tick.source.equals(MarketDataSourceNames.MOCK, ignoreCase = true)) {
             return
         }
+        
+        val now = System.currentTimeMillis()
+        val tickTs = if (tick.timestamp > 0L) tick.timestamp else now
+        if (now - tickTs > STALE_THRESHOLD_MS) {
+            return // Reject ticks older than 30s
+        }
 
         val currentMap = _ticks.value.toMutableMap()
         currentMap[tick.symbol] = tick

@@ -37,59 +37,60 @@ interface UpstoxApi {
         @Header("Api-Version") apiVersion: String = "2.0"
     ): Response<UpstoxProfileResponse>
 
-    @GET("v2/market-quote/quotes")
+    @GET("v3/market-quote/quotes")
     suspend fun getMarketQuotes(
         @Header("Authorization") token: String,
         @Query("instrument_key") instrumentKeys: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxMarketQuotesResponse>
 
-    @GET("v2/market-quote/ohlc")
+    @GET("v3/market-quote/ohlc")
     suspend fun getOHLCQuotes(
         @Header("Authorization") token: String,
         @Query("instrument_key") instrumentKeys: String,
         @Query("interval") interval: String = "1d",
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxMarketQuotesResponse>
 
-    @GET("v2/market-quote/ltp")
+    @GET("v3/market-quote/ltp")
     suspend fun getLTPQuotes(
         @Header("Authorization") token: String,
         @Query("instrument_key") instrumentKeys: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxMarketQuotesResponse>
 
-    @GET("v2/option/chain")
+    @GET("v3/option/chain")
     suspend fun getOptionChain(
         @Header("Authorization") token: String,
         @Query("instrument_key") instrumentKey: String,
         @Query("expiry_date") expiryDate: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxOptionChainResponse>
 
-    @GET("v2/option/contract")
+    @GET("v3/option/contract")
     suspend fun getOptionContracts(
         @Header("Authorization") token: String,
         @Query("instrument_key") instrumentKey: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxOptionContractsResponse>
 
-    @GET("v2/historical-candle/{instrument_key}/{interval}/{to_date}/{from_date}")
+    @GET("v3/historical-candle/{instrument_key}/{unit}/{interval}/{to_date}/{from_date}")
     suspend fun getHistoricalCandles(
         @Header("Authorization") token: String,
         @Path("instrument_key") instrumentKey: String,
+        @Path("unit") unit: String,
         @Path("interval") interval: String,
         @Path("to_date") toDate: String,
         @Path("from_date") fromDate: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxHistoricalCandlesResponse>
 
-    @GET("v2/historical-candle/intraday/{instrument_key}/{interval}")
+    @GET("v3/historical-candle/intraday/{instrument_key}/{interval}")
     suspend fun getIntradayCandles(
         @Header("Authorization") token: String,
         @Path("instrument_key") instrumentKey: String,
         @Path("interval") interval: String,
-        @Header("Api-Version") apiVersion: String = "2.0"
+        @Header("Api-Version") apiVersion: String = "3.0"
     ): Response<UpstoxHistoricalCandlesResponse>
 
     @GET("v3/feed/market-data-feed/authorize")

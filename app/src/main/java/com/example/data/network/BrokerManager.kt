@@ -127,8 +127,8 @@ class BrokerManager(
         return marketDataEngine.getMarketQuotes(symbols)
     }
 
-    suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> {
-        val res = marketDataEngine.getOptionChain(symbol, expiry)
+    suspend fun getOptionChain(symbol: String, expiry: String = "", forceRefresh: Boolean = false): Result<List<OptionStrikeItem>> {
+        val res = marketDataEngine.getOptionChain(symbol, expiry, forceRefresh)
         if (res.isSuccess) {
             return Result.success(res.getOrThrow().strikes)
         }
@@ -139,12 +139,10 @@ class BrokerManager(
         return marketDataEngine.getOptionExpiries(symbol)
     }
 
-    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<CandleData>> {
+    suspend fun getHistoricalCandles(symbol: String, interval: String = "15m"): Result<List<com.example.data.model.HistoricalCandle>> {
         val res = marketDataEngine.getHistoricalCandles(symbol, interval)
         if (res.isSuccess) {
-            val candles = res.getOrThrow().map { 
-                 CandleData(open = it.open.toFloat(), high = it.high.toFloat(), low = it.low.toFloat(), close = it.close.toFloat(), volume = 0f)
-            }
+            val candles = res.getOrThrow()
             return Result.success(candles)
         }
         return Result.failure(res.exceptionOrNull() ?: Exception("Historical data fetch failed"))

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 enum class BrokerAuthStatus {
     NOT_CONFIGURED,
@@ -39,6 +40,39 @@ class BrokerAuthManager(
     val providerHealth: StateFlow<Map<String, ProviderHealthState>>
         get() = brokerManager.healthManager.providerHealth
     
+    init {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            brokerManager.healthManager.providerHealth.collect { healthMap ->
+                val current = _statuses.value.toMutableMap()
+                var changed = false
+                healthMap.forEach { (key, healthState) ->
+                    val existingName = when(key) {
+                        "UPSTOX" -> "Upstox"
+                        "FYERS" -> "Fyers"
+                        "ANGEL_ONE" -> "Angel One"
+                        "DHAN" -> "Dhan"
+                        else -> return@forEach
+                    }
+                    val existing = current[existingName] ?: return@forEach
+                    val newStatus = when {
+                        healthState.status == "CONNECTED" || healthState.status == "SUBSCRIBED" || healthState.status == "LIVE" -> BrokerAuthStatus.CONNECTED
+                        healthState.status == "CONNECTING" || healthState.status == "AUTHENTICATING" -> BrokerAuthStatus.STANDBY
+                        healthState.status == "AUTH_FAILED" || healthState.status == "ERROR" -> BrokerAuthStatus.ERROR
+                        healthState.status == "DISCONNECTED" -> BrokerAuthStatus.DISCONNECTED
+                        else -> existing.status
+                    }
+                    if (existing.status != newStatus) {
+                        current[existingName] = existing.copy(status = newStatus, message = healthState.status)
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    _statuses.value = current
+                }
+            }
+        }
+    }
+
     private val _isInitializing = MutableStateFlow(false)
     val isInitializing: StateFlow<Boolean> = _isInitializing.asStateFlow()
     
@@ -95,14 +129,15 @@ class BrokerAuthManager(
             sessionManager.isDhanConnected = true
             updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.CONNECTED, "Active for Order Execution")
         } else {
-            sessionManager.isDhanConnected = false
             val errorMsg = profRes.exceptionOrNull()?.message ?: "Session Expired"
             if (errorMsg.contains("expired", ignoreCase = true) || 
                 errorMsg.contains("invalid", ignoreCase = true) || 
                 errorMsg.contains("401") || 
                 errorMsg.contains("403")) {
+                sessionManager.isDhanConnected = false
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Token Expired. Login Required.")
             } else {
+                // Network error or other transient error: do not disconnect, preserve last state.
                 updateStatus("Dhan", "Primary Order Execution", BrokerAuthStatus.ERROR, errorMsg)
             }
         }
@@ -126,8 +161,18 @@ class BrokerAuthManager(
                 updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #2 Active")
                 return@withContext
             } else {
-                Log.w(TAG, "[ANGEL_SESSION_VALIDATION_FAILED] Token invalid: ${profRes.exceptionOrNull()?.message}")
-                sessionManager.isAngelConnected = false
+                val errorMsg = profRes.exceptionOrNull()?.message ?: "Session Expired"
+                if (errorMsg.contains("expired", ignoreCase = true) || 
+                    errorMsg.contains("invalid", ignoreCase = true) || 
+                    errorMsg.contains("401") || 
+                    errorMsg.contains("403")) {
+                    Log.w(TAG, "[ANGEL_SESSION_VALIDATION_FAILED] Token invalid: ${errorMsg}")
+                    sessionManager.isAngelConnected = false
+                } else {
+                    // Network error: preserve state
+                    updateStatus("Angel One", "Fallback #2 Market Data", BrokerAuthStatus.ERROR, errorMsg)
+                    return@withContext
+                }
             }
         }
 
@@ -180,37 +225,39 @@ class BrokerAuthManager(
     
     suspend fun validateFyersSession() = withContext(Dispatchers.IO) {
         val hasSession = !sessionManager.fyersAccessToken.isNullOrBlank()
-        val hasRefreshToken = !sessionManager.fyersRefreshToken.isNullOrBlank()
         val hasAppId = sessionManager.fyersAppId.isNotBlank() || com.example.util.BrokerConfig.fyersAppId.isNotBlank()
         
-        if (!hasSession && !hasRefreshToken && !hasAppId) {
+        if (!hasSession && !hasAppId) {
             sessionManager.isFyersConnected = false
             updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONFIGURE, "Credentials not configured")
             return@withContext
         }
         
-        if (hasSession) {
+        // Enforce Daily Authentication
+        val calendar = java.util.Calendar.getInstance()
+        val currentDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        calendar.timeInMillis = sessionManager.fyersTokenTimestamp
+        val authDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        
+        if (hasSession && currentDay == authDay) {
             val isValid = brokerManager.fyersAuthManager.validateSession()
             if (isValid) {
                 sessionManager.isFyersConnected = true
                 updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active")
                 return@withContext
+            } else {
+                val currentStatus = brokerManager.fyersAuthManager.authStatus.value
+                if (currentStatus == BrokerAuthStatus.ERROR) {
+                    sessionManager.isFyersConnected = true // Preserve state on network error
+                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.ERROR, "Network or API Error")
+                    return@withContext
+                }
             }
         }
         
-        if (hasRefreshToken) {
-            updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.STANDBY, "Restoring Session...")
-            val result = brokerManager.fyersAuthManager.refreshSession()
-            if (result.isSuccess) {
-                sessionManager.isFyersConnected = true
-                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
-                return@withContext
-            }
-        }
-
         sessionManager.isFyersConnected = false
         val status = if (hasAppId) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.CONFIGURE
-        val msg = if (hasAppId) "Session Expired. Login Required." else "Credentials not configured"
+        val msg = if (hasAppId) "Daily Login Required." else "Credentials not configured"
         updateStatus("Fyers", "Fallback #1 Market Data", status, msg)
     }
     
@@ -242,17 +289,9 @@ class BrokerAuthManager(
     suspend fun reconnectBroker(brokerName: String): Result<Boolean> = withContext(Dispatchers.IO) {
         when (brokerName) {
             "Fyers" -> {
-                val fyersAuth = brokerManager.fyersAuthManager
-                val refreshRes = fyersAuth.refreshSession()
-                if (refreshRes.isSuccess) {
-                    sessionManager.isFyersConnected = true
-                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.CONNECTED, "Fallback #1 Active (Restored)")
-                    Result.success(true)
-                } else {
-                    sessionManager.isFyersConnected = false
-                    updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Session Expired. Login Required.")
-                    Result.failure(Exception(refreshRes.exceptionOrNull()?.message ?: "Fyers refresh failed"))
-                }
+                sessionManager.isFyersConnected = false
+                updateStatus("Fyers", "Fallback #1 Market Data", BrokerAuthStatus.AUTHENTICATION_REQUIRED, "Daily Login Required.")
+                Result.failure(Exception("Daily authentication required for Fyers"))
             }
             "Angel One" -> {
                 val clientCode = sessionManager.angelClientCode

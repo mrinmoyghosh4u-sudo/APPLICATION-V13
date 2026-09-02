@@ -332,11 +332,12 @@ fun DiagnosticsScreen(
             // Angel One Card
             item {
                 val angelStatus = brokerStatuses["Angel One"]?.status ?: BrokerAuthStatus.DISCONNECTED
+                val isAngelActive = com.example.data.model.MarketDataProviders.normalize(com.example.data.model.MarketDataStore.providerState.value.provider) == com.example.data.model.MarketDataProviders.ANGEL_ONE && com.example.data.model.MarketDataStore.providerState.value.live
                 FeedProviderRow(
                     name = "Angel One SmartAPI",
                     role = "Option Chain Feeds & Live Quotes",
-                    stateString = angelConnectionState,
-                    isConfigured = angelStatus == BrokerAuthStatus.CONNECTED || userProfile.isAngelConnected,
+                    stateString = if (isAngelActive) "SUBSCRIBED" else angelConnectionState,
+                    isConfigured = angelStatus == BrokerAuthStatus.CONNECTED || userProfile.isAngelConnected || isAngelActive,
                     onReconnect = {
                         coroutineScope.launch {
                             viewModel.brokerManager.angelMarketDataService.reconnect()

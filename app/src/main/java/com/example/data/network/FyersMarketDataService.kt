@@ -34,7 +34,7 @@ class FyersMarketDataService(
 
     private val TAG = "FyersMarketDataService"
 
-    private val scope = CoroutineScope(Dispatchers.IO + Job())
+    private val scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var webSocket: WebSocket? = null
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -64,7 +64,7 @@ class FyersMarketDataService(
         heartbeatJob = scope.launch {
             while (true) {
                 delay(5000)
-                if (isConnected && (_connectionState.value == "WEBSOCKET_LIVE" || _connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "STALE" || _connectionState.value == "SUBSCRIPTION_SENT" || _connectionState.value == "ACKNOWLEDGED" || _connectionState.value == "WAITING_FOR_FIRST_TICK")) {
+                if (isConnected && (_connectionState.value == "LIVE" || _connectionState.value == "LIVE" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "STALE" || _connectionState.value == "SUBSCRIBING" || _connectionState.value == "SUBSCRIBED" || _connectionState.value == "WAITING_FOR_FIRST_TICK")) {
                     val marketDetail = MarketStatusUtil.getDetailedMarketStatus("NSE")
                     if (!marketDetail.isOpen) {
                         Log.d(TAG, "[FYERS_MARKET_CLOSED] Market closed. Pausing stale reconnect monitor.")
@@ -98,7 +98,7 @@ class FyersMarketDataService(
         val timestamp: Long
     )
 
-    fun isConnectionLive(): Boolean = isConnected && (_connectionState.value == "LIVE" || _connectionState.value == "WEBSOCKET_LIVE")
+    fun isConnectionLive(): Boolean = isConnected && (_connectionState.value == "LIVE" || _connectionState.value == "LIVE")
     fun hasFirstTickReceived(): Boolean = hasFirstTick
     fun hasActiveSubscription(): Boolean = isSubscriptionSent && isConnected
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
@@ -125,13 +125,13 @@ class FyersMarketDataService(
     @Synchronized
     private fun connectWebSocket() {
         val currentState = _connectionState.value
-        if (isConnected || currentState == "WEBSOCKET_CONNECTING" || currentState == "AUTHENTICATING" || currentState == "SUBSCRIBING" || currentState == "SUBSCRIPTION_SENT") {
+        if (isConnected || currentState == "CONNECTING" || currentState == "AUTHENTICATING" || currentState == "SUBSCRIBING" || currentState == "SUBSCRIBING") {
             Log.d(TAG, "[FYERS_WS_SKIP] WebSocket connection already active or in progress ($currentState)")
             return
         }
 
         Log.i(TAG, "[FYERS_WS_CONNECTING] Initiating single FYERS WebSocket connection...")
-        _connectionState.value = "WEBSOCKET_CONNECTING"
+        _connectionState.value = "CONNECTING"
 
         val token = sessionManager.fyersAccessToken
 
@@ -161,7 +161,7 @@ class FyersMarketDataService(
                 isSubscriptionSent = false
                 isSubscriptionAck = false
 
-                _connectionState.value = "WEBSOCKET_CONNECTED"
+                _connectionState.value = "CONNECTED"
                 Log.i(TAG, "[FYERS_WS_CONNECTED] Socket layer connected. Initiating authentication...")
 
                 try {
@@ -446,7 +446,7 @@ class FyersMarketDataService(
 
             webSocket?.send(okio.ByteString.of(*subBytes))
             isSubscriptionSent = true
-            _connectionState.value = "SUBSCRIPTION_SENT"
+            _connectionState.value = "SUBSCRIBING"
             Log.i(TAG, "[FYERS_SUB_SENT] Sent subscription for ${symbolsToSub.size} symbols")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send FYERS subscription: ${e.message}")
@@ -468,7 +468,7 @@ class FyersMarketDataService(
             when (respType) {
                 6 -> {
                     isSubscriptionAck = true
-                    if (_connectionState.value == "SUBSCRIBING" || _connectionState.value == "SUBSCRIPTION_SENT") {
+                    if (_connectionState.value == "SUBSCRIBING" || _connectionState.value == "SUBSCRIBING") {
                         _connectionState.value = "SUBSCRIBED"
                         Log.i(TAG, "[FYERS_SUB_CONFIRMED] FYERS Topic Init confirmed by server")
                         Log.i(TAG, "[FYERS_SUBSCRIBED] Subscription confirmed")
@@ -812,7 +812,7 @@ class FyersMarketDataService(
         }
     }
 
-    suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<CandleData>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.data.model.HistoricalCandle>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         runCatching {
             val fyersAppId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
             val token = sessionManager.fyersAccessToken ?: throw Exception("Token missing")
@@ -839,12 +839,16 @@ class FyersMarketDataService(
             if (body.s != "ok" || body.candles == null) throw Exception("FYERS API Error")
 
             body.candles.map { c ->
-                CandleData(
-                    open = c[1].toFloat(),
-                    high = c[2].toFloat(),
-                    low = c[3].toFloat(),
-                    close = c[4].toFloat(),
-                    volume = c[5].toFloat()
+                var t = c[0].toLong()
+                if (t < 20000000000L) t *= 1000
+                com.example.data.model.HistoricalCandle(
+                    time = t.toString(),
+                    timestamp = t,
+                    open = c[1].toDouble(),
+                    high = c[2].toDouble(),
+                    low = c[3].toDouble(),
+                    close = c[4].toDouble(),
+                    volume = c[5].toLong()
                 )
             }
         }
@@ -877,7 +881,11 @@ class FyersMarketDataService(
             chain.forEach { contract ->
                 val strike = contract.strike_price ?: return@forEach
                 val item = strikesMap.getOrPut(strike) {
-                    OptionStrikeItem(strikePrice = strike)
+                    OptionStrikeItem(
+                        strikePrice = strike,
+                        expiry = expiry,
+                        underlying = symbol
+                    )
                 }
 
                 if (contract.option_type == "CE") {

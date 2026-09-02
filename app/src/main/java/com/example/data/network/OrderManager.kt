@@ -68,22 +68,21 @@ class OrderManager(
                 return@withContext Result.failure(Exception("Invalid Order: Trading symbol cannot be empty."))
             }
 
-            // 3.1. Strict Approved Universe Check (Option Buyer Only on 8 Underlyings)
-            if (!com.example.data.model.MarketUniverse.isApprovedUnderlying(symbol)) {
+            // --- USE CANONICAL RESOLVER ---
+            val canonical = com.example.util.InstrumentResolver.resolve(symbol, instrumentMasterService)
+            if (canonical == null) {
+                return@withContext Result.failure(Exception("Rejected: Instrument '$symbol' could not be resolved into a valid option contract or underlying. Order Blocked."))
+            }
+
+            val underlyingToCheck = canonical.underlying
+            if (!com.example.data.model.MarketUniverse.isApprovedUnderlying(underlyingToCheck)) {
                 return@withContext Result.failure(
-                    Exception("Rejected: '$symbol' is not in the approved 8-instrument universe (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, BANKEX, CRUDEOIL, CRUDEOIL M).")
+                    Exception("Rejected: '$symbol' (resolved as '$underlyingToCheck') is not in the approved 8-instrument universe (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, BANKEX, CRUDEOIL, CRUDEOIL M).")
                 )
             }
 
             // 4. Exchange Validation
-            val normExch = when (order.exchange.trim().uppercase()) {
-                "NSE", "NSE_EQ", "NSE-EQ" -> "NSE"
-                "BSE", "BSE_EQ", "BSE-EQ" -> "BSE"
-                "NFO", "NSE_FNO", "NSE-FNO", "NSE_FO" -> "NFO"
-                "BFO", "BSE_FNO", "BSE-FNO", "BSE_FO" -> "BFO"
-                "MCX", "MCX_COMM", "MCX_FO" -> "MCX"
-                else -> "NSE"
-            }
+            val normExch = canonical.exchange
 
             // 4.5. Market Status Validation
             val marketStatus = com.example.util.MarketStatusUtil.getDetailedMarketStatus(normExch)
@@ -91,26 +90,26 @@ class OrderManager(
                 return@withContext Result.failure(Exception("Market Closed: Cannot place order on $normExch while market is closed."))
             }
 
-            // 4.6. Stale Data Protection
-            val storeTick = com.example.data.model.MarketDataStore.getTick(symbol)
-            if (com.example.data.model.MarketDataStore.providerState.value.stale) {
+            // 4.6. Stale Data / Live Feed Protection
+            val providerState = com.example.data.model.MarketDataStore.providerState.value
+            if (!providerState.live) {
+                return@withContext Result.failure(Exception("Market Data Not Live: Cannot place order while market data feed is not LIVE."))
+            }
+            if (providerState.stale) {
                 return@withContext Result.failure(Exception("Stale Data Protection: Cannot place order using stale or unverified market data."))
             }
 
             // 5. Dhan Security ID Validation
             var secId = order.securityId.trim()
             if (secId.isBlank()) {
-                secId = instrumentMasterService?.resolveDhanSecurityId(symbol, normExch) ?: ""
+                secId = canonical.securityId
             }
             if (secId.isBlank()) {
-                secId = InstrumentMapUtil.getDhanSecurityId(symbol, normExch)
-            }
-            if (secId.isBlank()) {
-                return@withContext Result.failure(Exception("Instrument not found: Cannot resolve Dhan Security ID for '$symbol' on exchange '$normExch'."))
+                return@withContext Result.failure(Exception("Option instrument could not be resolved. Order blocked. Cannot resolve Dhan Security ID for '$symbol'."))
             }
 
             // 6. Lot Size & Quantity Validation
-            val lotSize = AppPreferences.getGlobalLotSize(symbol)
+            val lotSize = canonical.lotSize
             val qty = order.qty
             if (qty <= 0) {
                 return@withContext Result.failure(Exception("Invalid Quantity: Quantity must be greater than 0."))
@@ -119,17 +118,14 @@ class OrderManager(
                 return@withContext Result.failure(Exception("Invalid Quantity: Quantity ($qty) must be a multiple of lot size ($lotSize)."))
             }
 
-            // 7. Option Specific Validations (Strike, Expiry, Option Type)
-            val symUpper = symbol.uppercase()
-            val isOption = symUpper.endsWith("CE") || symUpper.endsWith("PE") || symUpper.contains("-CE") || symUpper.contains("-PE") || symUpper.contains(" CE") || symUpper.contains(" PE")
+            // 7. Option Specific Validations
+            val isOption = canonical.optionType.isNotBlank() || canonical.instrumentType.contains("OPT")
             if (isOption) {
-                val hasCe = symUpper.contains("CE")
-                val hasPe = symUpper.contains("PE")
-                if (!hasCe && !hasPe) {
+                if (canonical.optionType != "CE" && canonical.optionType != "PE") {
                     return@withContext Result.failure(Exception("Invalid Option Type: Option must specify CE or PE."))
                 }
                 
-                val indexIds = listOf("13", "25", "27", "31")
+                val indexIds = listOf("13", "25", "27", "31", "51", "17")
                 if (indexIds.contains(secId)) {
                     return@withContext Result.failure(Exception("Missing Exact Option Mapping: Cannot place option order using the underlying index Security ID ($secId). Exact Dhan contract mapping required."))
                 }

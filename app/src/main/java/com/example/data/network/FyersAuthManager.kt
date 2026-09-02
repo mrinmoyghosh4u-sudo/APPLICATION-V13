@@ -214,19 +214,25 @@ class FyersAuthManager(
         _authStatus.value = BrokerAuthStatus.DISCONNECTED
     }
 
-    suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
+        suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
         val token = sessionManager.fyersAccessToken
         val appId = sessionManager.fyersAppId
+        
         if (token.isNullOrBlank() || appId.isBlank()) {
-            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.ERROR else BrokerAuthStatus.NOT_CONFIGURED
+            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.NOT_CONFIGURED
             return@withContext false
         }
 
-        // Check if token is older than 20 hours (expires daily)
-        val timestamp = sessionManager.fyersTokenTimestamp
-        val isExpired = (System.currentTimeMillis() - timestamp) > 20 * 60 * 60 * 1000L
+        // Fyers access tokens expire daily.
+        val calendar = java.util.Calendar.getInstance()
+        val currentDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        calendar.timeInMillis = sessionManager.fyersTokenTimestamp
+        val authDay = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val isExpired = currentDay != authDay
+        
         if (isExpired) {
-            _authStatus.value = BrokerAuthStatus.ERROR
+            clearSession()
+            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
             return@withContext false
         }
 
@@ -234,61 +240,25 @@ class FyersAuthManager(
         try {
             val profileRes = fyersApi.getProfile(authHeader)
             if (profileRes.isSuccessful && profileRes.body()?.s == "ok") {
-                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
-                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
-                true
+                return@withContext true
             } else {
-                _authStatus.value = BrokerAuthStatus.ERROR
-                false
+                val errorMsg = profileRes.body()?.message ?: "HTTP ${profileRes.code()}"
+                if (profileRes.code() == 401 || profileRes.code() == 403 || errorMsg.contains("expired", true)) {
+                    clearSession()
+                    _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                } else {
+                    _authStatus.value = BrokerAuthStatus.ERROR
+                }
+                return@withContext false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Fyers validateSession profile call failed: ${e.message}")
+            // Network error: don't clear session, just return false for now
             _authStatus.value = BrokerAuthStatus.ERROR
-            false
+            return@withContext false
         }
     }
-    suspend fun refreshSession(): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val appId = sessionManager.fyersAppId
-            val secret = sessionManager.fyersSecretId
-            val refreshToken = sessionManager.fyersRefreshToken
-            
-            if (appId.isBlank() || secret.isBlank() || refreshToken.isNullOrBlank()) {
-                throw Exception("Missing credentials or refresh token")
-            }
 
-            val appIdHash = FyersAuthHelper.generateAppIdHash(appId, secret)
-            
-            val request = FyersRefreshTokenRequest(
-                grant_type = "refresh_token",
-                appIdHash = appIdHash,
-                refresh_token = refreshToken,
-                pin = ""
-            )
-
-            val response = fyersApi.validateRefreshToken(request)
-            if (!response.isSuccessful) {
-                clearSession()
-                throw Exception("HTTP ${response.code()}")
-            }
-
-            val body = response.body() ?: throw Exception("Empty response body")
-            android.util.Log.d("FyersAuth", "[8] Token validated: PASS")
-            if (body.s == "ok" && !body.access_token.isNullOrBlank()) {
-                sessionManager.fyersAccessToken = body.access_token
-                sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
-                sessionManager.isFyersConnected = true
-                android.util.Log.d("FyersAuth", "[9] Account verified: PASS")
-                android.util.Log.d("FyersAuth", "[10] Authentication SUCCESS: PASS")
-                _authStatus.value = BrokerAuthStatus.CONNECTED
-                body.access_token
-            } else {
-                clearSession()
-                val errorMsg = body.message ?: "Unknown error from Fyers refresh"
-                _authStatus.value = BrokerAuthStatus.ERROR
-                throw Exception(errorMsg)
-            }
-        }
-    }
+    // FYERS 2026 Audit: Refresh token flows are not supported for continuous sessions.
+    // Explicit re-authentication via login flow is required if the token expires.
 }

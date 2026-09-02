@@ -97,12 +97,23 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             MarketDataProviders.normalize(it.key) == canonicalBroker || it.key.equals(broker, ignoreCase = true) 
         }?.value?.status
         
+        val providerState = MarketDataStore.providerState.value
+        val isProviderActive = MarketDataProviders.normalize(providerState.provider) == canonicalBroker
+
+        // If the provider is actually providing live ticks, it IS authenticated, regardless of auth cache
+        if (isProviderActive && providerState.live && !providerState.stale) {
+            return ComponentHealth(canonicalBroker, HealthState.HEALTHY, details = mapOf(
+                "lastTick" to providerState.lastUpdate,
+                "connected" to true,
+                "status" to "Live"
+            ))
+        }
+
         if (authStatus != com.example.data.network.BrokerAuthStatus.CONNECTED) {
             return ComponentHealth(canonicalBroker, HealthState.AUTH_FAILED, details = mapOf("error" to "Not authenticated"))
         }
 
-        val providerState = MarketDataStore.providerState.value
-        if (MarketDataProviders.normalize(providerState.provider) == canonicalBroker) {
+        if (isProviderActive) {
             if (providerState.stale) {
                 val tickAge = if (providerState.lastUpdate > 0) System.currentTimeMillis() - providerState.lastUpdate else 0L
                 return ComponentHealth(canonicalBroker, HealthState.STALE, details = mapOf(

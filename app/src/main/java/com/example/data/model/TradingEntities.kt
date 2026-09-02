@@ -20,6 +20,21 @@ data class WatchlistItem(
 )
 
 @Immutable
+data class ResolvedInstrument(
+    val brokerToken: String,
+    val exchange: String,
+    val segment: String,
+    val securityId: String,
+    val tradingSymbol: String,
+    val underlying: String,
+    val instrumentType: String,
+    val expiry: String,
+    val strike: Double,
+    val optionType: String,
+    val lotSize: Int
+)
+
+@Immutable
 @Entity(tableName = "orders")
 data class OrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -37,6 +52,7 @@ data class OrderEntity(
     val status: String, // PENDING, OPEN, EXECUTED, CANCELLED, REJECTED, CLOSED
     val time: String,
     val expiry: String = "",
+    val underlying: String = "",
     val productType: String = "INTRADAY", // INTRADAY, MARGIN, CNC, MIS, CARRYFORWARD
     val ltp: Double = 0.0,
     val exitPrice: Double = 0.0,
@@ -60,6 +76,7 @@ data class PortfolioHoldingEntity(
     val exchange: String = "NSE",
     val type: String = "EQUITY", // INDEX, CE, PE, FUT, EQUITY
     val expiry: String = "",
+    val underlying: String = "",
     val qty: Int = 0,
     val avgPrice: Double = 0.0,
     val ltp: Double = 0.0,
@@ -107,6 +124,7 @@ data class AISignalEntity(
     val status: String = "LIVE",
     val strikePrice: String = "",
     val expiry: String = "",
+    val underlying: String = "",
     val reasons: String = "",
     val underlyingLtp: Double = 0.0,
     val underlyingChange: Double = 0.0
@@ -253,5 +271,7 @@ data class OptionStrikeItem(
     val callToken: String = "",
     val putToken: String = "",
     val callSymbol: String = "",
+    val expiry: String = "",
+    val underlying: String = "",
     val putSymbol: String = ""
 )
