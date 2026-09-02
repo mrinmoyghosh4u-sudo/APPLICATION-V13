@@ -413,8 +413,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            repository.allHoldings.collectLatest { list ->
-                _holdings.value = list
+            kotlinx.coroutines.flow.combine(repository.allHoldings, com.example.data.model.MarketDataStore.ticks) { list, liveTicks ->
+                list.map { item ->
+                    val tick = liveTicks.values.find { liveItem ->
+                        val liveSym = liveItem.symbol.uppercase().trim()
+                        val itemSym = item.symbol.uppercase().trim()
+                        liveSym == itemSym ||
+                        liveSym.endsWith("|$itemSym") ||
+                        liveSym.substringAfter("|") == itemSym ||
+                        liveSym.replace(" ", "") == itemSym.replace(" ", "")
+                    } ?: com.example.data.model.MarketDataStore.getTick(item.symbol)
+
+                    val liveLtp = tick?.price ?: item.ltp
+                    if (liveLtp > 0.0) {
+                        val isClosed = item.positionStatus.equals("CLOSED", ignoreCase = true) || item.qty == 0
+                        val netQty = item.qty
+                        val avgPrice = item.avgPrice
+                        val invested = kotlin.math.abs(netQty * avgPrice)
+                        val unrealized = if (!isClosed) {
+                            if (netQty > 0) (liveLtp - avgPrice) * netQty
+                            else (avgPrice - liveLtp) * kotlin.math.abs(netQty)
+                        } else {
+                            item.unrealizedPnl
+                        }
+                        val currVal = if (isClosed) 0.0 else (kotlin.math.abs(netQty) * liveLtp)
+                        val totalPnl = item.realizedPnl + unrealized
+                        val pnlPct = if (invested > 0.0) (totalPnl / invested) * 100.0 else 0.0
+                        item.copy(
+                            ltp = liveLtp,
+                            currentValue = currVal,
+                            unrealizedPnl = unrealized,
+                            pnl = totalPnl,
+                            pnlPercent = pnlPct
+                        )
+                    } else {
+                        item
+                    }
+                }
+            }.collectLatest { enrichedList ->
+                _holdings.value = enrichedList
             }
         }
         viewModelScope.launch {

@@ -433,8 +433,14 @@ class InstrumentMasterService(
         // Match exact strike & expiry from Instrument Master
         return matchingOptions.find { inst ->
             val instStrikeRaw = inst.strike.toDoubleOrNull() ?: 0.0
-            // Angel One option strikes are ALWAYS in paise (e.g. 2485000 for 24850.0)
-            val instStrike = instStrikeRaw / 100.0
+            val isCommodity = exchSeg == "MCX" || normalizeExchange(inst.exch_seg) == "MCX"
+            // MCX commodity contracts (e.g. CRUDEOIL) already store strikes in rupees and must not be divided.
+            // NSE/BFO index contracts in Angel One master store strikes in paise (e.g. 2485000 for 24850.0).
+            val instStrike = if (isCommodity) {
+                instStrikeRaw
+            } else {
+                instStrikeRaw / 100.0
+            }
 
             val strikeMatches = kotlin.math.abs(instStrike - strike) < 0.01
 
@@ -564,12 +570,10 @@ class InstrumentMasterService(
 
         if (cleanSymbol.all { it.isDigit() }) return cleanSymbol
 
-        val match = instrumentMap.values.find {
-            it.symbol.equals(cleanSymbol, ignoreCase = true) || it.name.equals(cleanSymbol, ignoreCase = true) ||
-            it.symbol.equals(cleanSymbol.replace(" ", ""), ignoreCase = true) ||
-            it.symbol.equals(cleanSymbol.replace(" ", "").replace("-", ""), ignoreCase = true)
-        }
-        return match?.token
+        // Security ID Isolation: NEVER fall back to Angel One's match?.token from OpenAPIScripMaster.json.
+        // Return null if no verified Dhan security ID mapping is found to prevent placing orders on unintended instruments.
+        Log.w("InstrumentMaster", "[DHAN_SECURITY_ID_NOT_FOUND] No verified Dhan security ID mapping found for symbol: $symbol, exchange: $exchange")
+        return null
     }
 }
 

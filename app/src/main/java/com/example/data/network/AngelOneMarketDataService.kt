@@ -72,7 +72,7 @@ class AngelOneMarketDataService(
 
 
     fun isConfigured(): Boolean {
-        return sessionManager.angelJwtToken.isNotEmpty() && sessionManager.angelClientId.isNotEmpty() && sessionManager.angelFeedToken.isNotEmpty()
+        return !sessionManager.angelJwtToken.isNullOrEmpty() && !sessionManager.angelClientId.isNullOrEmpty() && !sessionManager.angelFeedToken.isNullOrEmpty()
     }
 
     fun isConnectingOrLive(): Boolean {

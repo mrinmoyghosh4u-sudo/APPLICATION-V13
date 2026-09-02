@@ -199,7 +199,8 @@ data class DhanPlaceOrderRequest(
     @Json(name = "tradingSymbol") val tradingSymbol: String,
     @Json(name = "securityId") val securityId: String = "",
     @Json(name = "quantity") val quantity: Int,
-    @Json(name = "price") val price: Double
+    @Json(name = "price") val price: Double,
+    @Json(name = "triggerPrice") val triggerPrice: Double = 0.0
 )
 
 @JsonClass(generateAdapter = true)

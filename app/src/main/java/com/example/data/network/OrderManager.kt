@@ -91,12 +91,17 @@ class OrderManager(
             }
 
             // 4.6. Stale Data / Live Feed Protection
-            val providerState = com.example.data.model.MarketDataStore.providerState.value
-            if (!providerState.live) {
-                return@withContext Result.failure(Exception("Market Data Not Live: Cannot place order while market data feed is not LIVE."))
-            }
-            if (providerState.stale) {
-                return@withContext Result.failure(Exception("Stale Data Protection: Cannot place order using stale or unverified market data."))
+            // Pre-flight live & fresh feed checks apply strictly to new entry orders (BUY).
+            // Position exits, square-offs (SELL), modifications, and cancellations are allowed even during feed interruptions to avoid locking open risk.
+            val isNewEntryOrder = order.side.trim().equals("BUY", ignoreCase = true) || order.side.trim().equals("B", ignoreCase = true)
+            if (isNewEntryOrder) {
+                val providerState = com.example.data.model.MarketDataStore.providerState.value
+                if (!providerState.live) {
+                    return@withContext Result.failure(Exception("Market Data Not Live: Cannot place new entry order while market data feed is not LIVE."))
+                }
+                if (providerState.stale) {
+                    return@withContext Result.failure(Exception("Stale Data Protection: Cannot place new entry order using stale or unverified market data."))
+                }
             }
 
             // 5. Dhan Security ID Validation

@@ -262,6 +262,7 @@ dependencies {
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
+  implementation("com.google.protobuf:protobuf-java:3.24.4")
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
@@ -290,9 +291,6 @@ gradle.projectsEvaluated {
     if (!hasDhanSecret && !hasDhanApiKey) {
         logger.warn("DHAN_CLIENT_SECRET or DHAN_API_KEY secret is not configured. Real Dhan API calls will require credentials.")
     }
-}
-dependencies {
-    implementation("com.google.protobuf:protobuf-java:3.24.4")
 }
 
 tasks.withType<Test> {

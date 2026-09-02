@@ -205,9 +205,11 @@ class FyersMarketDataService(
 
                     webSocket.send(okio.ByteString.of(*buffer.array()))
                     isAuthSent = true
+                    _connectionState.value = "AUTHENTICATING"
                     Log.i(TAG, "[FYERS_AUTHENTICATING] Sent authentication packet. Awaiting server confirmation...")
 
                 } catch (e: Exception) {
+                    _connectionState.value = "ERROR"
                     Log.e(TAG, "[FYERS_AUTH_FAILED] Failed to send FYERS auth packet: ${e.message}")
                 }
             }
@@ -463,7 +465,7 @@ class FyersMarketDataService(
         try {
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
             if (buffer.remaining() < 3) return
-            val length = buffer.short.toInt()
+            val length = buffer.short.toInt() and 0xFFFF
             val respType = buffer.get().toInt()
 
             when (respType) {
@@ -511,7 +513,7 @@ class FyersMarketDataService(
         } else if (bytes != null && bytes.isNotEmpty()) {
             if (bytes.size >= 3) {
                 val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
-                val length = buffer.short.toInt()
+                val length = buffer.short.toInt() and 0xFFFF
                 val respType = buffer.get().toInt()
                 // RespType 2 / 1 / 11 are HSM Auth Response ACK packets
                 if (respType == 2 || respType == 1 || respType == 11 || respType == 0) {
@@ -540,14 +542,14 @@ class FyersMarketDataService(
     private fun parseTopicInit(buffer: ByteBuffer) {
         if (buffer.remaining() < 6) return
         val messageNum = buffer.int
-        val scripCount = buffer.short.toInt()
+        val scripCount = buffer.short.toInt() and 0xFFFF
 
         for (i in 0 until scripCount) {
             if (buffer.remaining() < 1) break
             val dataType = buffer.get().toInt()
             if (dataType == 83) { // Snapshot
                 if (buffer.remaining() < 3) break
-                val topicId = buffer.short.toInt()
+                val topicId = buffer.short.toInt() and 0xFFFF
                 val topicNameLen = buffer.get().toInt()
                 if (buffer.remaining() < topicNameLen) break
                 val topicNameBytes = ByteArray(topicNameLen)
@@ -562,7 +564,7 @@ class FyersMarketDataService(
                 }
 
                 if (buffer.remaining() < 3) break
-                val multiplier = buffer.short.toInt()
+                val multiplier = buffer.short.toInt() and 0xFFFF
                 topicToMultiplierMap[topicId] = multiplier
                 buffer.get() // precision
 
@@ -591,7 +593,7 @@ class FyersMarketDataService(
 
     private fun parseFullMode(buffer: ByteBuffer) {
         if (buffer.remaining() < 3) return
-        val topicId = buffer.short.toInt()
+        val topicId = buffer.short.toInt() and 0xFFFF
         val fieldCount = buffer.get().toInt()
 
         val symbol = topicToSymbolMap[topicId] ?: return
@@ -646,7 +648,7 @@ class FyersMarketDataService(
 
     private fun parseLiteMode(buffer: ByteBuffer) {
         if (buffer.remaining() < 6) return
-        val topicId = buffer.short.toInt()
+        val topicId = buffer.short.toInt() and 0xFFFF
         val ltpVal = buffer.int
 
         val symbol = topicToSymbolMap[topicId] ?: return
@@ -820,7 +822,13 @@ class FyersMarketDataService(
             val auth = "$fyersAppId:$token"
 
             val fyersSymbol = getFyersSymbol(symbol)
-            val res = interval.replace("m", "")
+            val res = when (interval.trim().lowercase()) {
+                "1h", "60m" -> "60"
+                "2h", "120m" -> "120"
+                "4h", "240m" -> "240"
+                "1d", "d", "day" -> "D"
+                else -> interval.replace("m", "").replace("M", "")
+            }
 
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
             val toDateObj = java.util.Date()

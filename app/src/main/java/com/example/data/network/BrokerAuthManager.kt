@@ -123,6 +123,9 @@ class BrokerAuthManager(
             return@withContext
         }
         
+        // Auto-renew Dhan token if older than 12 hours
+        dhanService.checkAndRenewTokenIfNeeded()
+
         // Active API validation: verify Dhan session with live profile/funds call
         val profRes = dhanService.getProfile()
         if (profRes.isSuccess) {

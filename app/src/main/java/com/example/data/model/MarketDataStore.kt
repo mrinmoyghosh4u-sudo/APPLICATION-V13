@@ -297,6 +297,10 @@ object MarketDataStore {
         }
     }
 
+    fun setProviderStateForTesting(state: MarketDataProviderState) {
+        _providerState.value = state
+    }
+
     fun getTickFlow(symbol: String): kotlinx.coroutines.flow.Flow<RealTimePriceTick?> {
         return _ticks.map { it[symbol] }.distinctUntilChanged()
     }

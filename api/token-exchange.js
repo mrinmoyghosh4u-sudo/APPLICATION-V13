@@ -2,6 +2,7 @@ const https = require('https');
 
 // In-memory cache of successful token exchanges (code -> token response) to handle retries seamlessly
 const tokenCache = new Map();
+const consumedCodes = new Map();
 
 function getCachedToken(code) {
   const clean = (code || '').trim();
@@ -20,7 +21,21 @@ function cacheToken(code, response) {
   const clean = (code || '').trim();
   if (clean && response) {
     tokenCache.set(clean, { timestamp: Date.now(), response });
+    consumedCodes.set(clean, Date.now());
   }
+}
+
+function isCodeConsumed(code) {
+  const clean = (code || '').trim();
+  if (!clean) return true;
+  const entry = consumedCodes.get(clean);
+  if (!entry) return false;
+  // Expire after 10 minutes
+  if (Date.now() - entry > 10 * 60 * 1000) {
+    consumedCodes.delete(clean);
+    return false;
+  }
+  return true;
 }
 
 function parseRequestBody(req) {

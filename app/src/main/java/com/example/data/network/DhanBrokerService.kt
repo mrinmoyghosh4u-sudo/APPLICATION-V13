@@ -28,7 +28,81 @@ class DhanBrokerService(
             .build()
     }
 
+    suspend fun checkAndRenewTokenIfNeeded(): Boolean = withContext(Dispatchers.IO) {
+        val currentToken = sessionManager.dhanAccessToken.trim()
+        val clientId = sessionManager.dhanClientId.trim()
+        if (currentToken.isEmpty() || clientId.isEmpty()) {
+            return@withContext false
+        }
+
+        val timestamp = sessionManager.dhanTokenTimestamp
+        val twelveHoursMs = 12L * 60L * 60L * 1000L
+        val isOlderThan12Hours = timestamp > 0L && (System.currentTimeMillis() - timestamp > twelveHoursMs)
+        if (!isOlderThan12Hours && timestamp > 0L) {
+            return@withContext false
+        }
+
+        try {
+            android.util.Log.i("DhanBrokerService", "Dhan token older than 12h or untracked. Attempting auto-renewal via /v2/RenewToken...")
+            val response = api.renewToken(currentToken = currentToken, clientId = clientId)
+            if (response.isSuccessful) {
+                val body = response.body()
+                val newAccessToken = (body?.get("accessToken") as? String)
+                    ?: (body?.get("dhanAccessToken") as? String)
+                    ?: (body?.get("token") as? String)
+                if (!newAccessToken.isNullOrBlank()) {
+                    sessionManager.dhanAccessToken = newAccessToken.trim()
+                    sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
+                    android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully.")
+                    return@withContext true
+                } else {
+                    android.util.Log.w("DhanBrokerService", "Dhan renewToken response did not contain an accessToken: $body")
+                }
+            } else {
+                android.util.Log.w("DhanBrokerService", "Dhan renewToken returned HTTP ${response.code()}: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DhanBrokerService", "Exception during Dhan auto-renewal via Retrofit: ${e.message}")
+        }
+
+        // Direct OkHttp fallback
+        try {
+            val request = Request.Builder()
+                .url("https://api.dhan.co/v2/RenewToken")
+                .get()
+                .header("access-token", currentToken)
+                .header("dhanClientId", clientId)
+                .header("client-id", clientId)
+                .header("Accept", "application/json")
+                .build()
+
+            directClient.newCall(request).execute().use { res ->
+                if (res.isSuccessful) {
+                    val resString = res.body?.string() ?: ""
+                    val json = JSONObject(resString)
+                    val newAccessToken = when {
+                        json.has("accessToken") -> json.optString("accessToken")
+                        json.has("dhanAccessToken") -> json.optString("dhanAccessToken")
+                        json.has("token") -> json.optString("token")
+                        else -> ""
+                    }
+                    if (newAccessToken.isNotBlank()) {
+                        sessionManager.dhanAccessToken = newAccessToken.trim()
+                        sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
+                        android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully via direct OkHttp call.")
+                        return@withContext true
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DhanBrokerService", "Dhan direct token renewal fallback error: ${e.message}")
+        }
+
+        return@withContext false
+    }
+
     override suspend fun getProfile(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
+        checkAndRenewTokenIfNeeded()
         val token = sessionManager.dhanAccessToken.trim()
         val clientId = sessionManager.dhanClientId.trim()
         if (token.isEmpty()) {
@@ -308,6 +382,8 @@ class DhanBrokerService(
                         numbers.lastOrNull { it.length >= 4 && !it.startsWith("202") }?.toDoubleOrNull() ?: 0.0
                     }
 
+                    val symbolStr = item.tradingSymbol.ifEmpty { "POS_${item.securityId}" }
+
                     // Expiry Date determination
                     val formattedExpiry = item.expiryDate ?: ""
 
@@ -315,23 +391,40 @@ class DhanBrokerService(
                         if (item.buyAvg > 0) item.buyAvg else item.sellAvg
                     } else if (isLong) item.buyAvg else item.sellAvg
 
-                    val pnl = item.realizedProfit + item.unrealizedProfit
-                    val invested = abs(item.netQty * avgPrice)
+                    val netQty = item.netQty
+                    val invested = abs(netQty * avgPrice)
+
+                    // Enrich / resolve position's ltp using MarketDataStore
+                    val liveTickPrice = com.example.data.model.MarketDataStore.getTick(symbolStr)?.price
+                        ?: com.example.data.model.MarketDataStore.getTick(item.tradingSymbol)?.price
+                        ?: com.example.data.model.MarketDataStore.getTick(symUpper)?.price
+                        ?: 0.0
+                    val ltp = if (liveTickPrice > 0.0) liveTickPrice else 0.0
+
+                    val unrealizedPnl = if (ltp > 0.0 && !isClosed) {
+                        if (netQty > 0) (ltp - avgPrice) * netQty
+                        else (avgPrice - ltp) * abs(netQty)
+                    } else {
+                        item.unrealizedProfit
+                    }
+
+                    val currentValue = if (isClosed) 0.0 else if (ltp > 0.0) (abs(netQty) * ltp) else (invested + item.unrealizedProfit)
+                    val pnl = item.realizedProfit + unrealizedPnl
                     val pnlPct = if (invested > 0) (pnl / invested) * 100 else 0.0
 
                     PortfolioHoldingEntity(
-                        symbol = item.tradingSymbol.ifEmpty { "POS_${item.securityId}" },
+                        symbol = symbolStr,
                         exchange = item.exchangeSegment,
                         type = optType,
                         expiry = formattedExpiry,
-                        qty = item.netQty,
+                        qty = netQty,
                         avgPrice = avgPrice,
-                        ltp = 0.0,
-                        currentValue = if (isClosed) 0.0 else (invested + item.unrealizedProfit),
+                        ltp = ltp,
+                        currentValue = currentValue,
                         pnl = pnl,
                         pnlPercent = pnlPct,
                         realizedPnl = item.realizedProfit,
-                        unrealizedPnl = item.unrealizedProfit,
+                        unrealizedPnl = unrealizedPnl,
                         securityId = item.securityId,
                         buyAvg = item.buyAvg,
                         buyQty = item.buyQty,
@@ -393,13 +486,17 @@ class DhanBrokerService(
                 else -> "INTRADAY"
             }
             
-            // Map exchange
-            val dhanExchange = when (exchange.uppercase()) {
-                "NSE" -> "NSE_EQ"
-                "BSE" -> "BSE_EQ"
+            // Map exchange & F&O segment
+            val isDeriv = symbol.contains("CE", ignoreCase = true) || 
+                          symbol.contains("PE", ignoreCase = true) || 
+                          symbol.contains("FUT", ignoreCase = true)
+            val dhanExchange = when (exchange.uppercase().trim()) {
+                "NSE" -> if (isDeriv) "NSE_FNO" else "NSE_EQ"
+                "BSE" -> if (isDeriv) "BSE_FNO" else "BSE_EQ"
                 "NFO", "NSE_FNO" -> "NSE_FNO"
-                "MCX" -> "MCX_COMM"
-                else -> "NSE_EQ"
+                "BFO", "BSE_FNO" -> "BSE_FNO"
+                "MCX", "MCX_COMM", "NCO" -> "MCX_COMM"
+                else -> if (isDeriv) "NSE_FNO" else "NSE_EQ"
             }
 
             // Map Order Type
@@ -416,6 +513,9 @@ class DhanBrokerService(
                 throw Exception("INSTRUMENT NOT FOUND: Cannot resolve Dhan security ID for $symbol")
             }
 
+            val orderPrice = if (dhanOrderType == "MARKET") 0.0 else price
+            val orderTriggerPrice = if (dhanOrderType.contains("STOP_LOSS")) stopLoss else 0.0
+
             val request = DhanPlaceOrderRequest(
                 dhanClientId = clientId,
                 transactionType = action.uppercase(), // BUY / SELL
@@ -425,7 +525,8 @@ class DhanBrokerService(
                 tradingSymbol = symbol,
                 securityId = finalSecId,
                 quantity = qty,
-                price = price
+                price = orderPrice,
+                triggerPrice = orderTriggerPrice
             )
 
             val response = api.placeOrder(request)

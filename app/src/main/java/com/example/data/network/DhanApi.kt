@@ -35,4 +35,10 @@ interface DhanApi {
 
     @GET("v2/trades")
     suspend fun getTrades(): Response<List<DhanTradeItem>>
+
+    @GET("v2/RenewToken")
+    suspend fun renewToken(
+        @Header("access-token") currentToken: String,
+        @Header("dhanClientId") clientId: String
+    ): Response<Map<String, Any>>
 }

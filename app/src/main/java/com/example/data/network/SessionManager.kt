@@ -221,7 +221,14 @@ class SessionManager(context: Context) {
 
     var dhanAccessToken: String
         get() = safeGetToken(KEY_DHAN_TOKEN) ?: ""
-        set(value) = safeSetToken(KEY_DHAN_TOKEN, value)
+        set(value) {
+            safeSetToken(KEY_DHAN_TOKEN, value)
+            if (value.isNotBlank()) {
+                dhanTokenTimestamp = System.currentTimeMillis()
+            } else {
+                dhanTokenTimestamp = 0L
+            }
+        }
 
     var dhanApiKey: String
         get() = prefs.getString(KEY_DHAN_API_KEY, "") ?: ""

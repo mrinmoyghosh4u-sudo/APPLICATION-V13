@@ -116,11 +116,11 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
             level = HttpLoggingInterceptor.Level.NONE
         }
         val authInterceptor = Interceptor { chain ->
-            val apiKey = "".ifBlank {
-                runCatching { com.example.BuildConfig.ANGEL_ONE_API_KEY }.getOrNull()
+            val apiKey = sessionManager.angelApiKey.takeIf { it.isNotBlank() }
+                ?: runCatching { com.example.BuildConfig.ANGEL_ONE_API_KEY }.getOrNull()
                     ?.takeIf { it.isNotBlank() && it != "ANGEL_ONE_API_KEY_DEFAULT_VALUE" }
-                    ?: "ANGEL_ONE_SMART_API_KEY"
-            }
+                ?: "ANGEL_ONE_SMART_API_KEY"
+
             val requestBuilder = chain.request().newBuilder()
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Accept", "application/json")
@@ -131,11 +131,11 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
                 .addHeader("X-MACAddress", "00:00:00:00:00:00")
                 .addHeader("X-PrivateKey", apiKey)
 
-            ""?.let { token ->
-                if (token.isNotBlank()) {
-                    val bearerToken = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
-                    requestBuilder.addHeader("Authorization", bearerToken)
-                }
+            val token = sessionManager.angelJwtToken?.takeIf { it.isNotBlank() }
+                ?: sessionManager.angelAuthToken?.takeIf { it.isNotBlank() }
+            if (!token.isNullOrBlank()) {
+                val bearerToken = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"
+                requestBuilder.addHeader("Authorization", bearerToken)
             }
             chain.proceed(requestBuilder.build())
         }
