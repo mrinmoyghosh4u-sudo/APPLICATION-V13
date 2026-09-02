@@ -210,6 +210,44 @@ fun LoginScreen(
                             onClick = { onConnectBroker("Angel One") }
                         )
 
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // --- UPSTOX LOGIN BUTTON ---
+                        BrokerLoginCard(
+                            title = "LOGIN WITH UPSTOX",
+                            subtitle = "📈 Upstox Pro API & Live Data Stream",
+                            containerColor = Color(0xFF2C103D),
+                            borderColor = Color(0xFF8E24AA),
+                            testTag = "upstox_login_button",
+                            iconContent = {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_upstox_logo),
+                                    contentDescription = "Upstox Logo",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            onClick = { onConnectBroker("Upstox") }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // --- FYERS LOGIN BUTTON ---
+                        BrokerLoginCard(
+                            title = "LOGIN WITH FYERS",
+                            subtitle = "🚀 Fyers API v3 OAuth & Order Gateway",
+                            containerColor = Color(0xFF331C04),
+                            borderColor = Color(0xFFE65100),
+                            testTag = "fyers_login_button",
+                            iconContent = {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_fyers_logo),
+                                    contentDescription = "Fyers Logo",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            onClick = { onConnectBroker("Fyers") }
+                        )
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Features 4-in-a-row
