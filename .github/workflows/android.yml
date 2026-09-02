@@ -53,10 +53,10 @@ jobs:
           echo "DHAN_REDIRECT_URI=${DHAN_REDIRECT_URI}" >> .env
           echo "UPSTOX_API_KEY=${{ secrets.UPSTOX_API_KEY || 'DEFAULT_UPSTOX_KEY' }}" >> .env
           echo "UPSTOX_API_SECRET=${{ secrets.UPSTOX_API_SECRET || 'DEFAULT_UPSTOX_SECRET' }}" >> .env
-          echo "UPSTOX_REDIRECT_URI=${{ secrets.UPSTOX_REDIRECT_URI || 'kingkhan://oauth/callback' }}" >> .env
+          echo "UPSTOX_REDIRECT_URI=${{ secrets.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth' }}" >> .env
           echo "FYERS_APP_ID=${{ secrets.FYERS_APP_ID || 'DEFAULT_FYERS_APP_ID' }}" >> .env
           echo "FYERS_SECRET_ID=${{ secrets.FYERS_SECRET_ID || 'DEFAULT_FYERS_SECRET_ID' }}" >> .env
-          echo "FYERS_REDIRECT_URI=${{ secrets.FYERS_REDIRECT_URI || 'kingkhan://oauth/callback' }}" >> .env
+          echo "FYERS_REDIRECT_URI=${{ secrets.FYERS_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth' }}" >> .env
 
       - name: Decode Production Keystore
         run: |

@@ -386,8 +386,9 @@ class MarketDataEngine(
                 com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
                     val angelService = angelMarketDataService
                     if (angelService != null) {
-                        val tokenList = symbols.mapNotNull {
-                            angelService.instrumentMaster.resolveAngelToken(it, "NSE")
+                        val tokenList = symbols.mapNotNull { sym ->
+                            val ex = if (sym.contains("CRUDE")) "MCX" else if (sym.contains("SENSEX") || sym.contains("BANKEX")) "BSE" else "NSE"
+                            angelService.instrumentMaster.resolveAngelToken(sym, ex)
                         }
                         if (tokenList.isNotEmpty()) {
                             angelService.subscribeToTokens(1, tokenList)

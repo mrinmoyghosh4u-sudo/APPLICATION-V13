@@ -270,10 +270,12 @@ class BrokerAuthManager(
             if (res.isSuccess) {
                 val tokens = res.getOrThrow()
                 sessionManager.angelAuthToken = tokens.jwtToken
+                sessionManager.angelJwtToken = tokens.jwtToken
+                sessionManager.angelClientCode = clientCode
+                sessionManager.angelClientId = clientCode
                 sessionManager.angelFeedToken = tokens.feedToken
                 sessionManager.angelRefreshToken = tokens.refreshToken
                 sessionManager.angelApiKey = apiKey
-                sessionManager.angelClientCode = clientCode
                 sessionManager.angelClientPin = pin
                 sessionManager.angelTotpSecret = totpSecret
                 sessionManager.angelTokenTimestamp = System.currentTimeMillis()

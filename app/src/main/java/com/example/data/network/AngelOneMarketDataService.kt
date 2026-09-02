@@ -72,15 +72,15 @@ class AngelOneMarketDataService(
 
 
     fun isConfigured(): Boolean {
-        return !sessionManager.angelJwtToken.isNullOrEmpty() && !sessionManager.angelClientId.isNullOrEmpty() && !sessionManager.angelFeedToken.isNullOrEmpty()
+        val token = sessionManager.angelJwtToken?.takeIf { it.isNotBlank() } ?: sessionManager.angelAuthToken
+        val cCode = sessionManager.angelClientCode.takeIf { it.isNotBlank() } ?: sessionManager.angelClientId
+        return !token.isNullOrBlank() && !cCode.isNullOrBlank() && !sessionManager.angelFeedToken.isNullOrBlank()
     }
 
     fun isConnectingOrLive(): Boolean {
         val state = _connectionState.value
         return state == "CONNECTING" || state == "CONNECTED" || state == "SUBSCRIBING" || state == "SUBSCRIBED" || state == "LIVE"
     }
-
-    private var pingJob: Job? = null
 
     private fun connectWebSocket(force: Boolean = false) {
         if (!force && webSocket != null && isConnectingOrLive()) {
@@ -90,13 +90,12 @@ class AngelOneMarketDataService(
 
         webSocket?.cancel()
         webSocket = null
-        pingJob?.cancel()
 
-        val token = sessionManager.angelJwtToken
-        val clientCode = sessionManager.angelClientId
+        val token = sessionManager.angelJwtToken?.takeIf { it.isNotBlank() } ?: sessionManager.angelAuthToken
+        val clientCode = sessionManager.angelClientCode.takeIf { it.isNotBlank() } ?: sessionManager.angelClientId
         val feedToken = sessionManager.angelFeedToken
         
-        if (token.isNullOrEmpty() || clientCode.isNullOrEmpty() || feedToken.isNullOrEmpty()) {
+        if (token.isNullOrBlank() || clientCode.isNullOrBlank() || feedToken.isNullOrBlank()) {
             _connectionState.value = "DISCONNECTED"
             return
         }
@@ -108,9 +107,10 @@ class AngelOneMarketDataService(
             isSubscribed = false
         }
         
+        val cleanAuth = token.removePrefix("Bearer ").removePrefix("bearer ").trim()
         val request = Request.Builder()
             .url("wss://smartapisocket.angelone.in/smart-stream")
-            .header("Authorization", "Bearer $token")
+            .header("Authorization", cleanAuth)
             .header("x-api-key", sessionManager.angelApiKey)
             .header("x-client-code", clientCode)
             .header("x-feed-token", feedToken)
@@ -122,17 +122,6 @@ class AngelOneMarketDataService(
                 reconnectAttempt = 0
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, true)
                 Log.d("SmartStream", "[WEBSOCKET_CONNECTED]")
-                
-                pingJob = scope.launch {
-                    while (true) {
-                        delay(30_000)
-                        try {
-                            webSocket.send("ping")
-                        } catch (e: Exception) {
-                            break
-                        }
-                    }
-                }
                 
                 if (instrumentMaster.isLoaded) {
                     resubscribeAll(webSocket)
@@ -162,7 +151,11 @@ class AngelOneMarketDataService(
                 hasFirstTick = false
                 healthManager?.reportDisconnected(ProviderHealthManager.PROVIDER_ANGEL_ONE)
                 com.example.data.model.MarketDataStore.setAngelHealth("OFFLINE")
-                Log.d("SmartStream", "WebSocket Closed: $reason")
+                Log.d("SmartStream", "WebSocket Closed: $reason, code: $code")
+                if (code == 4401 || code == 4403 || code == 4001) {
+                    _connectionState.value = "AUTH_FAILED"
+                    return
+                }
                 if (code != 1000 && code != 1008 && code != 1001) {
                     scheduleReconnect()
                 }
@@ -174,7 +167,12 @@ class AngelOneMarketDataService(
                 hasFirstTick = false
                 healthManager?.reportConnection(ProviderHealthManager.PROVIDER_ANGEL_ONE, false)
                 com.example.data.model.MarketDataStore.setAngelHealth("ERROR")
-                Log.e("SmartStream", "WebSocket Failure: ${t.message}")
+                Log.e("SmartStream", "WebSocket Failure: ${t.message}, code=${response?.code}")
+                if (response?.code == 401 || response?.code == 403) {
+                    Log.w("SmartStream", "Angel One WebSocket Auth Failed (code ${response.code}). Breaking reconnect loop.")
+                    _connectionState.value = "AUTH_FAILED"
+                    return
+                }
                 scheduleReconnect()
             }
         })
@@ -456,7 +454,6 @@ class AngelOneMarketDataService(
     fun disconnect() {
         webSocket?.cancel()
         webSocket = null
-        pingJob?.cancel()
         monitorJob?.cancel()
         _connectionState.value = "DISCONNECTED"
         com.example.data.model.MarketDataStore.setAngelHealth("OFFLINE")

@@ -46,7 +46,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val dhanService = com.example.data.network.DhanBrokerService(api = networkClient.dhanApi, sessionManager = sessionManager)
     val brokerManager = com.example.data.network.BrokerManager(sessionManager, angelOneService, dhanService, instrumentMasterService)
     val telegramService = TelegramService(sessionManager)
-    private val repository = TradingRepository(TradingDatabase.getDatabase(application).tradingDao(), brokerManager)
+    private val tradingDao = TradingDatabase.getDatabase(application).tradingDao()
+    private val repository = TradingRepository(tradingDao, brokerManager)
     val diagnosticEngine = com.example.util.diagnostic.SelfDiagnosticEngine(brokerManager)
     val alertService = com.example.util.alert.AlertService(
         context = application,
@@ -60,8 +61,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _userProfile = MutableStateFlow(UserProfileEntity())
     val userProfile: StateFlow<UserProfileEntity> = _userProfile.asStateFlow()
 
-    private val _watchlist = MutableStateFlow<List<WatchlistItem>>(emptyList())
-    val watchlist: StateFlow<List<WatchlistItem>> = _watchlist.asStateFlow()
+    val watchlist: StateFlow<List<WatchlistItem>> = kotlinx.coroutines.flow.combine(
+        tradingDao.getWatchlist("ALL"),
+        com.example.data.model.MarketDataStore.ticks
+    ) { dbList, liveTicks ->
+        dbList.map { item ->
+            val tick = liveTicks[item.symbol] 
+                ?: liveTicks[item.symbol.replace(" ", "")] 
+                ?: liveTicks[com.example.data.model.MarketUniverse.getCanonicalUnderlying(item.symbol)]
+                ?: liveTicks.values.find { liveItem ->
+                    val liveSymbol = liveItem.symbol.uppercase().trim()
+                    val dbSymbol = item.symbol.uppercase().trim()
+                    when (dbSymbol) {
+                        "NIFTY 50" -> liveSymbol == "NIFTY 50" || liveSymbol == "NIFTY"
+                        "BANKNIFTY" -> liveSymbol == "NIFTY BANK" || liveSymbol == "BANKNIFTY"
+                        "FINNIFTY" -> liveSymbol == "NIFTY FIN SERVICE" || liveSymbol == "FINNIFTY"
+                        "MIDCPNIFTY" -> liveSymbol.contains("MID SELECT") || liveSymbol == "MIDCPNIFTY"
+                        "SENSEX" -> liveSymbol == "SENSEX"
+                        "BANKEX" -> liveSymbol == "BANKEX"
+                        "CRUDEOIL" -> liveSymbol.startsWith("CRUDEOIL") && !liveSymbol.startsWith("CRUDEOILM")
+                        "CRUDEOIL M" -> liveSymbol.startsWith("CRUDEOILM")
+                        else -> liveSymbol == dbSymbol
+                    }
+                }
+            if (tick != null && tick.price > 0.0) {
+                val prevClose = if (item.change != 0.0) (item.ltp - item.change) else tick.price
+                val liveChange = tick.price - prevClose
+                val liveChangePct = if (prevClose > 0.0) (liveChange / prevClose) * 100.0 else 0.0
+                item.copy(
+                    ltp = tick.price,
+                    change = liveChange,
+                    changePercent = liveChangePct,
+                    isPositive = liveChange >= 0
+                )
+            } else {
+                item
+            }
+        }
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _orders = MutableStateFlow<List<OrderEntity>>(emptyList())
     val orders: StateFlow<List<OrderEntity>> = _orders.asStateFlow()
@@ -292,9 +329,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             brokerManager.brokerAuthManager.statuses.collectLatest { statuses ->
                 val actualDhanStatus = statuses["Dhan"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                val actualAngelStatus = statuses["Angel One"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                val actualUpstoxStatus = statuses["Upstox"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
+                val actualFyersStatus = statuses["Fyers"]?.status == com.example.data.network.BrokerAuthStatus.CONNECTED
                 val currentProfile = _userProfile.value
-                if (currentProfile.isDhanConnected != actualDhanStatus) {
-                    _userProfile.value = currentProfile.copy(isDhanConnected = actualDhanStatus)
+                if (currentProfile.isDhanConnected != actualDhanStatus ||
+                    currentProfile.isAngelConnected != actualAngelStatus ||
+                    currentProfile.isUpstoxConnected != actualUpstoxStatus ||
+                    currentProfile.isFyersConnected != actualFyersStatus) {
+                    _userProfile.value = currentProfile.copy(
+                        isDhanConnected = actualDhanStatus,
+                        isAngelConnected = actualAngelStatus,
+                        isUpstoxConnected = actualUpstoxStatus,
+                        isFyersConnected = actualFyersStatus
+                    )
                 }
             }
         }
@@ -336,7 +384,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.collectLatest { pair: Pair<List<com.example.data.model.WatchlistItem>, Boolean> ->
                 val combinedList = pair.first
                 val changed = pair.second
-                _watchlist.value = combinedList
                 if (changed) {
                     val onlyWithLtp = (combinedList as List<com.example.data.model.WatchlistItem>).filter { it.ltp > 0.0 }
                     if (onlyWithLtp.isNotEmpty()) {
@@ -829,6 +876,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val res = brokerManager.fyersAuthManager.exchangeAuthCode(cleanInput)
                     if (res.isSuccess) {
                         sessionManager.isFyersConnected = true
+                        val current = _userProfile.value
+                        val updated = current.copy(
+                            isFyersConnected = true,
+                            connectedBroker = if (current.connectedBroker.isBlank()) "Fyers" else current.connectedBroker
+                        )
+                        _userProfile.value = updated
+                        repository.updateProfile(updated)
                         brokerManager.brokerAuthManager.updateStatus(
                             "Fyers",
                             "Primary Market Data Feed",
@@ -895,7 +949,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startFyersOAuth(appId: String, secretId: String, onUrlGenerated: (String) -> Unit, onError: (String) -> Unit) {
-        val cleanAppId = appId.trim()
+        val cleanAppId = com.example.util.FyersAuthHelper.getFullAppId(appId)
         val cleanSecretId = secretId.trim()
         if (cleanAppId.isBlank()) {
             brokerManager.healthManager.reportAuthFailure(
@@ -910,7 +964,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (cleanSecretId.isNotBlank()) {
             sessionManager.fyersSecretId = cleanSecretId
         }
-        val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+        val rawRedirect = sessionManager.fyersRedirectUri
+        val redirectUri = if (rawRedirect.isBlank() || rawRedirect.contains("kingkhan://")) {
+            com.example.util.FyersAuthHelper.DEFAULT_REDIRECT_URI
+        } else {
+            rawRedirect
+        }
+        if (sessionManager.fyersRedirectUri != redirectUri) {
+            sessionManager.fyersRedirectUri = redirectUri
+        }
         val randomState = com.example.util.FyersAuthHelper.generateSecureState()
         sessionManager.pendingFyersOAuthState = randomState
         sessionManager.pendingOAuthState = randomState
@@ -994,6 +1056,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isAngelConnected = false,
                     connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
                 )
+                BrokerType.UPSTOX -> current.copy(
+                    isUpstoxConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Upstox") "" else current.connectedBroker
+                )
+                BrokerType.FYERS -> current.copy(
+                    isFyersConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Fyers") "" else current.connectedBroker
+                )
                 else -> current.copy(
                     connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
                 )
@@ -1020,6 +1090,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isAngelConnected = false,
                     angelClientId = "",
                     connectedBroker = if (current.connectedBroker == "Angel One") "" else current.connectedBroker
+                )
+                BrokerType.UPSTOX -> current.copy(
+                    isUpstoxConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Upstox") "" else current.connectedBroker
+                )
+                BrokerType.FYERS -> current.copy(
+                    isFyersConnected = false,
+                    connectedBroker = if (current.connectedBroker == "Fyers") "" else current.connectedBroker
                 )
                 else -> current.copy(
                     connectedBroker = if (current.connectedBroker == name) "" else current.connectedBroker
@@ -1433,7 +1511,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _userProfile.value = UserProfileEntity(id = 1)
             _orders.value = emptyList()
             _holdings.value = emptyList()
-            _watchlist.value = emptyList()
             repository.updateProfile(UserProfileEntity(id = 1))
         }
     }
@@ -1524,7 +1601,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _marketDataLastUpdated.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
             com.example.util.AlgoEngine.processMarketFeed(
-                quotes = _watchlist.value,
+                quotes = watchlist.value,
                 isLiveFeedActive = isLiveFeedActive.value,
                 optionChain = _optionStrikes.value
             )

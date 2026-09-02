@@ -101,7 +101,12 @@ object UpstoxAuthHelper {
         redirectUri: String = DEFAULT_REDIRECT_URI,
         state: String? = null
     ): String {
-        val encodedRedirect = URLEncoder.encode(redirectUri, "UTF-8")
+        val targetRedirect = if (redirectUri.isBlank() || redirectUri.startsWith("kingkhan://")) {
+            DEFAULT_REDIRECT_URI
+        } else {
+            redirectUri
+        }
+        val encodedRedirect = URLEncoder.encode(targetRedirect, "UTF-8")
         val effectiveState = state ?: generateSecureState()
         val encodedState = URLEncoder.encode(effectiveState, "UTF-8")
         return "$AUTH_DIALOG_BASE?response_type=code&client_id=$apiKey&redirect_uri=$encodedRedirect&state=$encodedState"

@@ -20,7 +20,7 @@ import com.example.data.model.WatchlistItem
         UserProfileEntity::class,
         NotificationEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {

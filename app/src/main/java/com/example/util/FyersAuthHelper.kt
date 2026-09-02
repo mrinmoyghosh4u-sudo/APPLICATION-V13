@@ -19,7 +19,11 @@ object FyersAuthHelper {
 
     fun getFullAppId(appId: String): String {
         val trimmed = appId.trim()
-        return if (trimmed.isNotBlank() && !trimmed.contains("-100")) "$trimmed-100" else trimmed
+        return when {
+            trimmed.isBlank() -> trimmed
+            trimmed.endsWith("-100") -> trimmed
+            else -> "$trimmed-100"
+        }
     }
 
     fun generateAppIdHash(appId: String, secretId: String): String {
@@ -35,7 +39,13 @@ object FyersAuthHelper {
         state: String? = null
     ): String {
         val fullAppId = getFullAppId(appId)
-        val encodedRedirect = URLEncoder.encode(redirectUri, StandardCharsets.UTF_8.toString())
+        // Ensure redirect_uri always matches Fyers developer console (https://application-beige-psi.vercel.app/oauth)
+        val targetRedirectUri = if (redirectUri.isBlank() || redirectUri.startsWith("kingkhan://")) {
+            DEFAULT_REDIRECT_URI
+        } else {
+            redirectUri
+        }
+        val encodedRedirect = URLEncoder.encode(targetRedirectUri, StandardCharsets.UTF_8.toString())
         var url = "https://api-t1.fyers.in/api/v3/generate-authcode?client_id=$fullAppId&redirect_uri=$encodedRedirect&response_type=code"
         if (!state.isNullOrBlank()) {
             val encodedState = URLEncoder.encode(state, StandardCharsets.UTF_8.toString())

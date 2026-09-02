@@ -474,7 +474,10 @@ class SessionManager(context: Context) {
         set(value) = safeSetToken(KEY_FYERS_SECRET_ID, value)
 
     var fyersRedirectUri: String
-        get() = prefs.getString(KEY_FYERS_REDIRECT_URI, "kingkhan://oauth/callback") ?: "kingkhan://oauth/callback"
+        get() {
+            val uri = prefs.getString(KEY_FYERS_REDIRECT_URI, "https://application-beige-psi.vercel.app/oauth") ?: "https://application-beige-psi.vercel.app/oauth"
+            return if (uri.isBlank() || uri.startsWith("kingkhan://")) "https://application-beige-psi.vercel.app/oauth" else uri
+        }
         set(value) = prefs.edit().putString(KEY_FYERS_REDIRECT_URI, value.trim()).apply()
 
     var fyersAccessToken: String?

@@ -226,6 +226,9 @@ fun ProfileScreen(
                             userProfile.isDhanConnected -> "Dhan Account Holder"
                             userProfile.dhanClientId.isNotBlank() -> "Dhan Account (${userProfile.dhanClientId})"
                             userProfile.isAngelConnected && userProfile.angelClientId.isNotBlank() -> "Angel One (${userProfile.angelClientId})"
+                            userProfile.isAngelConnected -> "Angel One Account"
+                            userProfile.isUpstoxConnected -> "Upstox Account"
+                            userProfile.isFyersConnected -> "Fyers Account"
                             else -> "Trader Account"
                         }
                         val initial = holderName.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "D"
@@ -264,16 +267,22 @@ fun ProfileScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(3.dp))
-                            if (userProfile.isDhanConnected || userProfile.dhanClientId.isNotBlank()) {
+                            if (userProfile.isBrokerConnected) {
+                                val connectedBrokers = buildList {
+                                    if (userProfile.isDhanConnected) add("Dhan")
+                                    if (userProfile.isAngelConnected) add("Angel One")
+                                    if (userProfile.isUpstoxConnected) add("Upstox")
+                                    if (userProfile.isFyersConnected) add("Fyers")
+                                }
                                 Text(
-                                    text = "⚡ Dhan Order Execution: Connected" + if (userProfile.dhanClientId.isNotBlank()) " (${userProfile.dhanClientId})" else "",
+                                    text = "⚡ Connected: ${connectedBrokers.joinToString(", ")}",
                                     fontSize = 11.sp,
                                     color = ProfitGreen,
                                     fontWeight = FontWeight.Medium
                                 )
                             } else {
                                 Text(
-                                    text = "Order Execution: Dhan Disconnected",
+                                    text = "Brokers Disconnected",
                                     fontSize = 11.sp,
                                     color = TextGray
                                 )
@@ -523,12 +532,12 @@ fun ProfileScreen(
 
             // 3. Fyers
             val fyersInfo = brokerStatuses["Fyers"]
-            val fyersStatus = fyersInfo?.status ?: BrokerAuthStatus.DISCONNECTED
+            val fyersStatus = fyersInfo?.status ?: if (userProfile.isFyersConnected) BrokerAuthStatus.CONNECTED else BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "Fyers",
                 subtitle = "Market Data Feed (API v3 WebSocket)",
                 status = fyersStatus,
-                statusMessage = fyersInfo?.message ?: "WebSocket Live Tick Feeds",
+                statusMessage = fyersInfo?.message ?: if (userProfile.isFyersConnected) "Connected (API v3 Active)" else "WebSocket Live Tick Feeds",
                 onConnect = { onSwitchBroker("Fyers") },
                 onReconnect = { onReconnectBroker("Fyers") },
                 onDisconnect = { onDisconnectBroker("Fyers") },
@@ -539,12 +548,12 @@ fun ProfileScreen(
 
             // 4. Upstox
             val upstoxInfo = brokerStatuses["Upstox"]
-            val upstoxStatus = upstoxInfo?.status ?: BrokerAuthStatus.DISCONNECTED
+            val upstoxStatus = upstoxInfo?.status ?: if (userProfile.isUpstoxConnected) BrokerAuthStatus.CONNECTED else BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "Upstox",
                 subtitle = "Market Data Feed & Streamer (Protobuf API v3)",
                 status = upstoxStatus,
-                statusMessage = upstoxInfo?.message ?: "High-speed Market Stream",
+                statusMessage = upstoxInfo?.message ?: if (userProfile.isUpstoxConnected) "Connected (Protobuf Active)" else "High-speed Market Stream",
                 onConnect = { onSwitchBroker("Upstox") },
                 onReconnect = { onReconnectBroker("Upstox") },
                 onDisconnect = { onDisconnectBroker("Upstox") },

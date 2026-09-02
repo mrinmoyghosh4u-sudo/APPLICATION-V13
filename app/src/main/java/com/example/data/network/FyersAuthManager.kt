@@ -78,11 +78,23 @@ class FyersAuthManager(
                 val rawAppId = sessionManager.fyersAppId.takeIf { it.isNotBlank() }
                     ?: com.example.util.BrokerConfig.fyersAppId.takeIf { it.isNotBlank() }
                     ?: throw Exception("FYERS App ID is missing")
+                val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
+                if (sessionManager.fyersAppId != fullAppId) {
+                    sessionManager.fyersAppId = fullAppId
+                }
+
                 val secret = sessionManager.fyersSecretId.takeIf { it.isNotBlank() }
                     ?: com.example.util.BrokerConfig.fyersSecretId.takeIf { it.isNotBlank() }
-                val redirectUri = sessionManager.fyersRedirectUri.takeIf { it.isNotBlank() } ?: FyersAuthHelper.DEFAULT_REDIRECT_URI
 
-                val fullAppId = FyersAuthHelper.getFullAppId(rawAppId)
+                val rawRedirectUri = sessionManager.fyersRedirectUri
+                val redirectUri = if (rawRedirectUri.isBlank() || rawRedirectUri.contains("kingkhan://")) {
+                    "https://application-beige-psi.vercel.app/oauth"
+                } else {
+                    rawRedirectUri
+                }
+                if (sessionManager.fyersRedirectUri != redirectUri) {
+                    sessionManager.fyersRedirectUri = redirectUri
+                }
 
                 Log.i(TAG, "[TOKEN_EXCHANGE_STARTED] Initiating FYERS authorization code exchange...")
                 Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Initiating FYERS authorization code exchange...")
@@ -217,9 +229,10 @@ class FyersAuthManager(
         suspend fun validateSession(): Boolean = withContext(Dispatchers.IO) {
         val token = sessionManager.fyersAccessToken
         val appId = sessionManager.fyersAppId
+        val fullAppId = FyersAuthHelper.getFullAppId(appId)
         
-        if (token.isNullOrBlank() || appId.isBlank()) {
-            _authStatus.value = if (appId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.NOT_CONFIGURED
+        if (token.isNullOrBlank() || fullAppId.isBlank()) {
+            _authStatus.value = if (fullAppId.isNotBlank()) BrokerAuthStatus.AUTHENTICATION_REQUIRED else BrokerAuthStatus.NOT_CONFIGURED
             return@withContext false
         }
 
@@ -236,7 +249,7 @@ class FyersAuthManager(
             return@withContext false
         }
 
-        val authHeader = "$appId:$token"
+        val authHeader = "$fullAppId:$token"
         try {
             val profileRes = fyersApi.getProfile(authHeader)
             if (profileRes.isSuccessful && profileRes.body()?.s == "ok") {
@@ -257,6 +270,23 @@ class FyersAuthManager(
             _authStatus.value = BrokerAuthStatus.ERROR
             return@withContext false
         }
+    }
+
+    fun buildAuthorizationUrl(appId: String, state: String? = null): String {
+        val fullAppId = FyersAuthHelper.getFullAppId(appId)
+        if (sessionManager.fyersAppId != fullAppId && fullAppId.isNotBlank()) {
+            sessionManager.fyersAppId = fullAppId
+        }
+        val rawRedirectUri = sessionManager.fyersRedirectUri
+        val redirectUri = if (rawRedirectUri.isBlank() || rawRedirectUri.contains("kingkhan://")) {
+            "https://application-beige-psi.vercel.app/oauth"
+        } else {
+            rawRedirectUri
+        }
+        if (sessionManager.fyersRedirectUri != redirectUri) {
+            sessionManager.fyersRedirectUri = redirectUri
+        }
+        return FyersAuthHelper.buildLoginUrl(fullAppId, redirectUri, state)
     }
 
     // FYERS 2026 Audit: Refresh token flows are not supported for continuous sessions.

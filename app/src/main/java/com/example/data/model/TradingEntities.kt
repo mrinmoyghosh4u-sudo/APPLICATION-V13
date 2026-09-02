@@ -200,6 +200,8 @@ data class UserProfileEntity(
     val angelClientId: String = "",
     val isDhanConnected: Boolean = false,
     val dhanClientId: String = "",
+    val isUpstoxConnected: Boolean = false,
+    val isFyersConnected: Boolean = false,
     val isBiometricEnabled: Boolean = false,
     val riskPreference: String = "Moderate",
     val defaultOrderType: String = "LIMIT",
@@ -221,7 +223,7 @@ data class UserProfileEntity(
     val pnlErrorMessage: String = ""
 ) {
     val isBrokerConnected: Boolean
-        get() = (isAngelConnected || isDhanConnected) && connectedBroker.isNotBlank()
+        get() = isDhanConnected || isAngelConnected || isUpstoxConnected || isFyersConnected
 
     val isPnlAvailable: Boolean
         get() = pnlStatus == PnlState.AVAILABLE.name
