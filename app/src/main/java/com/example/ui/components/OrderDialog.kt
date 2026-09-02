@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
@@ -257,6 +258,15 @@ fun OrderDialog(
 
                 // AI Trade Parameters Breakdown
                 Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Live order execution: DHAN ONLY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SecondaryGold,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = DarkCardSecondary,

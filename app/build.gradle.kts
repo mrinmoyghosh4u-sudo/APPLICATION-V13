@@ -73,16 +73,12 @@ android {
 
     buildConfigField("String", "DHAN_API_KEY", "\"${dhanApiKeyVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "DHAN_CLIENT_ID", "\"${dhanClientIdVal.replace("\"", "\\\"")}\"")
-    buildConfigField("String", "DHAN_CLIENT_SECRET", "\"${dhanClientSecretVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "DHAN_REDIRECT_URI", "\"${dhanRedirectUriVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "ANGEL_ONE_API_KEY", "\"${angelApiKeyVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "ANGEL_REDIRECT_URI", "\"${angelRedirectUriVal.replace("\"", "\\\"")}\"")
-    buildConfigField("String", "GITHUB_TOKEN", "\"${githubTokenVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "UPSTOX_API_KEY", "\"${upstoxApiKeyVal.replace("\"", "\\\"")}\"")
-    buildConfigField("String", "UPSTOX_API_SECRET", "\"${upstoxApiSecretVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "UPSTOX_REDIRECT_URI", "\"${upstoxRedirectUriVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "FYERS_APP_ID", "\"${fyersAppIdVal.replace("\"", "\\\"")}\"")
-    buildConfigField("String", "FYERS_SECRET_ID", "\"${fyersSecretIdVal.replace("\"", "\\\"")}\"")
     buildConfigField("String", "FYERS_REDIRECT_URI", "\"${fyersRedirectUriVal.replace("\"", "\\\"")}\"")
   }
 
@@ -101,21 +97,18 @@ android {
       val keystoreFile = resolveKsFile(envKsPath)
         ?: resolveKsFile("my-upload-key.jks")
         ?: resolveKsFile("release.keystore")
-        ?: resolveKsFile("debug.keystore")
-        ?: run {
-          val b64File = file("${rootDir}/debug.keystore.base64")
-          if (b64File.exists()) {
-            val ksFile = file("${rootDir}/debug.keystore")
-            ksFile.writeBytes(Base64.getDecoder().decode(b64File.readText().trim()))
-            ksFile
-          } else null
-        }
-        ?: throw GradleException("Production signing keystore is missing. Refusing to generate a new signing key because this would break app updates.")
 
-      storeFile = keystoreFile
-      storePassword = System.getenv("STORE_PASSWORD") ?: System.getenv("RELEASE_STORE_PASSWORD") ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS") ?: System.getenv("RELEASE_KEY_ALIAS") ?: (if (keystoreFile.name.contains("upload")) "upload" else "androiddebugkey")
-      keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("RELEASE_KEY_PASSWORD") ?: "android"
+      if (keystoreFile == null) {
+          val isRelease = gradle.startParameter.taskRequests.toString().contains("Release", ignoreCase = true)
+          if (isRelease) {
+              throw GradleException("Production signing keystore is missing. Refusing to generate a new signing key because this would break app updates.")
+          }
+      } else {
+          storeFile = keystoreFile
+          storePassword = System.getenv("STORE_PASSWORD") ?: System.getenv("RELEASE_STORE_PASSWORD") ?: throw GradleException("STORE_PASSWORD missing")
+          keyAlias = System.getenv("KEY_ALIAS") ?: System.getenv("RELEASE_KEY_ALIAS") ?: throw GradleException("KEY_ALIAS missing")
+          keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("RELEASE_KEY_PASSWORD") ?: throw GradleException("KEY_PASSWORD missing")
+      }
 
       enableV1Signing = true
       enableV2Signing = true

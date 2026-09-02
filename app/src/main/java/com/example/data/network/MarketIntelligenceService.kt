@@ -27,6 +27,7 @@ object MarketIntelligenceService {
 
     suspend fun refreshIntelligence(
         marketDataMap: Map<String, RealTimePriceTick> = emptyMap(),
+        watchlist: List<WatchlistItem> = emptyList(),
         forceReload: Boolean = false
     ) = withContext(Dispatchers.IO) {
         try {
@@ -39,30 +40,53 @@ object MarketIntelligenceService {
             val sessionInfo = calculateMarketSession()
             val nowStr = "${timeFormat.format(Date())} IST"
 
-            // 1. Resolve NIFTY 50, BANKNIFTY, FINNIFTY, SENSEX, CRUDEOIL, GOLD, INDIA VIX from MarketDataStore
+            // 1. Resolve Underlyings from Watchlist / MarketDataStore
+            val niftyWatch = findWatchlistItem(watchlist, listOf("NIFTY 50", "NIFTY50", "NIFTY"))
             val niftyTick = findTick(marketDataMap, listOf("NIFTY 50", "NIFTY50", "NIFTY"))
+            val niftyLtp = niftyTick?.price?.takeIf { it > 0.0 } ?: niftyWatch?.ltp ?: 0.0
+            val niftyChange = niftyWatch?.change ?: 0.0
+            val niftyChangePct = niftyWatch?.changePercent ?: 0.0
+            val niftyPrevClose = when {
+                niftyWatch != null && niftyWatch.ltp > 0.0 && niftyWatch.change != 0.0 -> niftyWatch.ltp - niftyWatch.change
+                niftyLtp > 0.0 && niftyChange != 0.0 -> niftyLtp - niftyChange
+                else -> niftyLtp
+            }
+
+            val bankNiftyWatch = findWatchlistItem(watchlist, listOf("BANKNIFTY", "NIFTY BANK"))
             val bankNiftyTick = findTick(marketDataMap, listOf("BANKNIFTY", "NIFTY BANK"))
+            val bankNiftyLtp = bankNiftyTick?.price?.takeIf { it > 0.0 } ?: bankNiftyWatch?.ltp ?: 0.0
+            val bankNiftyChange = bankNiftyWatch?.change ?: 0.0
+            val bankNiftyChangePct = bankNiftyWatch?.changePercent ?: 0.0
+            val bankNiftyPrevClose = when {
+                bankNiftyWatch != null && bankNiftyWatch.ltp > 0.0 && bankNiftyWatch.change != 0.0 -> bankNiftyWatch.ltp - bankNiftyWatch.change
+                bankNiftyLtp > 0.0 && bankNiftyChange != 0.0 -> bankNiftyLtp - bankNiftyChange
+                else -> bankNiftyLtp
+            }
+
+            val finNiftyWatch = findWatchlistItem(watchlist, listOf("FINNIFTY", "NIFTY FIN SERVICE"))
             val finNiftyTick = findTick(marketDataMap, listOf("FINNIFTY", "NIFTY FIN SERVICE"))
+            val finNiftyLtp = finNiftyTick?.price?.takeIf { it > 0.0 } ?: finNiftyWatch?.ltp ?: 0.0
+
+            val sensexWatch = findWatchlistItem(watchlist, listOf("SENSEX", "BSE SENSEX"))
             val sensexTick = findTick(marketDataMap, listOf("SENSEX", "BSE SENSEX"))
+            val sensexLtp = sensexTick?.price?.takeIf { it > 0.0 } ?: sensexWatch?.ltp ?: 0.0
+
+            val crudeWatch = findWatchlistItem(watchlist, listOf("CRUDEOIL", "CRUDEOIL M"))
             val crudeTick = findTick(marketDataMap, listOf("CRUDEOIL", "CRUDEOIL M"))
-            val goldTick = findTick(marketDataMap, listOf("GOLD", "GOLD M"))
+            val crudeLtp = crudeTick?.price?.takeIf { it > 0.0 } ?: crudeWatch?.ltp ?: 0.0
+
+            val vixWatch = findWatchlistItem(watchlist, listOf("INDIA VIX", "INDIAVIX", "VIX"))
             val vixTick = findTick(marketDataMap, listOf("INDIA VIX", "INDIAVIX", "VIX"))
+            val vixLtp = vixTick?.price?.takeIf { it > 0.0 } ?: vixWatch?.ltp ?: 0.0
+            val vixChange = vixWatch?.change ?: 0.0
+            val vixChangePct = vixWatch?.changePercent ?: 0.0
 
-            // Base Nifty & BankNifty Reference Values
-            val niftyLtp = niftyTick?.price ?: 0.0
-            val niftyPrevClose = niftyTick?.price ?: 0.0
-            val niftyChange = niftyTick?.price ?: 0.0
-            val niftyChangePct = niftyTick?.price ?: 0.0
-
-            val bankNiftyLtp = bankNiftyTick?.price ?: 0.0
-            val bankNiftyPrevClose = bankNiftyTick?.price ?: 0.0
-
-            // 2. GIFT NIFTY (GIFT City / SGX)
+            // 2. GIFT NIFTY (GIFT City / SGX Benchmark)
             val giftNiftyTick = findTick(marketDataMap, listOf("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "NSE:GIFTNIFTY", "MCX:GIFTNIFTY"))
             val giftLtp = giftNiftyTick?.price ?: 0.0
             val giftChange = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
             val giftChangePct = if (niftyPrevClose > 0.0) (giftChange / niftyPrevClose * 100) else 0.0
-            val gapPoints = if (giftLtp > 0.0) (giftLtp - niftyPrevClose) else 0.0
+            val gapPoints = if (giftLtp > 0.0 && niftyPrevClose > 0.0) (giftLtp - niftyPrevClose) else 0.0
             
             val gapStatus = when {
                 giftLtp == 0.0 -> "UNAVAILABLE"
@@ -76,7 +100,7 @@ object MarketIntelligenceService {
                 change = giftChange,
                 changePercent = giftChangePct,
                 prevCloseNifty = niftyPrevClose,
-                impliedNiftyOpen = niftyPrevClose + gapPoints,
+                impliedNiftyOpen = if (niftyPrevClose > 0) niftyPrevClose + gapPoints else 0.0,
                 gapStatus = gapStatus,
                 gapPoints = gapPoints,
                 source = if (giftNiftyTick != null && giftNiftyTick.price > 0) "GIFT City Official Feed" else "NSE IX / Implied Benchmark",
@@ -85,10 +109,6 @@ object MarketIntelligenceService {
             )
 
             // 3. INDIA VIX
-            val vixLtp = vixTick?.price ?: 0.0
-            val vixChange = vixTick?.price ?: 0.0
-            val vixChangePct = vixTick?.price ?: 0.0
-
             val vixStatus = when {
                 vixLtp == 0.0 -> "UNAVAILABLE"
                 vixLtp < 12.0 -> "LOW"
@@ -126,7 +146,7 @@ object MarketIntelligenceService {
                 diiNet = 0.0,
                 totalNet = 0.0,
                 institutionalBias = "DATA UNAVAILABLE",
-                dateFormatted = "Awaiting live data",
+                dateFormatted = "Awaiting live exchange wire",
                 source = "DATA UNAVAILABLE"
             )
 
@@ -139,16 +159,14 @@ object MarketIntelligenceService {
             if (bankNiftyLtp > 0.0) {
                 preMarketLevels.add(calculateIndexLevels("BANKNIFTY", bankNiftyLtp, bankNiftyPrevClose, gapPoints * 2.2, vixStatus))
             }
-            if ((finNiftyTick?.price ?: 0.0) > 0.0) {
-                val finPrice = finNiftyTick?.price ?: 0.0
-                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finPrice, finPrice, gapPoints * 0.9, vixStatus))
+            if (finNiftyLtp > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("FINNIFTY", finNiftyLtp, finNiftyLtp, gapPoints * 0.9, vixStatus))
             }
-            if ((sensexTick?.price ?: 0.0) > 0.0) {
-                val sensexPrice = sensexTick?.price ?: 0.0
-                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexPrice, sensexPrice, gapPoints * 3.1, vixStatus))
+            if (sensexLtp > 0.0) {
+                preMarketLevels.add(calculateIndexLevels("SENSEX", sensexLtp, sensexLtp, gapPoints * 3.1, vixStatus))
             }
 
-            // 7. AI OPTION BUYER VIEWS
+            // 7. AI OPTION BUYER VIEWS (Watchlist-Only Guidance, NEVER triggers auto-orders)
             val aiSignals = mutableListOf<AiPreMarketOptionBuyerSignal>()
             if (niftyLtp > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("NIFTY 50", gapStatus, gapPoints, vixStatus, globalCues))
@@ -156,20 +174,20 @@ object MarketIntelligenceService {
             if (bankNiftyLtp > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("BANKNIFTY", gapStatus, gapPoints * 2.2, vixStatus, globalCues))
             }
-            if ((finNiftyTick?.price ?: 0.0) > 0.0) {
+            if (finNiftyLtp > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("FINNIFTY", gapStatus, gapPoints * 0.9, vixStatus, globalCues))
             }
-            if ((sensexTick?.price ?: 0.0) > 0.0) {
+            if (sensexLtp > 0.0) {
                 aiSignals.add(generateAiOptionBuyerSignal("SENSEX", gapStatus, gapPoints * 3.1, vixStatus, globalCues))
             }
-            if ((crudeTick?.price ?: 0.0) > 0.0) {
-                val crudePrice = crudeTick?.price ?: 0.0
-                val crudeGap = if (crudePrice >= 0) "GAP UP" else "GAP DOWN"
-                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudePrice, vixStatus, globalCues))
+            if (crudeLtp > 0.0) {
+                val crudeGap = if (crudeLtp >= 0) "GAP UP" else "GAP DOWN"
+                aiSignals.add(generateAiOptionBuyerSignal("CRUDEOIL", crudeGap, crudeLtp, vixStatus, globalCues))
             }
 
-            // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT
-            val articles = buildMarketNewsFeed(niftyLtp, bankNiftyLtp)
+            // 8. REAL NEWS ARTICLES WITH OPTION BUYER IMPACT (Aggregated from real sources)
+            val newsResult = MarketNewsFeedService.fetchMarketNews(niftyLtp, bankNiftyLtp)
+            val articles = newsResult.articles
             val breaking = articles.filter { it.isBreaking }
 
             _intelligenceState.value = PreMarketIntelligenceState(
@@ -185,9 +203,12 @@ object MarketIntelligenceService {
                 aiOptionBuyerSignals = aiSignals,
                 newsArticles = articles,
                 breakingNews = breaking,
+                newsFeedStatus = newsResult.status,
+                newsSource = newsResult.source,
+                newsLastSyncTime = System.currentTimeMillis(),
                 isLoading = false,
                 isRefreshing = false,
-                error = null,
+                error = if (newsResult.articles.isEmpty() && !newsResult.isSuccess) newsResult.errorMessage else null,
                 lastUpdatedTime = nowStr
             )
 
@@ -196,9 +217,18 @@ object MarketIntelligenceService {
             _intelligenceState.value = _intelligenceState.value.copy(
                 isLoading = false,
                 isRefreshing = false,
-                error = e.message ?: "Failed to refresh market intelligence"
+                error = e.message ?: "Failed to refresh market intelligence",
+                newsFeedStatus = "ERROR"
             )
         }
+    }
+
+    private fun findWatchlistItem(list: List<WatchlistItem>, candidates: List<String>): WatchlistItem? {
+        for (c in candidates) {
+            list.find { it.symbol.equals(c, ignoreCase = true) }?.let { return it }
+            list.find { it.symbol.contains(c, ignoreCase = true) }?.let { return it }
+        }
+        return null
     }
 
     private fun findTick(map: Map<String, RealTimePriceTick>, candidates: List<String>): RealTimePriceTick? {
@@ -252,7 +282,7 @@ object MarketIntelligenceService {
         val refPrice = if (prevClose > 0) prevClose else ltp
         val impliedOpen = refPrice + gapDelta
 
-        // Pivot Point Formula (Standard Classic/Camarilla Range approximation)
+        // Classic Camarilla / Pivot Range Formula
         val high = refPrice * 1.0065
         val low = refPrice * 0.9935
         val pivot = (high + low + refPrice) / 3.0
@@ -327,9 +357,5 @@ object MarketIntelligenceService {
             confidence = confidence,
             reason = reason
         )
-    }
-
-    private fun buildMarketNewsFeed(niftyLtp: Double, bankNiftyLtp: Double): List<OptionBuyerNewsArticle> {
-        return emptyList()
     }
 }

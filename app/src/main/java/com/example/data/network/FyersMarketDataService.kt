@@ -263,6 +263,7 @@ class FyersMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
+        heartbeatJob?.cancel()
         try {
             webSocket?.close(1000, "User disconnected")
         } catch (_: Exception) {}

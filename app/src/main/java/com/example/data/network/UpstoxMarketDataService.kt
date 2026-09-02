@@ -481,6 +481,7 @@ class UpstoxMarketDataService(
 
     fun disconnect() {
         reconnectJob?.cancel()
+        staleCheckJob?.cancel()
         
         webSocket?.close(1000, "User disconnected")
         webSocket = null

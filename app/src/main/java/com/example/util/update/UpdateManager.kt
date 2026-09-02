@@ -58,9 +58,6 @@ class UpdateManager(
         val prefsToken = try { AppPreferences.getInstance(context).getGithubToken() } catch (e: Exception) { "" }
         return customToken?.takeIf { it.isNotBlank() }
             ?: prefsToken.takeIf { it.isNotBlank() }
-            ?: BuildConfig.GITHUB_TOKEN.takeIf { it.isNotBlank() }
-            ?: System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
-            ?: System.getenv("GH_TOKEN")?.takeIf { it.isNotBlank() }
             ?: ""
     }
 

@@ -16,10 +16,7 @@ object BrokerConfig {
             ?: ""
 
     val dhanClientSecret: String
-        get() = runCatching { BuildConfig.DHAN_CLIENT_SECRET }.getOrNull()
-            ?.takeIf { it != "DHAN_CLIENT_SECRET_DEFAULT_VALUE" && it.isNotBlank() }
-            ?: System.getenv("DHAN_CLIENT_SECRET")
-            ?: ""
+        get() = ""
 
     val dhanRedirectUri: String
         get() = runCatching { BuildConfig.DHAN_REDIRECT_URI }.getOrNull()
@@ -46,10 +43,7 @@ object BrokerConfig {
             ?: ""
 
     val upstoxApiSecret: String
-        get() = runCatching { BuildConfig.UPSTOX_API_SECRET }.getOrNull()
-            ?.takeIf { it != "UPSTOX_API_SECRET_DEFAULT_VALUE" && it.isNotBlank() }
-            ?: System.getenv("UPSTOX_API_SECRET")
-            ?: ""
+        get() = ""
 
     val upstoxRedirectUri: String
         get() = runCatching { BuildConfig.UPSTOX_REDIRECT_URI }.getOrNull()
@@ -64,10 +58,7 @@ object BrokerConfig {
             ?: ""
 
     val fyersSecretId: String
-        get() = runCatching { BuildConfig.FYERS_SECRET_ID }.getOrNull()
-            ?.takeIf { it != "FYERS_SECRET_ID_DEFAULT_VALUE" && it.isNotBlank() }
-            ?: System.getenv("FYERS_SECRET_ID")
-            ?: ""
+        get() = ""
 
     val fyersRedirectUri: String
         get() = runCatching { BuildConfig.FYERS_REDIRECT_URI }.getOrNull()

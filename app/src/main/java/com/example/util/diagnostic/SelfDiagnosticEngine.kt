@@ -332,10 +332,60 @@ class SelfDiagnosticEngine(private val brokerManager: BrokerManager) {
             results.add(AZDiagnosticResult(DiagnosticCategory.ORDER_ENGINE, "Dhan Orders", orderHealth, if (dhanAuth) "Verified (Execution Only)" else "ORDER BLOCKED", mapOf("Role" to "ORDER_EXECUTION_ONLY")))
             
             // 8. NEWS
-            results.add(AZDiagnosticResult(DiagnosticCategory.NEWS, "News Feed", HealthState.HEALTHY, "Verified", mapOf("Source" to "RSS")))
-            
+            val intelligenceState = com.example.data.network.MarketIntelligenceService.intelligenceState.value
+            val newsArticlesCount = intelligenceState.newsArticles.size
+            val breakingArticlesCount = intelligenceState.breakingNews.size
+            val isNewsHealthy = newsArticlesCount > 0 && intelligenceState.newsFeedStatus == "HEALTHY"
+
+            val newsHealthState = when {
+                isNewsHealthy -> HealthState.HEALTHY
+                newsArticlesCount > 0 -> HealthState.DEGRADED
+                else -> HealthState.OFFLINE
+            }
+            val newsMessage = when {
+                isNewsHealthy -> "Verified ($newsArticlesCount Live Articles)"
+                newsArticlesCount > 0 -> "Degraded ($newsArticlesCount Articles, ${intelligenceState.newsFeedStatus})"
+                else -> "UNAVAILABLE (No Live News Feeds Connected)"
+            }
+            results.add(
+                AZDiagnosticResult(
+                    DiagnosticCategory.NEWS,
+                    "News Feed",
+                    newsHealthState,
+                    newsMessage,
+                    mapOf(
+                        "Source" to intelligenceState.newsSource.ifBlank { "UNAVAILABLE" },
+                        "Articles" to "$newsArticlesCount",
+                        "Breaking" to "$breakingArticlesCount",
+                        "Status" to intelligenceState.newsFeedStatus,
+                        "Verified" to if (isNewsHealthy) "PASS" else "FAIL"
+                    )
+                )
+            )
+
             // 9. PREMARKET
-            results.add(AZDiagnosticResult(DiagnosticCategory.PREMARKET, "Global Cues", HealthState.HEALTHY, "Verified", mapOf("GiftNifty" to "Real tick required")))
+            val giftNifty = intelligenceState.giftNifty
+            val indiaVix = intelligenceState.indiaVix
+            val isPremarketLive = giftNifty?.isLive == true || indiaVix?.isLive == true
+            val premarketHealth = if (isPremarketLive) HealthState.HEALTHY else HealthState.DEGRADED
+            val premarketMsg = when {
+                giftNifty?.isLive == true -> "Verified (GIFT NIFTY: ₹${String.format("%,.0f", giftNifty.ltp)})"
+                indiaVix?.isLive == true -> "Verified (India VIX: ${indiaVix.ltp})"
+                else -> "STANDBY (Awaiting Real Benchmark Ticks)"
+            }
+            results.add(
+                AZDiagnosticResult(
+                    DiagnosticCategory.PREMARKET,
+                    "Global & Pre-Market Cues",
+                    premarketHealth,
+                    premarketMsg,
+                    mapOf(
+                        "GiftNiftyLive" to (giftNifty?.isLive == true).toString(),
+                        "VixLive" to (indiaVix?.isLive == true).toString(),
+                        "Session" to intelligenceState.sessionLabel
+                    )
+                )
+            )
             
             // 10. SECURITY
             results.add(AZDiagnosticResult(DiagnosticCategory.SECURITY, "Token Storage", HealthState.HEALTHY, "Verified", mapOf("Encrypted" to "YES", "Logs" to "Sanitized")))

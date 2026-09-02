@@ -50,8 +50,10 @@ class AngelOneMarketDataService(
     // Deduplicated token registry per exchange
     private val activeSubscribedTokens = ConcurrentHashMap<Int, MutableSet<String>>()
 
+    private var monitorJob: Job? = null
+
     init {
-        scope.launch {
+        monitorJob = scope.launch {
             monitorConnection()
         }
         scope.launch {
@@ -455,6 +457,7 @@ class AngelOneMarketDataService(
         webSocket?.cancel()
         webSocket = null
         pingJob?.cancel()
+        monitorJob?.cancel()
         _connectionState.value = "DISCONNECTED"
         com.example.data.model.MarketDataStore.setAngelHealth("OFFLINE")
     }

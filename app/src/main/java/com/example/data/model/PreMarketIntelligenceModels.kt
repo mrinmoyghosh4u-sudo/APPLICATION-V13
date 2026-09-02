@@ -115,6 +115,9 @@ data class PreMarketIntelligenceState(
     val aiOptionBuyerSignals: List<AiPreMarketOptionBuyerSignal> = emptyList(),
     val newsArticles: List<OptionBuyerNewsArticle> = emptyList(),
     val breakingNews: List<OptionBuyerNewsArticle> = emptyList(),
+    val newsFeedStatus: String = "UNAVAILABLE", // "HEALTHY", "DEGRADED", "UNAVAILABLE", "NETWORK_ERROR"
+    val newsSource: String = "UNAVAILABLE",
+    val newsLastSyncTime: Long = 0L,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,

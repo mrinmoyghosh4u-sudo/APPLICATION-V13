@@ -54,6 +54,11 @@ fun MarketNewsDialog(
     val context = LocalContext.current
     val marketDataMap by MarketDataStore.ticks.collectAsStateWithLifecycle()
     val intelligenceState by MarketIntelligenceService.intelligenceState.collectAsStateWithLifecycle()
+    val watchlistItems = if (viewModel != null) {
+        viewModel.watchlist.collectAsStateWithLifecycle(emptyList()).value
+    } else {
+        emptyList()
+    }
 
     var selectedCategory by remember { mutableStateOf("ALL") }
     var selectedAiIndex by remember { mutableStateOf("NIFTY 50") }
@@ -62,8 +67,8 @@ fun MarketNewsDialog(
         onDismiss()
     }
 
-    LaunchedEffect(Unit) {
-        MarketIntelligenceService.refreshIntelligence(marketDataMap)
+    LaunchedEffect(watchlistItems, marketDataMap) {
+        MarketIntelligenceService.refreshIntelligence(marketDataMap, watchlistItems)
         viewModel?.notifyBreakingNews(MarketIntelligenceService.intelligenceState.value.breakingNews)
     }
 
@@ -163,7 +168,7 @@ fun MarketNewsDialog(
                                 IconButton(
                                     onClick = {
                                         coroutineScope.launch {
-                                            MarketIntelligenceService.refreshIntelligence(marketDataMap, forceReload = true)
+                                            MarketIntelligenceService.refreshIntelligence(marketDataMap, watchlistItems, forceReload = true)
                                             Toast.makeText(context, "Market Intelligence Refreshed", Toast.LENGTH_SHORT).show()
                                         }
                                     },
