@@ -386,16 +386,17 @@ class MarketDataEngine(
                 com.example.data.model.MarketDataProviders.ANGEL_ONE -> {
                     val angelService = angelMarketDataService
                     if (angelService != null) {
-                        val tokenList = symbols.mapNotNull { sym ->
+                        symbols.forEach { sym ->
                             val exch = when {
                                 sym.contains("CRUDE", ignoreCase = true) -> "MCX"
                                 sym.contains("SENSEX", ignoreCase = true) || sym.contains("BANKEX", ignoreCase = true) -> "BSE"
                                 else -> "NSE"
                             }
-                            angelService.instrumentMaster.resolveAngelToken(sym, exch)
-                        }
-                        if (tokenList.isNotEmpty()) {
-                            angelService.subscribeToTokens(1, tokenList)
+                            val token = angelService.instrumentMaster.resolveAngelToken(sym, exch)
+                            if (token != null) {
+                                val exType = InstrumentMasterService.getExchangeType(exch)
+                                angelService.subscribeToTokens(exType, listOf(token))
+                            }
                         }
                     }
                 }
