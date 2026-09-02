@@ -203,8 +203,8 @@ class ProviderHealthManager {
     fun reportConnecting(provider: String = PROVIDER_UPSTOX) {
         updateState(provider) {
             it.copy(
-                status = "CONNECTING",
-                webSocketState = "CONNECTING",
+                status = "WEBSOCKET_CONNECTING",
+                webSocketState = "WEBSOCKET_CONNECTING",
                 healthy = false
             )
         }
@@ -214,8 +214,8 @@ class ProviderHealthManager {
         updateState(provider) {
             if (connected) {
                 it.copy(
-                    status = "CONNECTED",
-                    webSocketState = "CONNECTED",
+                    status = "WEBSOCKET_CONNECTED",
+                    webSocketState = "WEBSOCKET_CONNECTED",
                     connected = true,
                     healthy = false
                 )

@@ -471,7 +471,7 @@ class Phase2MarketDataWsTest {
             return Response.success(UpstoxOptionContractsResponse("ok", emptyList()))
         }
 
-        override suspend fun getHistoricalCandles(token: String, instrumentKey: String, interval: String, toDate: String, fromDate: String, apiVersion: String): Response<UpstoxHistoricalCandlesResponse> {
+        override suspend fun getHistoricalCandles(token: String, instrumentKey: String, unit: String, interval: String, toDate: String, fromDate: String, apiVersion: String): Response<UpstoxHistoricalCandlesResponse> {
             return Response.success(UpstoxHistoricalCandlesResponse("ok", UpstoxCandlesData(emptyList())))
         }
 
