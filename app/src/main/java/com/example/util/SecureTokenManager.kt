@@ -1,25 +1,57 @@
 package com.example.util
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.util.Base64
+import android.content.SharedPreferences
 import android.util.Log
-import java.security.KeyStore
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import com.example.data.network.InMemorySharedPreferences
 
 class SecureTokenManager private constructor(context: Context) {
     private val appContext = context.applicationContext
-    private val prefs = appContext.getSharedPreferences("secure_tokens_store", Context.MODE_PRIVATE)
+    private var isSecureStorageAvailable = true
+
+    private val securePrefs: SharedPreferences by lazy {
+        initSecurePrefs(appContext)
+    }
+
+    private fun initSecurePrefs(context: Context): SharedPreferences {
+        val prefFileName = "kingkhan_secure_tokens_v2"
+        return try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                prefFileName,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Throwable) {
+            Log.e("SecureTokenManager", "EncryptedSharedPreferences init failed: ${e.message}, attempting recreation")
+            runCatching {
+                context.deleteSharedPreferences(prefFileName)
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context,
+                    prefFileName,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            }.getOrElse { err ->
+                Log.e("SecureTokenManager", "Secure storage unavailable: ${err.message}. FAILING CLOSED. Plaintext fallback is strictly forbidden.")
+                isSecureStorageAvailable = false
+                InMemorySharedPreferences()
+            }
+        }
+    }
 
     companion object {
-        private const val KEY_ALIAS = "king_khan_github_token_key"
-        private const val ANDROID_KEY_STORE = "AndroidKeyStore"
-        private const val AES_GCM_NO_PADDING = "AES/GCM/NoPadding"
-        private const val PREF_KEY_ENCRYPTED_TOKEN = "enc_github_token"
+        private const val PREF_KEY_TOKEN = "github_token"
 
         @Volatile
         private var INSTANCE: SecureTokenManager? = null
@@ -33,60 +65,14 @@ class SecureTokenManager private constructor(context: Context) {
         }
     }
 
-    @Volatile
-    private var softwareFallbackKey: SecretKey? = null
-
-    private fun getSoftwareFallbackKey(): SecretKey {
-        softwareFallbackKey?.let { return it }
-
-        val cachedB64 = prefs.getString("sw_fallback_key", null)
-        if (!cachedB64.isNullOrBlank()) {
-            try {
-                val keyBytes = Base64.decode(cachedB64, Base64.NO_WRAP)
-                val secretKey = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
-                softwareFallbackKey = secretKey
-                return secretKey
-            } catch (e: Exception) {
-                Log.e("SecureTokenManager", "Error loading fallback key: ${e.message}")
+    init {
+        // Purge any legacy unencrypted fallback keys and tokens
+        try {
+            val legacyStore = appContext.getSharedPreferences("secure_tokens_store", Context.MODE_PRIVATE)
+            if (legacyStore.all.isNotEmpty()) {
+                legacyStore.edit().clear().apply()
             }
-        }
-
-        val keyGen = KeyGenerator.getInstance("AES")
-        keyGen.init(256)
-        val secretKey = keyGen.generateKey()
-        val keyB64 = Base64.encodeToString(secretKey.encoded, Base64.NO_WRAP)
-        prefs.edit().putString("sw_fallback_key", keyB64).apply()
-        softwareFallbackKey = secretKey
-        return secretKey
-    }
-
-    @Synchronized
-    private fun getOrCreateSecretKey(): SecretKey {
-        return try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-            if (keyStore.containsAlias(KEY_ALIAS)) {
-                val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-                if (entry != null) {
-                    return entry.secretKey
-                }
-            }
-
-            val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-            val keySpec = KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
-
-            keyGenerator.init(keySpec)
-            keyGenerator.generateKey()
-        } catch (t: Throwable) {
-            Log.w("SecureTokenManager", "AndroidKeyStore unavailable (${t.message}), using fallback AES key")
-            getSoftwareFallbackKey()
-        }
+        } catch (_: Exception) {}
     }
 
     fun saveGithubToken(token: String): Boolean {
@@ -97,16 +83,7 @@ class SecureTokenManager private constructor(context: Context) {
         }
 
         return try {
-            val secretKey = getOrCreateSecretKey()
-            val cipher = Cipher.getInstance(AES_GCM_NO_PADDING)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-            val iv = cipher.iv
-            val encryptedBytes = cipher.doFinal(trimmed.toByteArray(Charsets.UTF_8))
-
-            val ivBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
-            val encBase64 = Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
-
-            prefs.edit().putString(PREF_KEY_ENCRYPTED_TOKEN, "$ivBase64:$encBase64").apply()
+            securePrefs.edit().putString(PREF_KEY_TOKEN, trimmed).apply()
             AppPreferences.getInstance(appContext).clearLegacyGithubToken()
             true
         } catch (e: Exception) {
@@ -116,39 +93,30 @@ class SecureTokenManager private constructor(context: Context) {
     }
 
     fun getGithubToken(): String {
-        val payload = prefs.getString(PREF_KEY_ENCRYPTED_TOKEN, null)
-        if (payload.isNullOrBlank()) {
+        return try {
+            val token = securePrefs.getString(PREF_KEY_TOKEN, null)
+            if (!token.isNullOrBlank()) {
+                return token
+            }
             val legacyToken = AppPreferences.getInstance(appContext).getGithubTokenRaw()
             if (legacyToken.isNotBlank()) {
                 saveGithubToken(legacyToken)
                 return legacyToken
             }
-            return ""
-        }
-
-        return try {
-            val parts = payload.split(":")
-            if (parts.size != 2) return ""
-
-            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
-            val encryptedBytes = Base64.decode(parts[1], Base64.NO_WRAP)
-
-            val secretKey = getOrCreateSecretKey()
-            val cipher = Cipher.getInstance(AES_GCM_NO_PADDING)
-            val spec = GCMParameterSpec(128, iv)
-            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
-
-            val decryptedBytes = cipher.doFinal(encryptedBytes)
-            String(decryptedBytes, Charsets.UTF_8)
+            ""
         } catch (e: Exception) {
-            Log.e("SecureTokenManager", "Error decrypting token: ${e.message}")
+            Log.e("SecureTokenManager", "Error retrieving token: ${e.message}")
             ""
         }
     }
 
     fun clearGithubToken() {
-        prefs.edit().remove(PREF_KEY_ENCRYPTED_TOKEN).apply()
-        AppPreferences.getInstance(appContext).clearLegacyGithubToken()
+        try {
+            securePrefs.edit().remove(PREF_KEY_TOKEN).apply()
+            AppPreferences.getInstance(appContext).clearLegacyGithubToken()
+        } catch (e: Exception) {
+            Log.e("SecureTokenManager", "Error clearing token: ${e.message}")
+        }
     }
 
     fun hasGithubToken(): Boolean {

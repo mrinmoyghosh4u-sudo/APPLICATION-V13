@@ -143,6 +143,24 @@ fun formatRelativeTimestamp(createdMillis: Long): String {
     }
 }
 
+enum class PnlState {
+    AVAILABLE,
+    UNAVAILABLE,
+    LOADING,
+    STALE,
+    AUTH_ERROR,
+    NETWORK_ERROR
+}
+
+enum class MarginState {
+    AVAILABLE,
+    UNAVAILABLE,
+    LOADING,
+    STALE,
+    AUTH_ERROR,
+    NETWORK_ERROR
+}
+
 @Immutable
 @Entity(tableName = "user_profile")
 data class UserProfileEntity(
@@ -177,10 +195,33 @@ data class UserProfileEntity(
     val realizedPnl: Double = 0.0,
     val remarks: String = "",
     val unrealizedPnl: Double = 0.0,
-    val buyingPower: Double = 0.0
+    val buyingPower: Double = 0.0,
+    val pnlStatus: String = PnlState.UNAVAILABLE.name,
+    val marginStatus: String = MarginState.UNAVAILABLE.name,
+    val lastPnlSyncTime: Long = 0L,
+    val lastMarginSyncTime: Long = 0L,
+    val pnlErrorMessage: String = ""
 ) {
     val isBrokerConnected: Boolean
         get() = (isAngelConnected || isDhanConnected) && connectedBroker.isNotBlank()
+
+    val isPnlAvailable: Boolean
+        get() = pnlStatus == PnlState.AVAILABLE.name
+
+    val isPnlStale: Boolean
+        get() = pnlStatus == PnlState.STALE.name
+
+    val isPnlUnavailable: Boolean
+        get() = pnlStatus == PnlState.UNAVAILABLE.name || pnlStatus == PnlState.AUTH_ERROR.name || pnlStatus == PnlState.NETWORK_ERROR.name || pnlStatus.isBlank()
+
+    val isMarginAvailable: Boolean
+        get() = marginStatus == MarginState.AVAILABLE.name
+
+    val isMarginStale: Boolean
+        get() = marginStatus == MarginState.STALE.name
+
+    val isMarginUnavailable: Boolean
+        get() = marginStatus == MarginState.UNAVAILABLE.name || marginStatus == MarginState.AUTH_ERROR.name || marginStatus == MarginState.NETWORK_ERROR.name || marginStatus.isBlank()
 }
 
 @Immutable

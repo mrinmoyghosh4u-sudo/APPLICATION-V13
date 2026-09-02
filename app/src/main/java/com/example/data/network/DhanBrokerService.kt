@@ -5,6 +5,8 @@ import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
 import com.example.data.model.OptionStrikeItem
+import com.example.data.model.PnlState
+import com.example.data.model.MarginState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -85,14 +87,31 @@ class DhanBrokerService(
             // 3. Fetch positions to get realized/unrealized P&L
             var totalRealized = 0.0
             var totalUnrealized = 0.0
-            runCatching {
+            var pnlState = PnlState.UNAVAILABLE.name
+            var lastPnlTime = 0L
+            var pnlError = ""
+
+            try {
                 val posRes = api.getPositions()
                 if (posRes.isSuccessful) {
-                    posRes.body()?.forEach { 
-                        totalRealized += it.realizedProfit
-                        totalUnrealized += it.unrealizedProfit
+                    val posList = posRes.body()
+                    if (posList != null) {
+                        posList.forEach { 
+                            totalRealized += it.realizedProfit
+                            totalUnrealized += it.unrealizedProfit
+                        }
                     }
+                    pnlState = PnlState.AVAILABLE.name
+                    lastPnlTime = System.currentTimeMillis()
+                } else {
+                    pnlState = if (posRes.code() == 401 || posRes.code() == 403) PnlState.AUTH_ERROR.name else PnlState.UNAVAILABLE.name
+                    pnlError = "Dhan P&L refresh failed: HTTP ${posRes.code()}"
+                    android.util.Log.w("DhanBrokerService", pnlError)
                 }
+            } catch (e: Exception) {
+                pnlState = if (e is java.io.IOException) PnlState.NETWORK_ERROR.name else PnlState.UNAVAILABLE.name
+                pnlError = "Dhan P&L fetch error: ${e.message}"
+                android.util.Log.w("DhanBrokerService", "Dhan P&L fetch exception: ${e.javaClass.simpleName}")
             }
 
             val finalClientId = returnedClientId.ifBlank { clientId }
@@ -111,7 +130,12 @@ class DhanBrokerService(
                 isDhanConnected = true,
                 dhanClientId = finalClientId,
                 realizedPnl = totalRealized,
-                unrealizedPnl = totalUnrealized
+                unrealizedPnl = totalUnrealized,
+                pnlStatus = pnlState,
+                marginStatus = MarginState.AVAILABLE.name,
+                lastPnlSyncTime = lastPnlTime,
+                lastMarginSyncTime = System.currentTimeMillis(),
+                pnlErrorMessage = pnlError
             )
         }
     }
@@ -248,23 +272,22 @@ class DhanBrokerService(
             val response = api.getTrades()
             if (response.isSuccessful) {
                 response.body() ?: emptyList()
-            } else if (response.code() == 401 || response.code() == 403) {
-                android.util.Log.w("DhanBrokerService", "Trades fetch: Dhan token expired (HTTP ${response.code()})")
-                emptyList()
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                throw Exception("API Error ${response.code()}: $errorBody")
+                val code = response.code()
+                android.util.Log.w("DhanBrokerService", "Dhan trades fetch failed: HTTP $code")
+                throw Exception("Trades API Error: HTTP $code")
             }
         }
     }
 
     override suspend fun getPositions(): Result<List<PortfolioHoldingEntity>> {
-        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.success(emptyList())
+        if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.failure(Exception("Dhan account is not connected."))
 
         return runCatching {
             val response = api.getPositions()
             if (response.isSuccessful) {
-                response.body()?.map { item ->
+                val posList = response.body() ?: emptyList()
+                posList.map { item ->
                     val isClosed = item.netQty == 0 || item.positionType.equals("CLOSED", ignoreCase = true)
                     val posStatus = if (isClosed) "CLOSED" else "OPEN"
                     val isLong = item.positionType.equals("LONG", ignoreCase = true) || item.netQty > 0
@@ -319,13 +342,11 @@ class DhanBrokerService(
                         positionStatus = posStatus,
                         productType = item.productType
                     )
-                } ?: emptyList()
-            } else if (response.code() == 401 || response.code() == 403) {
-                android.util.Log.w("DhanBrokerService", "Positions fetch: Dhan token expired (HTTP ${response.code()})")
-                emptyList()
+                }
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                throw Exception("API Error ${response.code()}: $errorBody")
+                val code = response.code()
+                android.util.Log.w("DhanBrokerService", "Dhan positions fetch failed: HTTP $code")
+                throw Exception("Positions API Error: HTTP $code")
             }
         }
     }

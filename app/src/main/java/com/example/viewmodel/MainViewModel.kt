@@ -540,6 +540,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var liveMargin = 0.0
                 var liveRealized = 0.0
                 var liveUnrealized = 0.0
+                var pnlState = PnlState.UNAVAILABLE.name
+                var marginState = MarginState.UNAVAILABLE.name
+                var lastPnlTime = 0L
+                var lastMarginTime = 0L
                 var fetchedName = "Dhan ($cleanClientId)"
 
                 runCatching {
@@ -549,6 +553,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         liveMargin = prof.availableMargin
                         liveRealized = prof.realizedPnl
                         liveUnrealized = prof.unrealizedPnl
+                        pnlState = prof.pnlStatus
+                        marginState = prof.marginStatus
+                        lastPnlTime = prof.lastPnlSyncTime
+                        lastMarginTime = prof.lastMarginSyncTime
                         if (prof.name.isNotBlank()) {
                             fetchedName = prof.name
                         }
@@ -571,7 +579,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     accountBalance = liveMargin,
                     realizedPnl = liveRealized,
                     unrealizedPnl = liveUnrealized,
-                    todaysPnl = liveRealized + liveUnrealized
+                    todaysPnl = liveRealized + liveUnrealized,
+                    pnlStatus = pnlState,
+                    marginStatus = marginState,
+                    lastPnlSyncTime = lastPnlTime,
+                    lastMarginSyncTime = lastMarginTime
                 )
                 _userProfile.value = updated
                 repository.updateProfile(updated)

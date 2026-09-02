@@ -113,9 +113,19 @@ fun PortfolioScreen(
             ) {
                 Column {
                     Text("Overall Profit / Loss", fontSize = 10.sp, color = TextGray)
-                    val pnlColor = if (totalPnl >= 0) ProfitGreen else LossRed
+                    val pnlText = when {
+                        userProfile.isPnlAvailable -> String.format(java.util.Locale.US, "%s₹%,.2f (%s%.2f%%)", if (totalPnl >= 0) "+" else "", totalPnl, if (totalPnlPct >= 0) "+" else "", totalPnlPct)
+                        userProfile.isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (totalPnl >= 0) "+" else "", totalPnl)
+                        userProfile.isBrokerConnected -> "Unavailable"
+                        else -> "₹0.00"
+                    }
+                    val pnlColor = when {
+                        userProfile.isPnlUnavailable && userProfile.isBrokerConnected -> TextGray
+                        totalPnl >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
                     Text(
-                        String.format("%s₹%,.2f (%s%.2f%%)", if (totalPnl >= 0) "+" else "", totalPnl, if (true) "+" else "", totalPnlPct),
+                        pnlText,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = pnlColor
@@ -124,9 +134,19 @@ fun PortfolioScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text("Realized P&L", fontSize = 10.sp, color = TextGray)
-                    val realizedColor = if (totalRealized >= 0) ProfitGreen else LossRed
+                    val realizedText = when {
+                        userProfile.isPnlAvailable -> String.format(java.util.Locale.US, "%s₹%,.2f", if (totalRealized >= 0) "+" else "", totalRealized)
+                        userProfile.isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (totalRealized >= 0) "+" else "", totalRealized)
+                        userProfile.isBrokerConnected -> "Unavailable"
+                        else -> "₹0.00"
+                    }
+                    val realizedColor = when {
+                        userProfile.isPnlUnavailable && userProfile.isBrokerConnected -> TextGray
+                        totalRealized >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
                     Text(
-                        String.format("%s₹%,.2f", if (totalRealized >= 0) "+" else "", totalRealized),
+                        realizedText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = realizedColor
@@ -135,9 +155,19 @@ fun PortfolioScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text("Unrealized MTM", fontSize = 10.sp, color = TextGray)
-                    val unrealizedColor = if (totalUnrealized >= 0) ProfitGreen else LossRed
+                    val unrealizedText = when {
+                        userProfile.isPnlAvailable -> String.format(java.util.Locale.US, "%s₹%,.2f", if (totalUnrealized >= 0) "+" else "", totalUnrealized)
+                        userProfile.isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (totalUnrealized >= 0) "+" else "", totalUnrealized)
+                        userProfile.isBrokerConnected -> "Unavailable"
+                        else -> "₹0.00"
+                    }
+                    val unrealizedColor = when {
+                        userProfile.isPnlUnavailable && userProfile.isBrokerConnected -> TextGray
+                        totalUnrealized >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
                     Text(
-                        String.format("%s₹%,.2f", if (totalUnrealized >= 0) "+" else "", totalUnrealized),
+                        unrealizedText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = unrealizedColor
@@ -164,23 +194,23 @@ fun PortfolioScreen(
                 ) {
                     Column {
                         Text("Available Margin", fontSize = 10.sp, color = TextGray)
-                        val marginText = if (userProfile.isBrokerConnected) {
-                            String.format("₹%,.2f", userProfile.availableMargin)
-                        } else if (userProfile.availableMargin > 0) {
-                            String.format("₹%,.2f (Paper)", userProfile.availableMargin)
-                        } else {
-                            "--"
+                        val marginText = when {
+                            userProfile.isMarginAvailable -> String.format(java.util.Locale.US, "₹%,.2f", userProfile.availableMargin)
+                            userProfile.isMarginStale -> String.format(java.util.Locale.US, "₹%,.2f (Stale)", userProfile.availableMargin)
+                            userProfile.isBrokerConnected -> "Unavailable"
+                            userProfile.availableMargin > 0 -> String.format(java.util.Locale.US, "₹%,.2f (Paper)", userProfile.availableMargin)
+                            else -> "--"
                         }
                         Text(marginText, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Account Balance", fontSize = 10.sp, color = TextGray)
-                        val balText = if (userProfile.isBrokerConnected) {
-                            String.format("₹%,.2f", userProfile.accountBalance)
-                        } else if (userProfile.accountBalance > 0) {
-                            String.format("₹%,.2f (Paper)", userProfile.accountBalance)
-                        } else {
-                            "--"
+                        val balText = when {
+                            userProfile.isMarginAvailable -> String.format(java.util.Locale.US, "₹%,.2f", userProfile.accountBalance)
+                            userProfile.isMarginStale -> String.format(java.util.Locale.US, "₹%,.2f (Stale)", userProfile.accountBalance)
+                            userProfile.isBrokerConnected -> "Unavailable"
+                            userProfile.accountBalance > 0 -> String.format(java.util.Locale.US, "₹%,.2f (Paper)", userProfile.accountBalance)
+                            else -> "--"
                         }
                         Text(balText, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                     }

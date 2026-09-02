@@ -303,11 +303,18 @@ fun ProfileScreen(
                     ) {
                         Column {
                             Text("AVAILABLE MARGIN", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.SemiBold)
+                            val marginDisplay = when {
+                                userProfile.isMarginAvailable -> currencyFormatter.format(userProfile.availableMargin)
+                                userProfile.isMarginStale -> "${currencyFormatter.format(userProfile.availableMargin)} (Stale)"
+                                userProfile.isBrokerConnected -> "Unavailable"
+                                userProfile.availableMargin > 0 -> "${currencyFormatter.format(userProfile.availableMargin)} (Paper)"
+                                else -> "Unavailable"
+                            }
                             Text(
-                                text = currencyFormatter.format(userProfile.availableMargin.coerceAtLeast(0.0)),
+                                text = marginDisplay,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextWhite
+                                color = if (userProfile.isMarginUnavailable && userProfile.isBrokerConnected) TextGray else TextWhite
                             )
                         }
 
@@ -323,11 +330,26 @@ fun ProfileScreen(
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text("TODAY'S P&L", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.SemiBold)
-                            val pnl = userProfile.todaysPnl
-                            val pnlColor = if (pnl >= 0) ProfitGreen else LossRed
-                            val prefix = if (pnl >= 0) "+" else ""
+                            val (pnlText, pnlColor) = when {
+                                userProfile.isPnlAvailable -> {
+                                    val pnl = userProfile.todaysPnl
+                                    val prefix = if (pnl >= 0) "+" else ""
+                                    "$prefix${currencyFormatter.format(pnl)}" to (if (pnl >= 0) ProfitGreen else LossRed)
+                                }
+                                userProfile.isPnlStale -> {
+                                    val pnl = userProfile.todaysPnl
+                                    val prefix = if (pnl >= 0) "+" else ""
+                                    "$prefix${currencyFormatter.format(pnl)} (Stale)" to (if (pnl >= 0) ProfitGreen else LossRed)
+                                }
+                                userProfile.isBrokerConnected -> {
+                                    "Unavailable" to TextGray
+                                }
+                                else -> {
+                                    "₹0.00" to TextGray
+                                }
+                            }
                             Text(
-                                text = "$prefix${currencyFormatter.format(pnl)}",
+                                text = pnlText,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = pnlColor

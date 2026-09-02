@@ -408,7 +408,7 @@ class AngelOneBrokerService(
                 candles
             } else {
                 val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Historical data request failed"
-                Log.e("AngelOneBrokerService", "Historical API Error (Status ${response.code()}): $errorMsg for $symbol, token=$token")
+                Log.e("AngelOneBrokerService", "Historical API Error (Status ${response.code()}): $errorMsg for $symbol")
                 throw Exception("API Error ${response.code()}: $errorMsg")
             }
         }

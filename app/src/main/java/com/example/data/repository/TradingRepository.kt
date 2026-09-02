@@ -7,6 +7,8 @@ import com.example.data.model.OrderEntity
 import com.example.data.model.PortfolioHoldingEntity
 import com.example.data.model.UserProfileEntity
 import com.example.data.model.WatchlistItem
+import com.example.data.model.PnlState
+import com.example.data.model.MarginState
 import com.example.data.network.BrokerManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -47,10 +49,16 @@ class TradingRepository(
                 connectedBroker = newBrokerName,
                 availableMargin = 0.0,
                 accountBalance = 0.0,
+                totalBalance = 0.0,
                 realizedPnl = 0.0,
                 unrealizedPnl = 0.0,
                 todaysPnl = 0.0,
-                todaysPnlPercent = 0.0
+                todaysPnlPercent = 0.0,
+                pnlStatus = PnlState.UNAVAILABLE.name,
+                marginStatus = MarginState.UNAVAILABLE.name,
+                lastPnlSyncTime = 0L,
+                lastMarginSyncTime = 0L,
+                pnlErrorMessage = ""
             )
         )
     }
@@ -58,10 +66,70 @@ class TradingRepository(
     suspend fun syncWithBroker() {
         brokerManager?.let { manager ->
             val profileRes = manager.getProfile()
-            profileRes.getOrNull()?.let { prof ->
-                val current = dao.getUserProfile().firstOrNull() ?: UserProfileEntity()
+            val current = dao.getUserProfile().firstOrNull() ?: UserProfileEntity()
+
+            if (profileRes.isSuccess) {
+                val prof = profileRes.getOrThrow()
                 val isAngelConn = if (prof.connectedBroker == "Angel One") true else prof.isAngelConnected
                 val isDhanConn = if (prof.connectedBroker == "Dhan") true else prof.isDhanConnected
+
+                // Determine P&L handling:
+                val finalPnlStatus: String
+                val finalRealized: Double
+                val finalUnrealized: Double
+                val finalTodaysPnl: Double
+                val finalLastPnlSyncTime: Long
+
+                if (prof.pnlStatus == PnlState.AVAILABLE.name) {
+                    finalPnlStatus = PnlState.AVAILABLE.name
+                    finalRealized = prof.realizedPnl
+                    finalUnrealized = prof.unrealizedPnl
+                    finalTodaysPnl = prof.todaysPnl
+                    finalLastPnlSyncTime = prof.lastPnlSyncTime
+                } else {
+                    if ((current.pnlStatus == PnlState.AVAILABLE.name || current.pnlStatus == PnlState.STALE.name) && current.lastPnlSyncTime > 0L) {
+                        finalPnlStatus = PnlState.STALE.name
+                        finalRealized = current.realizedPnl
+                        finalUnrealized = current.unrealizedPnl
+                        finalTodaysPnl = current.todaysPnl
+                        finalLastPnlSyncTime = current.lastPnlSyncTime
+                    } else {
+                        finalPnlStatus = prof.pnlStatus.ifBlank { PnlState.UNAVAILABLE.name }
+                        finalRealized = 0.0
+                        finalUnrealized = 0.0
+                        finalTodaysPnl = 0.0
+                        finalLastPnlSyncTime = 0L
+                    }
+                }
+
+                // Determine Margin handling:
+                val finalMarginStatus: String
+                val finalAvailMargin: Double
+                val finalAccountBal: Double
+                val finalTotalBal: Double
+                val finalLastMarginTime: Long
+
+                if (prof.marginStatus == MarginState.AVAILABLE.name) {
+                    finalMarginStatus = MarginState.AVAILABLE.name
+                    finalAvailMargin = prof.availableMargin
+                    finalAccountBal = prof.accountBalance
+                    finalTotalBal = prof.totalBalance
+                    finalLastMarginTime = prof.lastMarginSyncTime
+                } else {
+                    if ((current.marginStatus == MarginState.AVAILABLE.name || current.marginStatus == MarginState.STALE.name) && current.lastMarginSyncTime > 0L) {
+                        finalMarginStatus = MarginState.STALE.name
+                        finalAvailMargin = current.availableMargin
+                        finalAccountBal = current.accountBalance
+                        finalTotalBal = current.totalBalance
+                        finalLastMarginTime = current.lastMarginSyncTime
+                    } else {
+                        finalMarginStatus = MarginState.UNAVAILABLE.name
+                        finalAvailMargin = 0.0
+                        finalAccountBal = 0.0
+                        finalTotalBal = 0.0
+                        finalLastMarginTime = 0L
+                    }
+                }
 
                 dao.insertOrUpdateProfile(
                     current.copy(
@@ -73,13 +141,31 @@ class TradingRepository(
                         angelClientId = if (prof.connectedBroker == "Angel One" && prof.angelClientId.isNotBlank()) prof.angelClientId else current.angelClientId,
                         isDhanConnected = isDhanConn,
                         dhanClientId = if (prof.connectedBroker == "Dhan" && prof.dhanClientId.isNotBlank()) prof.dhanClientId else current.dhanClientId,
-                        availableMargin = prof.availableMargin,
-                        accountBalance = prof.accountBalance,
-                        realizedPnl = prof.realizedPnl,
-                        unrealizedPnl = prof.unrealizedPnl,
-                        todaysPnl = prof.todaysPnl
+                        availableMargin = finalAvailMargin,
+                        accountBalance = finalAccountBal,
+                        totalBalance = finalTotalBal,
+                        realizedPnl = finalRealized,
+                        unrealizedPnl = finalUnrealized,
+                        todaysPnl = finalTodaysPnl,
+                        pnlStatus = finalPnlStatus,
+                        marginStatus = finalMarginStatus,
+                        lastPnlSyncTime = finalLastPnlSyncTime,
+                        lastMarginSyncTime = finalLastMarginTime,
+                        pnlErrorMessage = prof.pnlErrorMessage
                     )
                 )
+            } else {
+                if (current.isBrokerConnected) {
+                    val stalePnlStatus = if (current.lastPnlSyncTime > 0L) PnlState.STALE.name else PnlState.UNAVAILABLE.name
+                    val staleMarginStatus = if (current.lastMarginSyncTime > 0L) MarginState.STALE.name else MarginState.UNAVAILABLE.name
+                    dao.insertOrUpdateProfile(
+                        current.copy(
+                            pnlStatus = stalePnlStatus,
+                            marginStatus = staleMarginStatus,
+                            pnlErrorMessage = profileRes.exceptionOrNull()?.message ?: "Profile sync failed"
+                        )
+                    )
+                }
             }
                 
             val holdingsRes = manager.getHoldings()

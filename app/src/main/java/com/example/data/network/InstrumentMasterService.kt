@@ -509,7 +509,7 @@ class InstrumentMasterService(
         }
         val indexInst = indexSymbolMap[cleanIndex]
         if (indexInst != null && (exchange.isBlank() || normalizeExchange(indexInst.exch_seg) == normExch)) {
-            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] index=$symbol exch=$exchange token=${indexInst.token}")
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] index=$symbol exch=$exchange instrument_id=${indexInst.token}")
             return indexInst.token
         }
 
@@ -518,7 +518,7 @@ class InstrumentMasterService(
             ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-EQ"]
             ?: symbolExchangeMap["$normExch:${uppercaseSymbol}-FUT"]
         if (directMatch != null) {
-            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange token=${directMatch.token}")
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange instrument_id=${directMatch.token}")
             return directMatch.token
         }
 
@@ -531,7 +531,7 @@ class InstrumentMasterService(
         }
         val resolved = match?.token ?: indexInst?.token
         if (resolved != null) {
-            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange token=$resolved")
+            Log.d("InstrumentMaster", "[TOKEN_RESOLVED] symbol=$symbol exch=$exchange instrument_id=$resolved")
         }
         return resolved
     }

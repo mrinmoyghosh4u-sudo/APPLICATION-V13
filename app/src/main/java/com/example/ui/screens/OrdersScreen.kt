@@ -308,7 +308,14 @@ fun OrdersScreen(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("Available Margin", fontSize = 8.sp, color = TextGray)
-                                Text(String.format("₹%,.2f", availableMargin), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
+                                val marginDisplay = when {
+                                    userProfile.isMarginAvailable -> String.format(java.util.Locale.US, "₹%,.2f", availableMargin)
+                                    userProfile.isMarginStale -> String.format(java.util.Locale.US, "₹%,.2f (Stale)", availableMargin)
+                                    userProfile.isBrokerConnected -> "Unavailable"
+                                    availableMargin > 0 -> String.format(java.util.Locale.US, "₹%,.2f (Paper)", availableMargin)
+                                    else -> "--"
+                                }
+                                Text(marginDisplay, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
                             }
                         }
                     }
@@ -392,6 +399,54 @@ fun OrdersScreen(
             // ==========================================
             if (selectedMainMode == "POSITIONS") {
                 item {
+                    val isPnlAvail = userProfile.isPnlAvailable || !userProfile.isBrokerConnected
+                    val isPnlStale = userProfile.isPnlStale
+                    val isPnlUnavail = userProfile.isPnlUnavailable && userProfile.isBrokerConnected
+
+                    val todayPnlText = when {
+                        isPnlAvail -> String.format(java.util.Locale.US, "%s₹%,.2f", if (todayPnl >= 0) "+" else "", todayPnl)
+                        isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (todayPnl >= 0) "+" else "", todayPnl)
+                        else -> "Unavailable"
+                    }
+                    val todayPnlColor = when {
+                        isPnlUnavail -> TextGray
+                        todayPnl >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
+
+                    val overallPnlText = when {
+                        isPnlAvail -> String.format(java.util.Locale.US, "%s₹%,.2f", if (overallPnl >= 0) "+" else "", overallPnl)
+                        isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (overallPnl >= 0) "+" else "", overallPnl)
+                        else -> "Unavailable"
+                    }
+                    val overallPnlColor = when {
+                        isPnlUnavail -> TextGray
+                        overallPnl >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
+
+                    val mtmText = when {
+                        isPnlAvail -> String.format(java.util.Locale.US, "%s₹%,.2f", if (mtmVal >= 0) "+" else "", mtmVal)
+                        isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (mtmVal >= 0) "+" else "", mtmVal)
+                        else -> "Unavailable"
+                    }
+                    val mtmColor = when {
+                        isPnlUnavail -> TextGray
+                        mtmVal >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
+
+                    val realizedPnlText = when {
+                        isPnlAvail -> String.format(java.util.Locale.US, "%s₹%,.2f", if (realizedPnl >= 0) "+" else "", realizedPnl)
+                        isPnlStale -> String.format(java.util.Locale.US, "%s₹%,.2f (Stale)", if (realizedPnl >= 0) "+" else "", realizedPnl)
+                        else -> "Unavailable"
+                    }
+                    val realizedPnlColor = when {
+                        isPnlUnavail -> TextGray
+                        realizedPnl >= 0 -> ProfitGreen
+                        else -> LossRed
+                    }
+
                     // Summary Banner Metrics
                     GoldCard(
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -405,23 +460,21 @@ fun OrdersScreen(
                             ) {
                                 Column {
                                     Text("Today's P&L", fontSize = 10.sp, color = TextGray)
-                                    val isPos = todayPnl >= 0
                                     Text(
-                                        text = String.format("%s₹%,.2f", if (isPos) "+" else "", todayPnl),
+                                        text = todayPnlText,
                                         fontSize = 18.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = if (isPos) ProfitGreen else LossRed
+                                        color = todayPnlColor
                                     )
                                 }
 
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text("Overall P&L", fontSize = 10.sp, color = TextGray)
-                                    val isOvPos = overallPnl >= 0
                                     Text(
-                                        text = String.format("%s₹%,.2f", if (isOvPos) "+" else "", overallPnl),
+                                        text = overallPnlText,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isOvPos) ProfitGreen else LossRed
+                                        color = overallPnlColor
                                     )
                                 }
                             }
@@ -437,20 +490,20 @@ fun OrdersScreen(
                                 Column {
                                     Text("Unrealized MTM", fontSize = 9.sp, color = TextGray)
                                     Text(
-                                        String.format("%s₹%,.2f", if (mtmVal >= 0) "+" else "", mtmVal),
+                                        mtmText,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (mtmVal >= 0) ProfitGreen else LossRed
+                                        color = mtmColor
                                     )
                                 }
 
                                 Column {
                                     Text("Realized P&L", fontSize = 9.sp, color = TextGray)
                                     Text(
-                                        String.format("%s₹%,.2f", if (realizedPnl >= 0) "+" else "", realizedPnl),
+                                        realizedPnlText,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (realizedPnl >= 0) ProfitGreen else LossRed
+                                        color = realizedPnlColor
                                     )
                                 }
 

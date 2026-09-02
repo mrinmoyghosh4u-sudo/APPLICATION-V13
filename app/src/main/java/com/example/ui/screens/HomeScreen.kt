@@ -547,18 +547,34 @@ private fun PortfolioOverviewSection(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val marginText = when {
+                    !isVisible -> "••••••"
+                    userProfile.isMarginAvailable -> "₹${String.format(java.util.Locale.US, "%,.2f", userProfile.availableMargin)}"
+                    userProfile.isMarginStale -> "₹${String.format(java.util.Locale.US, "%,.2f", userProfile.availableMargin)} (Stale)"
+                    userProfile.isBrokerConnected -> "Unavailable"
+                    userProfile.availableMargin > 0 -> "₹${String.format(java.util.Locale.US, "%,.2f", userProfile.availableMargin)} (Paper)"
+                    else -> "Unavailable"
+                }
                 PortfolioStatBox(
                     label = "Available Margin",
-                    value = if (isVisible) "₹${String.format("%,.2f", userProfile.availableMargin)}" else "••••••",
+                    value = marginText,
                     icon = Icons.Outlined.AccountBalanceWallet,
-                    iconColor = ProfitGreen,
+                    iconColor = if (userProfile.isMarginUnavailable && userProfile.isBrokerConnected) TextGray else ProfitGreen,
                     modifier = Modifier.weight(1f)
                 )
+                val usedMargin = (userProfile.totalBalance - userProfile.availableMargin).coerceAtLeast(0.0)
+                val usedMarginText = when {
+                    !isVisible -> "••••••"
+                    userProfile.isMarginAvailable -> "₹${String.format(java.util.Locale.US, "%,.2f", usedMargin)}"
+                    userProfile.isMarginStale -> "₹${String.format(java.util.Locale.US, "%,.2f", usedMargin)} (Stale)"
+                    userProfile.isBrokerConnected -> "Unavailable"
+                    else -> "₹0.00"
+                }
                 PortfolioStatBox(
                     label = "Used Margin",
-                    value = if (isVisible) "₹${String.format("%,.2f", usedMargin)}" else "••••••",
+                    value = usedMarginText,
                     icon = Icons.Outlined.WorkOutline,
-                    iconColor = PrimaryGold,
+                    iconColor = if (userProfile.isMarginUnavailable && userProfile.isBrokerConnected) TextGray else PrimaryGold,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -567,19 +583,44 @@ private fun PortfolioOverviewSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val unrealized = userProfile.unrealizedPnl
+                val unrealizedText = when {
+                    !isVisible -> "••••••"
+                    userProfile.isPnlAvailable -> "${if (unrealized >= 0) "+" else ""}₹${String.format(java.util.Locale.US, "%,.2f", unrealized)}"
+                    userProfile.isPnlStale -> "${if (unrealized >= 0) "+" else ""}₹${String.format(java.util.Locale.US, "%,.2f", unrealized)} (Stale)"
+                    userProfile.isBrokerConnected -> "Unavailable"
+                    else -> "₹0.00"
+                }
+                val unrealizedColor = when {
+                    userProfile.isPnlUnavailable && userProfile.isBrokerConnected -> TextGray
+                    unrealized >= 0 -> ProfitGreen
+                    else -> LossRed
+                }
                 PortfolioStatBox(
                     label = "Unrealized P&L",
-                    value = if (isVisible) "${if (unrealized >= 0) "+" else ""}₹${String.format("%,.2f", unrealized)}" else "••••••",
+                    value = unrealizedText,
                     icon = Icons.Outlined.History,
-                    iconColor = if (unrealized >= 0) ProfitGreen else LossRed,
+                    iconColor = unrealizedColor,
                     modifier = Modifier.weight(1f)
                 )
+
                 val realized = userProfile.realizedPnl
+                val realizedText = when {
+                    !isVisible -> "••••••"
+                    userProfile.isPnlAvailable -> "${if (realized >= 0) "+" else ""}₹${String.format(java.util.Locale.US, "%,.2f", realized)}"
+                    userProfile.isPnlStale -> "${if (realized >= 0) "+" else ""}₹${String.format(java.util.Locale.US, "%,.2f", realized)} (Stale)"
+                    userProfile.isBrokerConnected -> "Unavailable"
+                    else -> "₹0.00"
+                }
+                val realizedColor = when {
+                    userProfile.isPnlUnavailable && userProfile.isBrokerConnected -> TextGray
+                    realized >= 0 -> ProfitGreen
+                    else -> LossRed
+                }
                 PortfolioStatBox(
                     label = "Realized P&L",
-                    value = if (isVisible) "${if (realized >= 0) "+" else ""}₹${String.format("%,.2f", realized)}" else "••••••",
+                    value = realizedText,
                     icon = Icons.Outlined.BarChart,
-                    iconColor = if (realized >= 0) ProfitGreen else LossRed,
+                    iconColor = realizedColor,
                     modifier = Modifier.weight(1f)
                 )
             }
