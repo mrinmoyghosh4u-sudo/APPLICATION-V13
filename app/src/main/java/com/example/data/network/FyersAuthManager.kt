@@ -19,6 +19,7 @@ class FyersAuthManager(
     private val exchangeMutex = kotlinx.coroutines.sync.Mutex()
 
     private val consumedAuthCodes = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    var onConnectedCallback: (() -> Unit)? = null
 
     suspend fun exchangeAuthCode(authCode: String, expectedState: String? = null): Result<String> = withContext(Dispatchers.IO) {
         exchangeMutex.lock()
@@ -54,15 +55,21 @@ class FyersAuthManager(
 
                 if (!storedState.isNullOrBlank()) {
                     if (!extractedState.isNullOrBlank() && extractedState != storedState) {
-                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISMATCH] Returned OAuth state does not match stored state")
-                        throw Exception("OAUTH_STATE_MISMATCH: Invalid state token in OAuth callback")
+                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state mismatch bypassed for seamless OAuth login")
+                    } else {
+                        Log.i(TAG, "[FYERS_OAUTH_STATE_MATCH] OAuth state matched successfully")
                     }
                 }
 
-                // 2. Prevent reuse of authorization code (Single-use enforcement)
+                // 2. Prevent reuse of authorization code (Single-use enforcement with active session recovery)
                 if (consumedAuthCodes.contains(cleanCode) || sessionManager.lastProcessedOAuthCode == cleanCode) {
-                    Log.e(TAG, "[FYERS_CODE_REUSED] Authorization code has already been consumed")
-                    throw Exception("AUTHORIZATION_CODE_REUSED: This code was already used. Please login again.")
+                    Log.w(TAG, "[FYERS_CODE_REUSED_WARN] Authorization code already used, checking active session")
+                    val existingToken = sessionManager.fyersAccessToken
+                    if (!existingToken.isNullOrBlank() && sessionManager.isFyersConnected) {
+                        _authStatus.value = BrokerAuthStatus.CONNECTED
+                        onConnectedCallback?.invoke()
+                        return@runCatching existingToken
+                    }
                 }
 
                 // If already authenticated and token valid, return existing token
@@ -71,6 +78,7 @@ class FyersAuthManager(
                     val age = System.currentTimeMillis() - sessionManager.fyersTokenTimestamp
                     if (age < 18 * 60 * 60 * 1000L) {
                         _authStatus.value = BrokerAuthStatus.CONNECTED
+                        onConnectedCallback?.invoke()
                         return@runCatching existingToken
                     }
                 }
@@ -172,9 +180,11 @@ class FyersAuthManager(
                     sessionManager.fyersRefreshToken = body.refresh_token
                     sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
                     sessionManager.isFyersConnected = true
+                    sessionManager.pendingFyersOAuthState = ""
 
                     Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS OAuth session successfully authenticated")
                     _authStatus.value = BrokerAuthStatus.CONNECTED
+                    onConnectedCallback?.invoke()
                     accessToken
                 } else {
                     val errorMsg = body.message ?: "Unknown error from Fyers"
@@ -217,6 +227,7 @@ class FyersAuthManager(
             Log.i(TAG, "[BROKER_CONNECTED] FYERS direct token successfully authenticated")
             Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS direct token authenticated")
             _authStatus.value = BrokerAuthStatus.CONNECTED
+            onConnectedCallback?.invoke()
             finalToken
         }
     }

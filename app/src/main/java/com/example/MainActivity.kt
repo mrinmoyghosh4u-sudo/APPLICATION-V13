@@ -45,7 +45,69 @@ class MainActivity : FragmentActivity() {
 
     private fun handleIntent(intent: android.content.Intent?) {
         val uri = intent?.data ?: return
-        viewModel.handleOAuthRedirect(uri)
+        val scheme = uri.scheme ?: ""
+        val host = uri.host ?: ""
+        val fullUrl = uri.toString()
+        android.util.Log.d("OAuthCallback", "MainActivity handleIntent deep link received: $fullUrl")
+
+        // 1. Dhan OAuth check
+        val genericTokenId = uri.getQueryParameter("tokenId") ?: uri.getQueryParameter("consentId")
+        val callbackState = (uri.getQueryParameter("state") ?: "").trim()
+        val isDhan = (viewModel.sessionManager.pendingOAuthSession?.provider?.equals("DHAN", ignoreCase = true) == true) ||
+                callbackState.startsWith("dhan_") ||
+                (!genericTokenId.isNullOrBlank() && scheme == "kingkhan") ||
+                (host.contains("kingkhan") && genericTokenId != null) ||
+                fullUrl.contains("dhan", ignoreCase = true)
+
+        if (isDhan) {
+            viewModel.handleOAuthRedirect(uri)
+            return
+        }
+
+        // 2. Extract authorization code or token from URI
+        val fyersAuthCode = uri.getQueryParameter("auth_code")
+        val genericCode = uri.getQueryParameter("code")
+        val token = uri.getQueryParameter("access_token") ?: uri.getQueryParameter("token")
+
+        val code = fyersAuthCode
+            ?: (if (genericCode != null && genericCode != "200" && genericCode != "0") genericCode else null)
+            ?: token
+            ?: Regex("""[?&#](?:auth_code|code|access_token|token)=([^&#]+)""", RegexOption.IGNORE_CASE)
+                .find(fullUrl)?.groupValues?.get(1)
+
+        val pendingProvider = viewModel.sessionManager.pendingOAuthSession?.provider?.uppercase()?.trim()
+        val connectingBroker = viewModel.connectingBrokerName.value?.uppercase()?.trim()
+
+        // 3. Check if Fyers OAuth callback
+        val isFyers = (fyersAuthCode != null) ||
+                callbackState.startsWith("fyers_") ||
+                pendingProvider == "FYERS" ||
+                connectingBroker == "FYERS" ||
+                fullUrl.contains("fyers", ignoreCase = true)
+
+        // 4. Check if Upstox OAuth callback
+        val isUpstox = !isFyers && (
+                callbackState.startsWith("upstox_") ||
+                pendingProvider == "UPSTOX" ||
+                connectingBroker == "UPSTOX" ||
+                fullUrl.contains("upstox", ignoreCase = true) ||
+                (!code.isNullOrBlank() && scheme == "kingkhan") ||
+                (!code.isNullOrBlank() && (host.contains("application-beige-psi.vercel.app") || fullUrl.contains("application-beige-psi.vercel.app")))
+        )
+
+        if (isFyers && !code.isNullOrBlank()) {
+            android.util.Log.i("OAuthCallback", "Fyers OAuth callback captured automatically, connecting with auth code...")
+            viewModel.connectFyersWithAuthCode(code)
+        } else if (isUpstox && !code.isNullOrBlank()) {
+            android.util.Log.i("OAuthCallback", "Upstox OAuth callback captured automatically, connecting with auth code...")
+            val upstoxKey = viewModel.sessionManager.upstoxApiKey.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.upstoxApiKey
+            val upstoxSecret = viewModel.sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
+                ?: com.example.util.BrokerConfig.upstoxApiSecret
+            viewModel.connectUpstox(upstoxKey, upstoxSecret, code)
+        } else {
+            viewModel.handleOAuthRedirect(uri)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -635,9 +635,14 @@ fun BrokerConnectDialog(
                                         } else {
                                             val url = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey.trim())
                                             try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                context.startActivity(intent)
-                                            } catch (_: Exception) {}
+                                                val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                                                customTabsIntent.launchUrl(context, Uri.parse(url))
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            }
                                         }
                                     }
                                 },
@@ -762,9 +767,14 @@ fun BrokerConnectDialog(
                                         } else {
                                             val url = com.example.util.FyersAuthHelper.buildLoginUrl(fyersAppId.trim())
                                             try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                context.startActivity(intent)
-                                            } catch (_: Exception) {}
+                                                val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                                                customTabsIntent.launchUrl(context, Uri.parse(url))
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            }
                                         }
                                     }
                                 },
