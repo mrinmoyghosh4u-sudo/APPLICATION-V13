@@ -303,6 +303,22 @@ class AngelOneMarketDataService(
         Log.d("SmartStream", "[SUBSCRIPTION_SENT] dynamic_tokens=${newTokens.size} exchangeType=$exchangeType")
     }
 
+    fun subscribeToMarketData(symbols: List<String>) {
+        if (symbols.isEmpty()) return
+        symbols.forEach { sym ->
+            val exch = when {
+                sym.contains("CRUDE", ignoreCase = true) -> "MCX"
+                sym.contains("SENSEX", ignoreCase = true) || sym.contains("BANKEX", ignoreCase = true) -> "BSE"
+                else -> "NSE"
+            }
+            val token = instrumentMaster.resolveAngelToken(sym, exch)
+            if (token != null) {
+                val exType = InstrumentMasterService.getExchangeType(exch)
+                subscribeToTokens(exType, listOf(token))
+            }
+        }
+    }
+
     private fun handleBinaryTick(bytes: ByteArray) {
         try {
             if (bytes.size < 51) {
