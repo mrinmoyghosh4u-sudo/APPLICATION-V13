@@ -451,6 +451,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        observeOrdersAndHoldings()
     }
 
     fun getWatchlistItemFlow(indexName: String): Flow<WatchlistItem?> {
@@ -1936,6 +1937,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     broker = sessionManager.activeBroker
                 )
                 refreshBrokerData()
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(1000L)
+                    refreshBrokerData()
+                }
             } catch (e: Exception) {
                 val isTimeout = e is java.net.SocketTimeoutException || e is kotlinx.coroutines.TimeoutCancellationException
                 val errorMsg = if (isTimeout) {

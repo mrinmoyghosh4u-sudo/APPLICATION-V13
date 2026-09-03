@@ -184,14 +184,23 @@ class TradingRepository(
             if (ordersRes.isSuccess) {
                 val ordersList = ordersRes.getOrDefault(emptyList())
                 val localOrders = dao.getAllOrders().firstOrNull() ?: emptyList()
+                val activeStatuses = listOf("PENDING", "REQUESTED", "OPEN", "SUBMITTED", "IN_PROGRESS", "TRADED", "EXECUTED")
                 val preservedLocalOrders = localOrders.filter { local ->
-                    local.status == "PENDING" && ordersList.none { api -> api.brokerOrderId == local.brokerOrderId || api.orderId == local.orderId }
+                    (local.status.uppercase() in activeStatuses || (System.currentTimeMillis() - local.id) < 60000L) &&
+                    ordersList.none { api ->
+                        (api.brokerOrderId.isNotBlank() && api.brokerOrderId == local.brokerOrderId) ||
+                        (api.orderId.isNotBlank() && api.orderId == local.orderId) ||
+                        (local.brokerOrderId.isNotBlank() && api.orderId == local.brokerOrderId) ||
+                        (local.orderId.isNotBlank() && api.brokerOrderId == local.orderId)
+                    }
                 }
                 
                 dao.clearAllOrders()
-                val finalOrders = ordersList + preservedLocalOrders
-                if (finalOrders.isNotEmpty()) {
-                    dao.insertOrders(finalOrders)
+                val combinedOrders = (ordersList + preservedLocalOrders).distinctBy {
+                    if (it.orderId.isNotBlank()) it.orderId else if (it.brokerOrderId.isNotBlank()) it.brokerOrderId else "${it.symbol}_${it.time}_${it.id}"
+                }
+                if (combinedOrders.isNotEmpty()) {
+                    dao.insertOrders(combinedOrders)
                 }
             }
 
