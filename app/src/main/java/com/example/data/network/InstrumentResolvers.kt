@@ -63,16 +63,34 @@ class AngelOneInstrumentResolver(private val instrumentMaster: InstrumentMasterS
         val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
         val inst = instrumentMaster?.resolveIndexToken(cleanSym)
             ?: instrumentMaster?.searchInstruments(cleanSym)?.firstOrNull()
-        if (inst == null) return null
+
+        val token = inst?.token ?: when (cleanSym) {
+            "NIFTY 50", "NIFTY50", "NIFTY" -> "99926000"
+            "BANKNIFTY", "NIFTY BANK", "BANK NIFTY" -> "99926009"
+            "FINNIFTY", "NIFTY FIN SERVICE", "FIN NIFTY" -> "99926037"
+            "MIDCPNIFTY", "NIFTY MID SELECT", "MIDCP NIFTY" -> "99926074"
+            "SENSEX", "BSESN", "BSE SENSEX" -> "99919000"
+            "BANKEX", "BSE BANKEX" -> "99919012"
+            else -> ""
+        }
+
+        if (token.isBlank()) return null
+
+        val exchSeg = inst?.exch_seg?.ifBlank { exchange } ?: when {
+            cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX") -> "BSE"
+            cleanSym.contains("CRUDE") || cleanSym.contains("GOLD") || cleanSym.contains("SILVER") -> "MCX"
+            else -> exchange
+        }
+
         return CanonicalInstrument(
-            exchange = inst.exch_seg.ifBlank { exchange },
-            segment = if (inst.instrumenttype.isNotBlank()) inst.instrumenttype else "EQ",
-            symbol = inst.symbol.ifBlank { cleanSym },
-            displayName = inst.name.ifBlank { cleanSym },
-            instrumentType = inst.instrumenttype,
+            exchange = InstrumentMasterService.normalizeExchange(exchSeg),
+            segment = if (inst != null && inst.instrumenttype.isNotBlank()) inst.instrumenttype else "IDX",
+            symbol = inst?.symbol?.ifBlank { cleanSym } ?: cleanSym,
+            displayName = inst?.name?.ifBlank { cleanSym } ?: cleanSym,
+            instrumentType = inst?.instrumenttype ?: "INDEX",
             instrumentKey = "",
-            token = inst.token,
-            lotSize = inst.lotsize.toIntOrNull() ?: 1
+            token = token,
+            lotSize = inst?.lotsize?.toIntOrNull() ?: instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
         )
     }
 }
@@ -81,15 +99,17 @@ class FyersInstrumentResolver(private val instrumentMaster: InstrumentMasterServ
     fun resolve(symbol: String, exchange: String = "NSE"): CanonicalInstrument? {
         val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
         val fyersSym = FyersSymbolMapper.toFyersSymbol(cleanSym, exchange)
+        val normExch = if (cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX")) "BSE" else if (cleanSym.contains("CRUDE") || cleanSym.contains("GOLD") || cleanSym.contains("SILVER")) "MCX" else exchange
+        val lotSize = instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
         return CanonicalInstrument(
-            exchange = exchange,
-            segment = if (cleanSym.contains("NIFTY") || cleanSym.contains("SENSEX")) "IDX" else "EQ",
+            exchange = normExch,
+            segment = if (cleanSym.contains("NIFTY") || cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX")) "IDX" else if (normExch == "MCX") "COMM" else "EQ",
             symbol = cleanSym,
             displayName = cleanSym,
-            instrumentType = "EQUITY",
+            instrumentType = if (cleanSym.contains("NIFTY") || cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX")) "INDEX" else "EQUITY",
             instrumentKey = "",
             token = fyersSym,
-            lotSize = 1
+            lotSize = if (lotSize > 0) lotSize else 1
         )
     }
 }

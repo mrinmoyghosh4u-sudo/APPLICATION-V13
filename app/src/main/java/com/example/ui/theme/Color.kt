@@ -19,6 +19,6 @@ val LossRed = Color(0xFFFF5252)
 val LossRedBg = Color(0x1FFF5252)
 
 val TextWhite = Color(0xFFFFFFFF)
-val TextGray = Color(0xFF9E9E9E)
-val TextMuted = Color(0xFF616161)
+val TextGray = Color(0xFFB8B8B8)
+val TextMuted = Color(0xFF909090)
 val DividerDark = Color(0xFF222222)

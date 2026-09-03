@@ -904,7 +904,10 @@ private fun PositionCardItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(34.dp)
@@ -924,7 +927,14 @@ private fun PositionCardItem(
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(order.symbol, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        Text(
+                            order.symbol,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
@@ -935,9 +945,11 @@ private fun PositionCardItem(
                         }
                     }
                     val displayExpiry = order.expiry.ifEmpty { com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(order.symbol).firstOrNull() ?: "" }
-                    Text("Expiry: $displayExpiry • Strike: $strikeText", fontSize = 9.sp, color = TextGray)
+                    Text("Expiry: $displayExpiry • Strike: $strikeText", fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -950,7 +962,7 @@ private fun PositionCardItem(
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
-                Text("Broker ID: ${order.brokerOrderId.ifEmpty { order.orderId }}", fontSize = 8.sp, color = TextMuted)
+                Text("Broker ID: ${order.brokerOrderId.ifEmpty { order.orderId }}", fontSize = 8.sp, color = TextMuted, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
 
@@ -961,20 +973,20 @@ private fun PositionCardItem(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Net Quantity", fontSize = 8.sp, color = TextGray)
                 Text("${order.qty} Lots (${order.qty * order.lotSize})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Avg Price", fontSize = 8.sp, color = TextGray)
                 Text(String.format("₹%,.2f", order.price), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(if (isOpen) "Live LTP" else "Exit Price", fontSize = 8.sp, color = TextGray)
                 val displayPrice = if (isOpen) liveLtp else if (order.exitPrice > 0) order.exitPrice else order.price
                 Text(String.format("₹%,.2f", displayPrice), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                 Text(if (isOpen) "Unrealized P&L" else "Realized P&L", fontSize = 8.sp, color = TextGray)
                 val isPnlPos = pnlAmount >= 0
                 Text(
@@ -1063,7 +1075,10 @@ private fun DetailedOrderCardItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -1078,7 +1093,14 @@ private fun DetailedOrderCardItem(
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(order.symbol, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        Text(
+                            order.symbol,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
@@ -1088,9 +1110,11 @@ private fun DetailedOrderCardItem(
                             Text(order.exchange, fontSize = 8.sp, color = TextGray)
                         }
                     }
-                    Text("ID: ${order.orderId} • Broker ID: ${order.brokerOrderId.ifEmpty { "N/A" }}", fontSize = 8.sp, color = TextGray)
+                    Text("ID: ${order.orderId} • Broker ID: ${order.brokerOrderId.ifEmpty { "N/A" }}", fontSize = 8.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1151,19 +1175,19 @@ private fun DetailedOrderCardItem(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Quantity (Lots)", fontSize = 8.sp, color = TextGray)
                 Text("${order.qty} (${order.qty * order.lotSize})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Order / Product", fontSize = 8.sp, color = TextGray)
                 Text("${order.orderType} • ${order.productType}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Limit Price", fontSize = 8.sp, color = TextGray)
                 Text(String.format("₹%,.2f", order.price), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                 Text("Avg Executed Price", fontSize = 8.sp, color = TextGray)
                 val avgP = if (order.avgPrice > 0) order.avgPrice else order.price
                 Text(String.format("₹%,.2f", avgP), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
@@ -1177,19 +1201,19 @@ private fun DetailedOrderCardItem(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Filled / Remaining", fontSize = 8.sp, color = TextGray)
                 Text("${order.filledQty} / ${order.remainingQty}", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = TextGray)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Stop Loss", fontSize = 8.sp, color = TextGray)
                 Text(String.format("₹%,.2f", order.stopLoss), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LossRed)
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Target", fontSize = 8.sp, color = TextGray)
                 Text(String.format("₹%,.2f", order.target), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ProfitGreen)
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                 Text("Order Value", fontSize = 8.sp, color = TextGray)
                 Text(String.format("₹%,.2f", order.value), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
             }
@@ -1695,7 +1719,10 @@ private fun HoldingPositionCardItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(34.dp)
@@ -1715,7 +1742,14 @@ private fun HoldingPositionCardItem(
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(holding.symbol, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                        Text(
+                            holding.symbol,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
@@ -1726,9 +1760,11 @@ private fun HoldingPositionCardItem(
                         }
                     }
                     val displayExpiry = holding.expiry.ifEmpty { com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(holding.symbol).firstOrNull() ?: "" }
-                    Text("Expiry: $displayExpiry" + (if (strikeText.isNotBlank()) " • Strike: $strikeText" else ""), fontSize = 9.sp, color = TextGray)
+                    Text("Expiry: $displayExpiry" + (if (strikeText.isNotBlank()) " • Strike: $strikeText" else ""), fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Column(horizontalAlignment = Alignment.End) {
                 Box(
@@ -1757,19 +1793,19 @@ private fun HoldingPositionCardItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("BUY", fontSize = 8.sp, color = TextGray)
                     Text("${holding.buyQty} @ ₹${String.format("%.2f", holding.buyAvg)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("SELL", fontSize = 8.sp, color = TextGray)
                     Text("${holding.sellQty} @ ₹${String.format("%.2f", holding.sellAvg)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Net Qty", fontSize = 8.sp, color = TextGray)
                     Text("0", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                     Text("Realized P&L", fontSize = 8.sp, color = TextGray)
                     val isPos = pnlAmount >= 0
                     Text(
@@ -1785,20 +1821,20 @@ private fun HoldingPositionCardItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Net Quantity", fontSize = 8.sp, color = TextGray)
                     Text("${holding.qty}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Avg Price", fontSize = 8.sp, color = TextGray)
                     Text(String.format("₹%,.2f", holding.avgPrice), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextWhite)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Live LTP", fontSize = 8.sp, color = TextGray)
                     val ltpToDisplay = if (liveLtp > 0) liveLtp else holding.ltp
                     Text(String.format("₹%,.2f", ltpToDisplay), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryGold)
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                     Text("P&L", fontSize = 8.sp, color = TextGray)
                     val isPos = pnlAmount >= 0
                     Text(
