@@ -80,19 +80,23 @@ class MainActivity : FragmentActivity() {
 
         // 3. Check if Fyers OAuth callback
         val isFyers = (fyersAuthCode != null) ||
+                fullUrl.contains("auth_code", ignoreCase = true) ||
                 callbackState.startsWith("fyers_") ||
                 pendingProvider == "FYERS" ||
                 connectingBroker == "FYERS" ||
-                fullUrl.contains("fyers", ignoreCase = true)
+                fullUrl.contains("fyers", ignoreCase = true) ||
+                viewModel.sessionManager.pendingFyersOAuthState.isNotBlank() ||
+                ( (host.contains("application-beige-psi.vercel.app") || scheme == "kingkhan" || host == "oauth" || uri.path?.contains("oauth") == true) &&
+                  !callbackState.startsWith("upstox_") && !callbackState.startsWith("dhan_") &&
+                  pendingProvider != "UPSTOX" && pendingProvider != "DHAN" &&
+                  connectingBroker != "UPSTOX" && connectingBroker != "DHAN" )
 
         // 4. Check if Upstox OAuth callback
         val isUpstox = !isFyers && (
                 callbackState.startsWith("upstox_") ||
                 pendingProvider == "UPSTOX" ||
                 connectingBroker == "UPSTOX" ||
-                fullUrl.contains("upstox", ignoreCase = true) ||
-                (!code.isNullOrBlank() && scheme == "kingkhan") ||
-                (!code.isNullOrBlank() && (host.contains("application-beige-psi.vercel.app") || fullUrl.contains("application-beige-psi.vercel.app")))
+                fullUrl.contains("upstox", ignoreCase = true)
         )
 
         if (isFyers && !code.isNullOrBlank()) {

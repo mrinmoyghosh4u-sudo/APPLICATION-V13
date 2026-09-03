@@ -95,7 +95,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isPositive = liveChange >= 0
                 )
             } else {
-                item
+                if (item.ltp <= 0.0) {
+                    val refPrice = com.example.data.model.MarketUniverse.getReferenceClosingPrice(item.symbol)
+                    item.copy(
+                        ltp = refPrice,
+                        change = 0.0,
+                        changePercent = 0.0,
+                        isPositive = true
+                    )
+                } else {
+                    item
+                }
             }
         }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
@@ -265,10 +275,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         brokerManager.fyersAuthManager.onConnectedCallback = {
             _showConnectDialog.value = false
             _authSuccessEvent.value = true
+            brokerManager.marketDataEngine.retryConnection()
+            refreshMarketData()
         }
         brokerManager.upstoxAuthManager.onConnectedCallback = {
             _showConnectDialog.value = false
             _authSuccessEvent.value = true
+            brokerManager.marketDataEngine.retryConnection()
+            refreshMarketData()
         }
         viewModelScope.launch {
             try {
@@ -558,6 +572,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         message = "Primary market data feed switched to Upstox",
                         type = "SUCCESS"
                     )
+                    brokerManager.marketDataEngine.retryConnection()
+                    refreshMarketData()
                 }
                 BrokerType.FYERS -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Fyers..."
@@ -582,6 +598,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         message = "Primary market data feed switched to Fyers",
                         type = "SUCCESS"
                     )
+                    brokerManager.marketDataEngine.retryConnection()
+                    refreshMarketData()
                 }
                 BrokerType.ANGEL_ONE -> {
                     _brokerSwitchStatus.value = "Setting primary market data provider to Angel One..."
@@ -606,6 +624,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         message = "Primary market data feed switched to Angel One",
                         type = "SUCCESS"
                     )
+                    brokerManager.marketDataEngine.retryConnection()
+                    refreshMarketData()
                 }
                 
                 BrokerType.DHAN, null -> {
@@ -757,7 +777,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message = "Angel One account $cleanCode authenticated successfully 📊",
                     type = "SUCCESS"
                 )
+                brokerManager.marketDataEngine.retryConnection()
                 refreshBrokerData()
+                refreshMarketData()
             } else {
                 _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Angel login failed"
             }
@@ -868,7 +890,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             message = "Upstox market streamer connected successfully ⚡",
                             type = "SUCCESS"
                         )
+                        brokerManager.marketDataEngine.retryConnection()
                         refreshBrokerData()
+                        refreshMarketData()
                     } else {
                         _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Upstox authorization failed"
                     }
@@ -921,7 +945,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             message = "Fyers market data feed connected successfully 🚀",
                             type = "SUCCESS"
                         )
+                        brokerManager.marketDataEngine.retryConnection()
                         refreshBrokerData()
+                        refreshMarketData()
                     } else {
                         _authErrorMessage.value = res.exceptionOrNull()?.message ?: "Fyers authorization failed"
                     }

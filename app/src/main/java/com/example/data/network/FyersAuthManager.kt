@@ -55,7 +55,9 @@ class FyersAuthManager(
 
                 if (!storedState.isNullOrBlank()) {
                     if (!extractedState.isNullOrBlank() && extractedState != storedState) {
-                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state mismatch bypassed for seamless OAuth login")
+                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state mismatch ($extractedState vs $storedState) - proceeding with non-fatal warning for manual/seamless OAuth callback")
+                    } else if (extractedState.isNullOrBlank()) {
+                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state missing in callback - proceeding with non-fatal warning for manual/seamless OAuth callback")
                     } else {
                         Log.i(TAG, "[FYERS_OAUTH_STATE_MATCH] OAuth state matched successfully")
                     }
@@ -223,6 +225,7 @@ class FyersAuthManager(
             sessionManager.fyersAccessToken = finalToken
             sessionManager.fyersTokenTimestamp = System.currentTimeMillis()
             sessionManager.isFyersConnected = true
+            sessionManager.pendingFyersOAuthState = ""
 
             Log.i(TAG, "[BROKER_CONNECTED] FYERS direct token successfully authenticated")
             Log.i(TAG, "[FYERS_AUTHENTICATED] FYERS direct token authenticated")

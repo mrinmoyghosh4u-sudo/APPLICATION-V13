@@ -106,6 +106,21 @@ object MarketUniverse {
         }
     }
 
+    fun getReferenceClosingPrice(symbol: String): Double {
+        val canonical = getCanonicalUnderlying(symbol)
+        return when (canonical) {
+            NIFTY -> 24850.0
+            BANKNIFTY -> 51200.0
+            FINNIFTY -> 23450.0
+            MIDCPNIFTY -> 13100.0
+            SENSEX -> 81400.0
+            BANKEX -> 58200.0
+            CRUDEOIL -> 6150.0
+            CRUDEOIL_M -> 6150.0
+            else -> 100.0
+        }
+    }
+
     private fun cleanSymbol(symbol: String): String {
         return symbol.trim().uppercase()
     }

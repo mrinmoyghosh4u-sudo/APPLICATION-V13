@@ -232,6 +232,9 @@ class AngelOneBrokerService(
     override suspend fun getOptionChain(symbol: String, expiry: String): Result<List<OptionStrikeItem>> = withContext(Dispatchers.IO) {
         runCatching {
             if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            if (!instrumentMaster.isLoaded) {
+                instrumentMaster.ensureLoaded()
+            }
             val instrument = instrumentMaster.resolveIndexToken(symbol)
                 ?: throw Exception("Index token not found for option chain: $symbol")
             
@@ -295,6 +298,9 @@ class AngelOneBrokerService(
     override suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.data.model.HistoricalCandle>> = withContext(Dispatchers.IO) {
         runCatching {
             if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            if (!instrumentMaster.isLoaded) {
+                instrumentMaster.ensureLoaded()
+            }
             val ex = when {
                 symbol.contains("CRUDE", ignoreCase = true) -> "MCX"
                 symbol.contains("SENSEX", ignoreCase = true) || symbol.contains("BANKEX", ignoreCase = true) -> "BSE"

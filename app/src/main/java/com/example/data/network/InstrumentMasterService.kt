@@ -90,6 +90,15 @@ class InstrumentMasterService(
     val isLoadedFlow = _isLoaded.asStateFlow()
     val isLoaded: Boolean get() = _isLoaded.value
 
+    suspend fun ensureLoaded() {
+        if (_isLoaded.value) return
+        withContext(Dispatchers.IO) {
+            if (!_isLoaded.value) {
+                loadMaster()
+            }
+        }
+    }
+
     init {
         // No hardcoded stock/option tokens populated here.
         // Instrument Master is the single source of truth.
@@ -436,10 +445,12 @@ class InstrumentMasterService(
             val isCommodity = exchSeg == "MCX" || normalizeExchange(inst.exch_seg) == "MCX"
             // MCX commodity contracts (e.g. CRUDEOIL) already store strikes in rupees and must not be divided.
             // NSE/BFO index contracts in Angel One master store strikes in paise (e.g. 2485000 for 24850.0).
-            val instStrike = if (isCommodity) {
-                instStrikeRaw
-            } else {
+            val instStrike = if (instStrikeRaw > 100000) {
                 instStrikeRaw / 100.0
+            } else if (instStrikeRaw > 10000 && !isCommodity) {
+                instStrikeRaw / 100.0
+            } else {
+                instStrikeRaw
             }
 
             val strikeMatches = kotlin.math.abs(instStrike - strike) < 0.01

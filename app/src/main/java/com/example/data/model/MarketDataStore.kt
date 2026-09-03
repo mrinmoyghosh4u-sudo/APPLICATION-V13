@@ -322,4 +322,14 @@ object MarketDataStore {
             Log.i(TAG, "Market Failover Transition Complete. Feeds restored.")
         }
     }
+
+    fun forceRefresh() {
+        val current = _providerState.value
+        _providerState.value = current.copy(
+            status = "CONNECTING",
+            stale = false,
+            error = null
+        )
+        Log.i(TAG, "MarketDataStore state force-refreshed for broker reconnect")
+    }
 }

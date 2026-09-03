@@ -341,6 +341,10 @@ class TradingRepository(
     }
 
     suspend fun getOptionExpiries(symbol: String): List<String> {
+        val master = brokerManager?.instrumentMasterService
+        if (master != null && !master.isLoaded) {
+            runCatching { master.ensureLoaded() }
+        }
         val liveExpiries = runCatching {
             brokerManager?.getOptionExpiries(symbol)?.getOrNull()
         }.getOrNull() ?: emptyList()
@@ -348,6 +352,10 @@ class TradingRepository(
     }
 
     suspend fun getOptionChainStrikes(symbol: String = "NIFTY", expiry: String = "", forceRefresh: Boolean = false): List<OptionStrikeItem> {
+        val master = brokerManager?.instrumentMasterService
+        if (master != null && !master.isLoaded) {
+            runCatching { master.ensureLoaded() }
+        }
         val live = runCatching {
             brokerManager?.getOptionChain(symbol, expiry, forceRefresh)?.getOrNull()
         }.getOrNull()

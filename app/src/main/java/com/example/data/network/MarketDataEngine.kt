@@ -358,14 +358,27 @@ class MarketDataEngine(
     }
 
     fun retryConnection() {
+        Log.i(TAG, "Forcing connection retry and MarketDataStore refresh across all brokers...")
         _unifiedFeedStatus.value = "CONNECTING"
-        if (upstoxMarketDataService?.isConfigured() == true) {
-            CoroutineScope(Dispatchers.IO).launch { upstoxMarketDataService?.connect() }
+        MarketDataStore.forceRefresh()
+        val symbols = com.example.data.model.MarketUniverse.APPROVED_UNDERLYINGS
+        CoroutineScope(Dispatchers.IO).launch {
+            if (upstoxMarketDataService?.isConfigured() == true) {
+                runCatching {
+                    upstoxMarketDataService?.connect()
+                    upstoxMarketDataService?.subscribeToMarketData(symbols)
+                }
+            }
+            if (fyersMarketDataService?.isConfigured() == true) {
+                runCatching {
+                    fyersMarketDataService?.connect()
+                    fyersMarketDataService?.subscribeToMarketData(symbols)
+                }
+            }
+            runCatching {
+                angelMarketDataService?.reconnect()
+            }
         }
-        if (fyersMarketDataService?.isConfigured() == true) {
-            CoroutineScope(Dispatchers.IO).launch { fyersMarketDataService?.connect() }
-        }
-        angelMarketDataService?.reconnect()
     }
 
     suspend fun subscribeToMarketData(symbols: List<String>) {
