@@ -134,7 +134,7 @@ fun GoldCard(
     modifier: Modifier = Modifier,
     borderColor: Color = PrimaryGold,
     backgroundColor: Color = Color(0xFF1E1E1E),
-    content: @Composable () -> Unit
+    content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
         modifier = modifier
@@ -143,7 +143,7 @@ fun GoldCard(
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Box(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             content()
         }
     }

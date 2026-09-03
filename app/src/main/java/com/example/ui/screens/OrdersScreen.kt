@@ -183,7 +183,7 @@ fun OrdersScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(DarkBackground),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(bottom = 100.dp)
         ) {
             // 1. Top Header
             item {
@@ -325,6 +325,8 @@ fun OrdersScreen(
 
             // 3. Main Mode Switcher: "📋 ORDERS" vs "💼 POSITIONS"
             item {
+                val totalPositionsCount = if (useHoldings) (openHoldingPositions.size + closedHoldingPositions.size) else (openPositions.size + closedPositions.size)
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -353,7 +355,7 @@ fun OrdersScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "POSITIONS (${openPositions.size})",
+                                text = "POSITIONS ($totalPositionsCount)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selectedMainMode == "POSITIONS") Color.Black else TextWhite
@@ -945,7 +947,18 @@ private fun PositionCardItem(
                         }
                     }
                     val displayExpiry = order.expiry.ifEmpty { com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(order.symbol).firstOrNull() ?: "" }
-                    Text("Expiry: $displayExpiry • Strike: $strikeText", fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    val contractDetails = buildString {
+                        if (displayExpiry.isNotBlank() && !displayExpiry.equals("UNAVAILABLE", ignoreCase = true)) {
+                            append("Expiry: $displayExpiry")
+                        }
+                        if (strikeText.isNotBlank()) {
+                            if (isNotEmpty()) append(" • ")
+                            append("Strike: $strikeText")
+                        }
+                    }
+                    if (contractDetails.isNotBlank()) {
+                        Text(contractDetails, fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
             }
 
@@ -1760,7 +1773,18 @@ private fun HoldingPositionCardItem(
                         }
                     }
                     val displayExpiry = holding.expiry.ifEmpty { com.example.util.OptionExpiryUtil.getUpcomingExpiriesForSymbol(holding.symbol).firstOrNull() ?: "" }
-                    Text("Expiry: $displayExpiry" + (if (strikeText.isNotBlank()) " • Strike: $strikeText" else ""), fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    val contractDetails = buildString {
+                        if (displayExpiry.isNotBlank() && !displayExpiry.equals("UNAVAILABLE", ignoreCase = true)) {
+                            append("Expiry: $displayExpiry")
+                        }
+                        if (strikeText.isNotBlank()) {
+                            if (isNotEmpty()) append(" • ")
+                            append("Strike: $strikeText")
+                        }
+                    }
+                    if (contractDetails.isNotBlank()) {
+                        Text(contractDetails, fontSize = 9.sp, color = TextGray, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
             }
 
