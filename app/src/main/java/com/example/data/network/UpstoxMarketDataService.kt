@@ -532,6 +532,7 @@ class UpstoxMarketDataService(
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> = withContext(Dispatchers.IO) {
         runCatching {
+            InstrumentMasterService.instance?.ensureLoaded()
             if (!isConfigured()) throw Exception("Upstox credentials not configured")
             val auth = getAuthHeader()
             val instKey = UpstoxSymbolMapper.toUpstoxInstrumentKey(symbol)
@@ -636,6 +637,7 @@ class UpstoxMarketDataService(
         toDate: String = ""
     ): Result<List<com.example.data.model.HistoricalCandle>> = withContext(Dispatchers.IO) {
         runCatching {
+            InstrumentMasterService.instance?.ensureLoaded()
             if (!isConfigured()) throw Exception("Upstox credentials not configured")
             val auth = getAuthHeader()
             val instKey = UpstoxSymbolMapper.toUpstoxInstrumentKey(symbol)

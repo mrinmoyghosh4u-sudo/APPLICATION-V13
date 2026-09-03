@@ -121,6 +121,8 @@ class MarketDataEngine(
         
         com.example.data.model.OptionChainCache.setLoading()
         
+        InstrumentMasterService.instance?.ensureLoaded()
+        
         val providers = getProviderPriorityOrder()
         
         for (provider in providers) {
@@ -182,6 +184,7 @@ class MarketDataEngine(
     // Priority: Dynamic based on primary selection (Upstox / Fyers / Angel One)
     // =========================================================================
     suspend fun getHistoricalCandles(symbol: String, interval: String): Result<List<HistoricalCandle>> {
+        InstrumentMasterService.instance?.ensureLoaded()
         val providers = getProviderPriorityOrder()
         for (provider in providers) {
             when (provider) {

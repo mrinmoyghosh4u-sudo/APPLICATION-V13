@@ -57,7 +57,9 @@ fun IndexDetailsScreen(
         it.symbol.equals(indexName, ignoreCase = true) || 
         (indexName == "MIDCPNIFTY" && it.symbol.contains("MID", ignoreCase = true)) 
     }
-    val ltp = indexItem?.ltp ?: 0.0
+    val refPrice = com.example.data.model.MarketUniverse.getReferenceClosingPrice(indexName)
+    val rawLtp = indexItem?.ltp ?: 0.0
+    val ltp = if (rawLtp > 0.0) rawLtp else refPrice
     val change = indexItem?.change ?: 0.0
     val changePercent = indexItem?.changePercent ?: 0.0
     val isPositive = change >= 0

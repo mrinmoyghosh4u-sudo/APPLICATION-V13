@@ -817,6 +817,7 @@ class FyersMarketDataService(
 
     suspend fun getHistoricalCandles(symbol: String, interval: String, fromDate: String, toDate: String): Result<List<com.example.data.model.HistoricalCandle>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         runCatching {
+            InstrumentMasterService.instance?.ensureLoaded()
             val fyersAppId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
             val token = sessionManager.fyersAccessToken ?: throw Exception("Token missing")
             val auth = "$fyersAppId:$token"
@@ -865,6 +866,7 @@ class FyersMarketDataService(
 
     suspend fun getOptionChain(symbol: String, expiry: String = ""): Result<List<OptionStrikeItem>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         runCatching {
+            InstrumentMasterService.instance?.ensureLoaded()
             val fyersAppId = sessionManager.fyersAppId ?: throw Exception("App ID missing")
             val token = sessionManager.fyersAccessToken ?: throw Exception("Token missing")
             val auth = "$fyersAppId:$token"

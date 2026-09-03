@@ -299,6 +299,17 @@ class DhanBrokerService(
         }
     }
 
+    private fun normalizeExchangeSegment(segment: String?): String {
+        if (segment.isNullOrBlank()) return "NSE"
+        val upper = segment.uppercase().trim()
+        return when {
+            upper.startsWith("MCX") || upper.contains("MCX") -> "MCX"
+            upper.startsWith("BSE") || upper.contains("BSE") -> "BSE"
+            upper.startsWith("NSE") || upper.contains("NSE") -> "NSE"
+            else -> upper
+        }
+    }
+
     override suspend fun getOrders(): Result<List<OrderEntity>> {
         if (sessionManager.dhanAccessToken.isNullOrEmpty()) return Result.failure(Exception("Dhan account is not connected."))
 
@@ -307,10 +318,11 @@ class DhanBrokerService(
             if (response.isSuccessful) {
                 response.body()?.map { item ->
                     val lot = com.example.util.AppPreferences.getGlobalLotSize(item.tradingSymbol)
+                    val exch = if (item.exchangeSegment.isNotBlank()) item.exchangeSegment else normalizeExchangeSegment(item.exchangeSegment)
                     OrderEntity(
                         orderId = item.orderId,
                         symbol = item.tradingSymbol,
-                        exchange = item.exchangeSegment,
+                        exchange = exch,
                         lotSize = lot,
                         qty = item.quantity,
                         filledQty = item.tradedQty,
@@ -414,7 +426,7 @@ class DhanBrokerService(
 
                     PortfolioHoldingEntity(
                         symbol = symbolStr,
-                        exchange = item.exchangeSegment,
+                        exchange = if (item.exchangeSegment.isNotBlank()) item.exchangeSegment else normalizeExchangeSegment(item.exchangeSegment),
                         type = optType,
                         expiry = formattedExpiry,
                         qty = netQty,

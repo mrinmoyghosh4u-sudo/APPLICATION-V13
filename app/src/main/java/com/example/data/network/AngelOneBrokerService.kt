@@ -174,6 +174,9 @@ class AngelOneBrokerService(
     override suspend fun getMarketQuotes(symbols: List<String>): Result<List<WatchlistItem>> = withContext(Dispatchers.IO) {
         runCatching {
             if (sessionManager.angelJwtToken.isNullOrEmpty()) throw Exception("Not authenticated with Angel One")
+            if (!instrumentMaster.isLoaded) {
+                instrumentMaster.ensureLoaded()
+            }
             val tokenMap = mutableMapOf<String, MutableList<String>>()
             symbols.forEach { sym ->
                 val normExchange = if (sym.contains("SENSEX") || sym.contains("BANKEX")) "BSE" else if (sym.contains("CRUDE")) "MCX" else "NSE"

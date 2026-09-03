@@ -51,7 +51,7 @@ class UpstoxInstrumentResolver(private val instrumentMaster: InstrumentMasterSer
             symbol = cleanSym,
             displayName = cleanSym,
             instrumentType = instType,
-            instrumentKey = "",
+            instrumentKey = mappedKey,
             token = mappedKey,
             lotSize = if (lotSize > 0) lotSize else 1
         )

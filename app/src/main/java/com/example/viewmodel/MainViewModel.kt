@@ -387,13 +387,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             else -> liveSymbol == dbSymbol
                         }
                     }
-                    if (live != null && live.price > 0 && live.price != item.ltp) {
-                        val prevClose = if (item.ltp > 0) item.ltp - item.change else 0.0
-                        val newChange = if (prevClose > 0) live.price - prevClose else item.change
+                    val fallbackLtp = com.example.data.model.MarketUniverse.getReferenceClosingPrice(item.symbol)
+                    val targetLtp = if (live != null && live.price > 0.0) live.price else if (item.ltp > 0.0) item.ltp else fallbackLtp
+
+                    if (targetLtp > 0.0 && targetLtp != item.ltp) {
+                        val prevClose = if (item.ltp > 0) item.ltp - item.change else fallbackLtp
+                        val newChange = if (prevClose > 0) targetLtp - prevClose else item.change
                         val newChangePct = if (prevClose > 0) (newChange / prevClose) * 100.0 else item.changePercent
                         changed = true
                         item.copy(
-                            ltp = live.price,
+                            ltp = targetLtp,
                             change = newChange,
                             changePercent = newChangePct,
                             isPositive = newChange >= 0
@@ -525,7 +528,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            repository.aiSignals.collectLatest { list ->
+            kotlinx.coroutines.flow.combine(repository.aiSignals, com.example.data.model.MarketDataStore.ticks) { sigList, liveTicks ->
+                sigList.map { sig ->
+                    val tick = liveTicks.values.find { liveItem ->
+                        val liveSym = liveItem.symbol.uppercase().trim()
+                        val sigSym = sig.symbol.uppercase().trim()
+                        liveSym == sigSym || liveSym.endsWith("|$sigSym") || liveSym.substringAfter("|") == sigSym
+                    } ?: com.example.data.model.MarketDataStore.getTick(sig.symbol)
+                    val livePrice = tick?.price ?: 0.0
+                    val refPrice = com.example.data.model.MarketUniverse.getReferenceClosingPrice(sig.symbol)
+                    val effectivePrice = if (livePrice > 0.0) livePrice else refPrice
+                    if (effectivePrice > 0.0 && sig.ltp <= 0.0) {
+                        sig.copy(ltp = effectivePrice)
+                    } else {
+                        sig
+                    }
+                }
+            }.collectLatest { list ->
                 _aiSignals.value = list
             }
         }
