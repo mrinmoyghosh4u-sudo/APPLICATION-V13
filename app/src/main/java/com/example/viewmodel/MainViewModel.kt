@@ -700,69 +700,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (cleanClientId.isNotBlank() && cleanToken.isNotBlank()) {
                 sessionManager.dhanClientId = cleanClientId
                 sessionManager.dhanAccessToken = cleanToken
-                sessionManager.isDhanConnected = true
+                sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
                 sessionManager.activeBroker = "Dhan"
                 brokerManager.setActiveBroker("Dhan")
 
-                var liveMargin = 0.0
-                var liveRealized = 0.0
-                var liveUnrealized = 0.0
-                var pnlState = PnlState.UNAVAILABLE.name
-                var marginState = MarginState.UNAVAILABLE.name
-                var lastPnlTime = 0L
-                var lastMarginTime = 0L
-                var fetchedName = "Dhan ($cleanClientId)"
+                val profRes = runCatching { brokerManager.getProfile() }.getOrElse { Result.failure(it) }
+                if (profRes.isSuccess) {
+                    val prof = profRes.getOrThrow()
+                    val liveMargin = prof.availableMargin
+                    val liveRealized = prof.realizedPnl
+                    val liveUnrealized = prof.unrealizedPnl
+                    val pnlState = prof.pnlStatus
+                    val marginState = prof.marginStatus
+                    val lastPnlTime = prof.lastPnlSyncTime
+                    val lastMarginTime = prof.lastMarginSyncTime
+                    val fetchedName = if (prof.name.isNotBlank()) prof.name else "Dhan ($cleanClientId)"
 
-                runCatching {
-                    val profRes = brokerManager.getProfile()
-                    if (profRes.isSuccess) {
-                        val prof = profRes.getOrThrow()
-                        liveMargin = prof.availableMargin
-                        liveRealized = prof.realizedPnl
-                        liveUnrealized = prof.unrealizedPnl
-                        pnlState = prof.pnlStatus
-                        marginState = prof.marginStatus
-                        lastPnlTime = prof.lastPnlSyncTime
-                        lastMarginTime = prof.lastMarginSyncTime
-                        if (prof.name.isNotBlank()) {
-                            fetchedName = prof.name
-                        }
-                    }
+                    sessionManager.isDhanConnected = true
+                    brokerManager.brokerAuthManager.updateStatus(
+                        "Dhan",
+                        "Primary Order Execution",
+                        com.example.data.network.BrokerAuthStatus.CONNECTED,
+                        "Active for Order Execution (Client: $cleanClientId • Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)})"
+                    )
+                    val current = _userProfile.value
+                    val updated = current.copy(
+                        name = fetchedName,
+                        isDhanConnected = true,
+                        dhanClientId = cleanClientId,
+                        connectedBroker = "Dhan",
+                        availableMargin = liveMargin,
+                        accountBalance = liveMargin,
+                        realizedPnl = liveRealized,
+                        unrealizedPnl = liveUnrealized,
+                        todaysPnl = liveRealized + liveUnrealized,
+                        pnlStatus = pnlState,
+                        marginStatus = marginState,
+                        lastPnlSyncTime = lastPnlTime,
+                        lastMarginSyncTime = lastMarginTime
+                    )
+                    _userProfile.value = updated
+                    repository.updateProfile(updated)
+                    _isSessionValid.value = true
+                    _authSuccessEvent.value = true
+                    _showConnectDialog.value = false
+                    repository.addNotification(
+                        title = "Dhan Connected",
+                        message = "DhanHQ account $cleanClientId connected (Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)}) ⚡",
+                        type = "SUCCESS"
+                    )
+                    refreshBrokerData()
+                } else {
+                    val errorMsg = profRes.exceptionOrNull()?.message ?: "Failed to validate Dhan Access Token or Client ID"
+                    sessionManager.isDhanConnected = false
+                    _authErrorMessage.value = errorMsg
+                    brokerManager.brokerAuthManager.updateStatus(
+                        "Dhan",
+                        "Primary Order Execution",
+                        com.example.data.network.BrokerAuthStatus.AUTHENTICATION_REQUIRED,
+                        "Login Failed: $errorMsg"
+                    )
                 }
-
-                brokerManager.brokerAuthManager.updateStatus(
-                    "Dhan",
-                    "Primary Order Execution",
-                    com.example.data.network.BrokerAuthStatus.CONNECTED,
-                    "Active for Order Execution (Client: $cleanClientId • Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)})"
-                )
-                val current = _userProfile.value
-                val updated = current.copy(
-                    name = fetchedName,
-                    isDhanConnected = true,
-                    dhanClientId = cleanClientId,
-                    connectedBroker = "Dhan",
-                    availableMargin = liveMargin,
-                    accountBalance = liveMargin,
-                    realizedPnl = liveRealized,
-                    unrealizedPnl = liveUnrealized,
-                    todaysPnl = liveRealized + liveUnrealized,
-                    pnlStatus = pnlState,
-                    marginStatus = marginState,
-                    lastPnlSyncTime = lastPnlTime,
-                    lastMarginSyncTime = lastMarginTime
-                )
-                _userProfile.value = updated
-                repository.updateProfile(updated)
-                _isSessionValid.value = true
-                _authSuccessEvent.value = true
-                _showConnectDialog.value = false
-                repository.addNotification(
-                    title = "Dhan Connected",
-                    message = "DhanHQ account $cleanClientId connected (Margin: ₹${String.format(java.util.Locale.US, "%.2f", liveMargin)}) ⚡",
-                    type = "SUCCESS"
-                )
-                refreshBrokerData()
             } else {
                 _authErrorMessage.value = "Client ID and Access Token are required"
             }
@@ -1030,7 +1028,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         android.util.Log.i("UpstoxAuth", "[UPSTOX_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_UPSTOX, randomState)
 
-        val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(cleanKey, redirectUri)
+        val loginUrl = com.example.util.UpstoxAuthHelper.buildLoginUrl(cleanKey, redirectUri, state = randomState)
         onUrlGenerated(loginUrl)
     }
 
@@ -1077,7 +1075,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         android.util.Log.i("FyersAuth", "[FYERS_WAITING_FOR_CALLBACK] Waiting for redirect callback...")
         brokerManager.healthManager.reportWaitingForCallback(com.example.data.network.ProviderHealthManager.PROVIDER_FYERS, randomState)
 
-        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(cleanAppId, redirectUri)
+        val loginUrl = com.example.util.FyersAuthHelper.buildLoginUrl(cleanAppId, redirectUri, state = randomState)
         onUrlGenerated(loginUrl)
     }
 
@@ -1316,30 +1314,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 is SessionManager.OAuthValidationResult.SessionExpired -> {
-                    if (rawProvider == "FYERS" || rawProvider == "UPSTOX") {
-                        android.util.Log.w("Auth", "[$logPrefix" + "_SESSION_EXPIRED_WARN] Pending session expired; proceeding seamlessly with code exchange")
-                    } else {
-                        val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
-                        android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                        _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
-                        _isAuthInProgress.value = false
-                        brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
-                        return@launch
-                    }
+                    val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
+                    android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
+                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                    _isAuthInProgress.value = false
+                    brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
+                    return@launch
                 }
                 is SessionManager.OAuthValidationResult.MissingPendingSession,
                 is SessionManager.OAuthValidationResult.MissingCallbackState,
                 is SessionManager.OAuthValidationResult.MissingStoredState,
                 is SessionManager.OAuthValidationResult.StateMismatch,
                 is SessionManager.OAuthValidationResult.ProviderMismatch -> {
-                    if (rawProvider == "FYERS" || rawProvider == "UPSTOX") {
-                        android.util.Log.w("Auth", "[$logPrefix" + "_STATE_BYPASS] State validation non-fatal for 1-click automatic redirect capture")
-                    } else {
-                        _isAuthInProgress.value = false
-                        _authErrorMessage.value = "$logPrefix OAuth Error: State mismatch. Possible CSRF attack or invalid session."
-                        brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", "Invalid state")
-                        return@launch
-                    }
+                    _isAuthInProgress.value = false
+                    _authErrorMessage.value = "$logPrefix OAuth Error: State mismatch. Possible CSRF attack or invalid session."
+                    brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", "Invalid state")
+                    return@launch
                 }
             }
 

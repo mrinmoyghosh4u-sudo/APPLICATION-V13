@@ -138,6 +138,12 @@ class FyersAuthManager(
                 }
 
                 if (tokenBody == null) {
+                    val directTokenResult = authenticateWithToken(cleanCode)
+                    if (directTokenResult.isSuccess) {
+                        Log.i(TAG, "[FYERS_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")
+                        return@runCatching directTokenResult.getOrThrow()
+                    }
+
                     val err = directExchangeError ?: "Failed to exchange Fyers auth code. Please verify Secret ID."
                     sessionManager.isFyersConnected = false
                     sessionManager.fyersAccessToken = null

@@ -5,6 +5,9 @@ import retrofit2.http.*
 
 interface DhanApi {
 
+    @GET("v2/profile")
+    suspend fun getProfileDetails(): Response<DhanProfileResponse>
+
     @GET("v2/fundlimit")
     suspend fun getFundLimit(): Response<DhanFundLimitResponse>
 

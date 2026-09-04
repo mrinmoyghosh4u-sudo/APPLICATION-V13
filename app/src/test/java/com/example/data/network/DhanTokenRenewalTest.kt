@@ -108,6 +108,7 @@ class DhanTokenRenewalTest {
         override suspend fun getHoldings(): Response<List<DhanHoldingItem>> = Response.success(emptyList())
         override suspend fun getPositions(): Response<List<DhanPositionItem>> = Response.success(emptyList())
         override suspend fun getTrades(): Response<List<DhanTradeItem>> = Response.success(emptyList())
+        override suspend fun getProfileDetails(): Response<DhanProfileResponse> = Response.success(DhanProfileResponse(dhanClientId = "10001", clientName = "Trader"))
         override suspend fun renewToken(
             currentToken: String,
             clientId: String

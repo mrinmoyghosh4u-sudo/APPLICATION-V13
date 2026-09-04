@@ -15,11 +15,16 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 class DhanBrokerService(
     override val brokerName: String = "Dhan",
     private val api: DhanApi,
     private val sessionManager: SessionManager
 ) : IBrokerService {
+
+    private val tokenRenewalMutex = Mutex()
 
     private val directClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -29,76 +34,86 @@ class DhanBrokerService(
     }
 
     suspend fun checkAndRenewTokenIfNeeded(): Boolean = withContext(Dispatchers.IO) {
-        val currentToken = sessionManager.dhanAccessToken.trim()
-        val clientId = sessionManager.dhanClientId.trim()
-        if (currentToken.isEmpty() || clientId.isEmpty()) {
-            return@withContext false
-        }
-
-        val timestamp = sessionManager.dhanTokenTimestamp
-        val twelveHoursMs = 12L * 60L * 60L * 1000L
-        val isOlderThan12Hours = timestamp > 0L && (System.currentTimeMillis() - timestamp > twelveHoursMs)
-        if (!isOlderThan12Hours && timestamp > 0L) {
-            return@withContext false
-        }
-
-        try {
-            android.util.Log.i("DhanBrokerService", "Dhan token older than 12h or untracked. Attempting auto-renewal via /v2/RenewToken...")
-            val response = api.renewToken(currentToken = currentToken, clientId = clientId)
-            if (response.isSuccessful) {
-                val body = response.body()
-                val newAccessToken = (body?.get("accessToken") as? String)
-                    ?: (body?.get("dhanAccessToken") as? String)
-                    ?: (body?.get("token") as? String)
-                if (!newAccessToken.isNullOrBlank()) {
-                    sessionManager.dhanAccessToken = newAccessToken.trim()
-                    sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
-                    android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully.")
-                    return@withContext true
-                } else {
-                    android.util.Log.w("DhanBrokerService", "Dhan renewToken response did not contain an accessToken: $body")
-                }
-            } else {
-                android.util.Log.w("DhanBrokerService", "Dhan renewToken returned HTTP ${response.code()}: ${response.message()}")
+        tokenRenewalMutex.withLock {
+            val currentToken = sessionManager.dhanAccessToken.trim()
+            val clientId = sessionManager.dhanClientId.trim()
+            if (currentToken.isEmpty() || clientId.isEmpty()) {
+                return@withLock false
             }
-        } catch (e: Exception) {
-            android.util.Log.e("DhanBrokerService", "Exception during Dhan auto-renewal via Retrofit: ${e.message}")
-        }
 
-        // Direct OkHttp fallback
-        try {
-            val request = Request.Builder()
-                .url("https://api.dhan.co/v2/RenewToken")
-                .get()
-                .header("access-token", currentToken)
-                .header("dhanClientId", clientId)
-                .header("client-id", clientId)
-                .header("Accept", "application/json")
-                .build()
+            val timestamp = sessionManager.dhanTokenTimestamp
+            val twelveHoursMs = 12L * 60L * 60L * 1000L
+            val isOlderThan12Hours = timestamp > 0L && (System.currentTimeMillis() - timestamp > twelveHoursMs)
+            if (!isOlderThan12Hours && timestamp > 0L) {
+                return@withLock false
+            }
 
-            directClient.newCall(request).execute().use { res ->
-                if (res.isSuccessful) {
-                    val resString = res.body?.string() ?: ""
-                    val json = JSONObject(resString)
-                    val newAccessToken = when {
-                        json.has("accessToken") -> json.optString("accessToken")
-                        json.has("dhanAccessToken") -> json.optString("dhanAccessToken")
-                        json.has("token") -> json.optString("token")
-                        else -> ""
-                    }
-                    if (newAccessToken.isNotBlank()) {
+            try {
+                android.util.Log.i("DhanBrokerService", "Dhan token older than 12h or untracked. Attempting auto-renewal via /v2/RenewToken...")
+                val response = api.renewToken(currentToken = currentToken, clientId = clientId)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val newAccessToken = (body?.get("accessToken") as? String)
+                        ?: (body?.get("dhanAccessToken") as? String)
+                        ?: (body?.get("token") as? String)
+                    if (!newAccessToken.isNullOrBlank()) {
                         sessionManager.dhanAccessToken = newAccessToken.trim()
                         sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
-                        android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully via direct OkHttp call.")
-                        return@withContext true
+                        android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully.")
+                        return@withLock true
+                    } else {
+                        android.util.Log.w("DhanBrokerService", "Dhan renewToken response did not contain an accessToken: $body")
+                    }
+                } else if (response.code() == 401 || response.code() == 403) {
+                    android.util.Log.w("DhanBrokerService", "Dhan renewToken returned HTTP ${response.code()}: session expired.")
+                    sessionManager.isDhanConnected = false
+                    return@withLock false
+                } else {
+                    android.util.Log.w("DhanBrokerService", "Dhan renewToken returned HTTP ${response.code()}: ${response.message()}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DhanBrokerService", "Exception during Dhan auto-renewal via Retrofit: ${e.message}")
+            }
+
+            // Direct OkHttp fallback
+            try {
+                val request = Request.Builder()
+                    .url("https://api.dhan.co/v2/RenewToken")
+                    .get()
+                    .header("access-token", currentToken)
+                    .header("dhanClientId", clientId)
+                    .header("client-id", clientId)
+                    .header("Accept", "application/json")
+                    .build()
+
+                directClient.newCall(request).execute().use { res ->
+                    if (res.isSuccessful) {
+                        val resString = res.body?.string() ?: ""
+                        val json = JSONObject(resString)
+                        val newAccessToken = when {
+                            json.has("accessToken") -> json.optString("accessToken")
+                            json.has("dhanAccessToken") -> json.optString("dhanAccessToken")
+                            json.has("token") -> json.optString("token")
+                            else -> ""
+                        }
+                        if (newAccessToken.isNotBlank()) {
+                            sessionManager.dhanAccessToken = newAccessToken.trim()
+                            sessionManager.dhanTokenTimestamp = System.currentTimeMillis()
+                            android.util.Log.i("DhanBrokerService", "Dhan token renewed successfully via direct OkHttp call.")
+                            return@withLock true
+                        }
+                    } else if (res.code == 401 || res.code == 403) {
+                        sessionManager.isDhanConnected = false
+                        android.util.Log.w("DhanBrokerService", "Dhan direct token renewal returned HTTP ${res.code}: session expired.")
+                        return@withLock false
                     }
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("DhanBrokerService", "Dhan direct token renewal fallback error: ${e.message}")
             }
-        } catch (e: Exception) {
-            android.util.Log.e("DhanBrokerService", "Dhan direct token renewal fallback error: ${e.message}")
-        }
 
-        return@withContext false
+            return@withLock false
+        }
     }
 
     override suspend fun getProfile(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
@@ -116,25 +131,42 @@ class DhanBrokerService(
             var tokenInvalid = false
             var authErrorCode = 0
 
-            // 1. Try Retrofit API call
+            var fetchedName = ""
+            // 0. Try Retrofit Profile API call (/v2/profile)
             runCatching {
-                val response = api.getFundLimit()
-                if (response.isSuccessful) {
-                    val fund = response.body()
-                    val parsedAvail = fund?.availableBalance 
-                        ?: fund?.altAvailableBalance 
-                        ?: fund?.netMarginAvailable 
-                        ?: fund?.sodLimit 
-                        ?: fund?.cashBalance 
-                        ?: fund?.withdrawableBalance
-                    if (parsedAvail != null) {
-                        avail = parsedAvail
+                val profileRes = api.getProfileDetails()
+                if (profileRes.isSuccessful) {
+                    profileRes.body()?.let { prof ->
+                        prof.clientName?.takeIf { it.isNotBlank() }?.let { fetchedName = it }
+                        prof.dhanClientId?.takeIf { it.isNotBlank() }?.let { returnedClientId = it }
                     }
-                    fund?.collateralAmount?.let { collateral = it }
-                    fund?.dhanClientId?.takeIf { it.isNotBlank() }?.let { returnedClientId = it }
-                } else if (response.code() == 401 || response.code() == 403) {
+                } else if (profileRes.code() == 401 || profileRes.code() == 403) {
                     tokenInvalid = true
-                    authErrorCode = response.code()
+                    authErrorCode = profileRes.code()
+                }
+            }
+
+            // 1. Try Retrofit API call (/v2/fundlimit)
+            if (!tokenInvalid) {
+                runCatching {
+                    val response = api.getFundLimit()
+                    if (response.isSuccessful) {
+                        val fund = response.body()
+                        val parsedAvail = fund?.availableBalance 
+                            ?: fund?.altAvailableBalance 
+                            ?: fund?.netMarginAvailable 
+                            ?: fund?.sodLimit 
+                            ?: fund?.cashBalance 
+                            ?: fund?.withdrawableBalance
+                        if (parsedAvail != null) {
+                            avail = parsedAvail
+                        }
+                        fund?.collateralAmount?.let { collateral = it }
+                        fund?.dhanClientId?.takeIf { it.isNotBlank() }?.let { returnedClientId = it }
+                    } else if (response.code() == 401 || response.code() == 403) {
+                        tokenInvalid = true
+                        authErrorCode = response.code()
+                    }
                 }
             }
 
@@ -189,7 +221,7 @@ class DhanBrokerService(
             }
 
             val finalClientId = returnedClientId.ifBlank { clientId }
-            val accountName = if (finalClientId.isNotBlank()) "Dhan Account ($finalClientId)" else "Dhan Account"
+            val accountName = if (fetchedName.isNotBlank()) "$fetchedName ($finalClientId)" else if (finalClientId.isNotBlank()) "Dhan Account ($finalClientId)" else "Dhan Account"
 
             UserProfileEntity(
                 id = 1,

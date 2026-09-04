@@ -63,6 +63,7 @@ fun BrokerConnectDialog(
     var selectedBroker by remember { mutableStateOf(brokerList[initialIndex]) }
 
     // Dhan Form State
+    var dhanLoginTab by remember { mutableStateOf(0) }
     var dhanClientId by remember(selectedBroker) {
         mutableStateOf(sessionManager?.dhanClientId?.ifBlank { BrokerConfig.dhanClientId } ?: BrokerConfig.dhanClientId)
     }
@@ -328,106 +329,214 @@ fun BrokerConnectDialog(
                     when (selectedBroker) {
                         "Dhan" -> {
                             Text(
-                                "Dhan HQ Credentials",
+                                "Dhan HQ Connection Method",
                                 color = PrimaryGold,
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Client ID
-                            OutlinedTextField(
-                                value = dhanClientId,
-                                onValueChange = { dhanClientId = it },
-                                label = { Text("Dhan Client ID (e.g. 1000000001)") },
-                                placeholder = { Text("Enter your 10-digit Client ID") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PrimaryGold,
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedLabelColor = PrimaryGold,
-                                    unfocusedLabelColor = TextGray,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Access Token
-                            OutlinedTextField(
-                                value = dhanAccessToken,
-                                onValueChange = { dhanAccessToken = it },
-                                label = { Text("Dhan Access Token (JWT)") },
-                                placeholder = { Text("Paste token generated from web.dhan.co") },
-                                visualTransformation = if (showDhanToken) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = {
-                                            clipboardManager.getText()?.text?.let { dhanAccessToken = it }
-                                        }) {
-                                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = PrimaryGold, modifier = Modifier.size(18.dp))
-                                        }
-                                        IconButton(onClick = { showDhanToken = !showDhanToken }) {
-                                            Icon(
-                                                imageVector = if (showDhanToken) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                                contentDescription = null,
-                                                tint = TextGray,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PrimaryGold,
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedLabelColor = PrimaryGold,
-                                    unfocusedLabelColor = TextGray,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Guide Box
-                            Surface(
-                                color = Color(0xFF14171E),
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, Color(0xFF222B38)),
-                                modifier = Modifier.fillMaxWidth()
+                            // Dual Tab Selector
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF13161C), RoundedCornerShape(8.dp))
+                                    .border(0.6.dp, Color(0xFF282C35), RoundedCornerShape(8.dp))
+                                    .padding(3.dp)
                             ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text("📌 How to get Dhan Access Token:", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(3.dp))
-                                    Text("1. Log in to web.dhan.co on your browser\n2. Go to Profile -> Access Token\n3. Click 'Generate Token' (valid for 30 days)\n4. Copy and paste it here", color = TextGray, fontSize = 10.sp, lineHeight = 14.sp)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (dhanLoginTab == 0) PrimaryGold else Color.Transparent, RoundedCornerShape(6.dp))
+                                        .clickable { dhanLoginTab = 0 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🔑 DIRECT TOKEN (HQ V2)", color = if (dhanLoginTab == 0) Color.Black else TextGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (dhanLoginTab == 1) PrimaryGold else Color.Transparent, RoundedCornerShape(6.dp))
+                                        .clickable { dhanLoginTab = 1 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🌐 WEB OAUTH CONSENT", color = if (dhanLoginTab == 1) Color.Black else TextGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            Button(
-                                onClick = { onDhanLogin?.invoke(dhanClientId.trim(), dhanAccessToken.trim()) },
-                                enabled = !isAuthInProgress && dhanClientId.isNotBlank() && dhanAccessToken.isNotBlank(),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = PrimaryGold,
-                                    contentColor = Color.Black
+                            if (dhanLoginTab == 0) {
+                                // Direct Access Token / Client Login Tab
+                                Text(
+                                    "Direct Developer HQ Credentials",
+                                    color = TextWhite,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
-                            ) {
-                                if (isAuthInProgress) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("CONNECTING DHAN...", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                } else {
-                                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                OutlinedTextField(
+                                    value = dhanClientId,
+                                    onValueChange = { dhanClientId = it },
+                                    label = { Text("Dhan Client ID (e.g. 1000000001)") },
+                                    placeholder = { Text("Enter your 10-digit Client ID") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryGold,
+                                        unfocusedBorderColor = DarkCardBorder,
+                                        focusedLabelColor = PrimaryGold,
+                                        unfocusedLabelColor = TextGray,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                OutlinedTextField(
+                                    value = dhanAccessToken,
+                                    onValueChange = { dhanAccessToken = it },
+                                    label = { Text("Dhan Permanent / HQ Access Token (JWT)") },
+                                    placeholder = { Text("Paste token generated from web.dhan.co Developer HQ") },
+                                    visualTransformation = if (showDhanToken) VisualTransformation.None else PasswordVisualTransformation(),
+                                    trailingIcon = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = {
+                                                clipboardManager.getText()?.text?.let { dhanAccessToken = it }
+                                            }) {
+                                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = PrimaryGold, modifier = Modifier.size(18.dp))
+                                            }
+                                            IconButton(onClick = { showDhanToken = !showDhanToken }) {
+                                                Icon(
+                                                    imageVector = if (showDhanToken) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                                    contentDescription = null,
+                                                    tint = TextGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryGold,
+                                        unfocusedBorderColor = DarkCardBorder,
+                                        focusedLabelColor = PrimaryGold,
+                                        unfocusedLabelColor = TextGray,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Surface(
+                                    color = Color(0xFF14171E),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF222B38)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text("📌 Direct Access Token (No Repetitive Auth Loops):", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text("1. Log in to web.dhan.co on your browser\n2. Go to Profile -> Access Token / Developer HQ\n3. Click 'Generate Token' (valid for 30 days)\n4. Copy Client ID & Access Token here for uninterrupted connection", color = TextGray, fontSize = 10.sp, lineHeight = 14.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = { onDhanLogin?.invoke(dhanClientId.trim(), dhanAccessToken.trim()) },
+                                    enabled = !isAuthInProgress && dhanClientId.isNotBlank() && dhanAccessToken.isNotBlank(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PrimaryGold,
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    if (isAuthInProgress) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("VALIDATING & CONNECTING...", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    } else {
+                                        Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("SAVE & CONNECT DIRECT DHAN", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                    }
+                                }
+                            } else {
+                                // Web OAuth Consent Flow
+                                Text(
+                                    "Web OAuth Login (Browser Consent)",
+                                    color = TextWhite,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                OutlinedTextField(
+                                    value = dhanClientId,
+                                    onValueChange = { dhanClientId = it },
+                                    label = { Text("Dhan Client ID") },
+                                    placeholder = { Text("Enter Client ID for Web OAuth") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryGold,
+                                        unfocusedBorderColor = DarkCardBorder,
+                                        focusedLabelColor = PrimaryGold,
+                                        unfocusedLabelColor = TextGray,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Surface(
+                                    color = Color(0xFF14171E),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF222B38)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text("🌐 Dhan Web OAuth Authentication:", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text("Open official web.dhan.co consent portal in your browser to approve daily login token.", color = TextGray, fontSize = 10.sp, lineHeight = 14.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                OutlinedButton(
+                                    onClick = {
+                                        val url = "https://auth.dhan.co/"
+                                        try {
+                                            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                                            customTabsIntent.launchUrl(context, Uri.parse(url))
+                                        } catch (_: Exception) {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, PrimaryGold),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
+                                ) {
+                                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("SAVE & CONNECT DHAN", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                    Text("OPEN DHAN OAUTH LOGIN PAGE", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                                 }
                             }
                         }
@@ -556,7 +665,7 @@ fun BrokerConnectDialog(
                                         angelTotpSecret.trim()
                                     )
                                 },
-                                enabled = !isAuthInProgress && angelClientCode.isNotBlank() && angelMpin.isNotBlank() && angelApiKey.isNotBlank(),
+                                enabled = !isAuthInProgress && angelClientCode.isNotBlank() && angelMpin.isNotBlank() && angelApiKey.isNotBlank() && angelTotpSecret.isNotBlank(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp),

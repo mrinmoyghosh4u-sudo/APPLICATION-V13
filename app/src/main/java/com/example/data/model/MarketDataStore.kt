@@ -202,6 +202,16 @@ object MarketDataStore {
             return // Reject ticks older than 30s
         }
 
+        val existing = _ticks.value[tick.symbol]
+        if (existing != null &&
+            existing.price == tick.price &&
+            existing.volume == tick.volume &&
+            existing.oi == tick.oi &&
+            existing.source == tick.source) {
+            // Deduplicated identical tick - skip redundant state flow update
+            return
+        }
+
         val currentMap = _ticks.value.toMutableMap()
         currentMap[tick.symbol] = tick
         _ticks.value = currentMap
@@ -232,6 +242,12 @@ object MarketDataStore {
                     MarketDataProviders.UPSTOX -> _upstoxHealth.value = "LIVE"
                     MarketDataProviders.FYERS -> _fyersHealth.value = "LIVE"
                     MarketDataProviders.ANGEL_ONE -> _angelHealth.value = "LIVE"
+                }
+
+                // Pipeline: REAL WEBSOCKET TICK -> CandleStore.onLiveTick() -> candle aggregation
+                com.example.util.indicators.CandleStore.onLiveTickAllTimeframes(tick.symbol, tick.price, tick.volume, tickTs)
+                if (tick.token.isNotBlank() && tick.token != tick.symbol) {
+                    com.example.util.indicators.CandleStore.onLiveTickAllTimeframes(tick.token, tick.price, tick.volume, tickTs)
                 }
 
                 onTickReceivedListener?.invoke(canonical, tickTs)

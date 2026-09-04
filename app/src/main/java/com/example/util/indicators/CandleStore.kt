@@ -187,6 +187,17 @@ fun normalizeTimeframe(timeframe: String): String {
     }
 
     /**
+     * Ingests a live tick across all standard timeframes (1m, 5m, 15m, 30m, 1h, 1d).
+     */
+    fun onLiveTickAllTimeframes(symbolOrKey: String, ltp: Double, volume: Long, timestamp: Long = System.currentTimeMillis()) {
+        if (ltp <= 0.0 || symbolOrKey.isBlank()) return
+        val timeframes = listOf("1 MIN", "5 MIN", "15 MIN", "30 MIN", "1 HOUR", "1 DAY")
+        for (tf in timeframes) {
+            onLiveTick(symbolOrKey, ltp, volume, timestamp, tf)
+        }
+    }
+
+    /**
      * Returns defensive copy of real candles for symbol/key and timeframe.
      */
     fun getCandles(symbolOrKey: String, timeframe: String = "5 MIN"): List<RealCandle> {

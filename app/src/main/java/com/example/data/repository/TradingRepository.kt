@@ -310,10 +310,23 @@ class TradingRepository(
     }
 
     suspend fun updateOrderStopLossTarget(orderId: String, stopLoss: Double, target: Double) {
+        val manager = brokerManager
+        if (manager != null && (stopLoss > 0.0 || target > 0.0)) {
+            // Attempt broker SL update if order ID is real
+            runCatching {
+                manager.modifyOrder(orderId, 0.0, 0, "STOP_LOSS")
+            }
+        }
         dao.updateOrderStopLossTarget(orderId, stopLoss, target)
     }
 
     suspend fun exitPosition(orderId: String, exitPrice: Double, realizedPnl: Double) {
+        val manager = brokerManager
+        if (manager != null) {
+            runCatching {
+                manager.cancelOrder(orderId)
+            }
+        }
         dao.exitOrderPosition(orderId, exitPrice, realizedPnl)
     }
 

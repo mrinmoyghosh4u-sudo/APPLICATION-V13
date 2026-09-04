@@ -503,7 +503,7 @@ fun ProfileScreen(
             val dhanStatus = dhanInfo?.status ?: if (userProfile.isDhanConnected) BrokerAuthStatus.CONNECTED else BrokerAuthStatus.DISCONNECTED
             BrokerStatusRow(
                 name = "DhanHQ",
-                subtitle = "Primary Order Execution Engine (DhanHQ API v2)",
+                subtitle = "Primary Order Execution Engine (Direct HQ Token & Web OAuth v2)",
                 status = dhanStatus,
                 statusMessage = dhanInfo?.message ?: if (userProfile.isDhanConnected) "Connected (Client: ${userProfile.dhanClientId.ifBlank { "Active" }})" else "Disconnected",
                 onConnect = { onSwitchBroker("Dhan") },

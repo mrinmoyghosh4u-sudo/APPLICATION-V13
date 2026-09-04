@@ -477,12 +477,19 @@ class MainActivity : FragmentActivity() {
                                     onConnectBroker = { broker ->
                                         viewModel.openConnectDialog(broker)
                                     },
+                                    onDhanLogin = { clientId, token ->
+                                        viewModel.connectDhan(clientId, token)
+                                    },
+                                    onAngelLogin = { clientCode, mpin, apiKey, totp ->
+                                        viewModel.loginAngel(clientCode, mpin, apiKey, totp)
+                                    },
                                     onSkipLogin = {
                                         navController.navigate("main") {
                                             popUpTo("login") { inclusive = true }
                                             launchSingleTop = true
                                         }
-                                    }
+                                    },
+                                    viewModel = viewModel
                                 )
                             }
 

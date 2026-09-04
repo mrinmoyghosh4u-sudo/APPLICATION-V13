@@ -155,6 +155,14 @@ data class AngelQuoteItem(
 // DHAN API v2 DTOs
 // ==========================================
 @JsonClass(generateAdapter = true)
+data class DhanProfileResponse(
+    @Json(name = "dhanClientId") val dhanClientId: String? = null,
+    @Json(name = "clientName") val clientName: String? = null,
+    @Json(name = "emailId") val emailId: String? = null,
+    @Json(name = "mobileNumber") val mobileNumber: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class DhanFundLimitResponse(
     @Json(name = "dhanClientId") val dhanClientId: String? = null,
     @Json(name = "availabelBalance") val availableBalance: Double? = null,
