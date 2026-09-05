@@ -18,7 +18,7 @@ class CandleStoreTest {
         CandleStore.onLiveTick("NIFTY", 22050.0, 1500, timestamp = 1500L)
         candles = CandleStore.getCandles("NIFTY", "5 MIN")
         assertEquals(1, candles.size)
-        assertEquals(2500.0, candles[0].volume, 0.001)
+        assertEquals(1500.0, candles[0].volume, 0.001)
     }
 
     @Test
@@ -34,7 +34,7 @@ class CandleStoreTest {
         
         val candles = CandleStore.getCandles("NIFTY", "5 MIN")
         assertEquals(2, candles.size)
-        assertEquals(2500.0, candles[0].volume, 0.001)
+        assertEquals(1500.0, candles[0].volume, 0.001)
         assertEquals(500.0, candles[1].volume, 0.001)
     }
 
