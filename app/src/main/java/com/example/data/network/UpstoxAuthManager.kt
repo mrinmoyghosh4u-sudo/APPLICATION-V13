@@ -28,14 +28,15 @@ class UpstoxAuthManager(
             runCatching {
                 var cleanCode = authCode.trim()
 
-                // If state provided, validate state gracefully for 1-click automatic login
+                // If state provided, validate state strictly
                 if (!state.isNullOrBlank()) {
                     val stateValid = UpstoxAuthHelper.validateAndConsumeState(state)
                     if (!stateValid) {
-                        Log.w(TAG, "[UPSTOX_OAUTH_STATE_WARN] State mismatch or expired for state=$state; continuing seamlessly with code exchange")
-                    } else {
-                        Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] State validated successfully")
+                        Log.e(TAG, "[UPSTOX_OAUTH_STATE_MISMATCH] State mismatch or expired for state=$state - HARD FAILURE")
+                        _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                        return@runCatching null
                     }
+                    Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] State validated successfully")
                 }
 
                 // If already authenticated and token valid, return existing token
@@ -67,11 +68,13 @@ class UpstoxAuthManager(
                         val uriState = parsedUri.getQueryParameter("state")
                         if (!uriState.isNullOrBlank() && state.isNullOrBlank()) {
                             val uriStateValid = UpstoxAuthHelper.validateAndConsumeState(uriState)
-                            if (!uriStateValid) {
-                                Log.w(TAG, "[UPSTOX_OAUTH_STATE_WARN] URI state mismatch or expired; continuing seamlessly")
-                            } else {
-                                Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] URI state validated successfully")
-                            }
+                        if (!uriStateValid) {
+                            Log.e(TAG, "[UPSTOX_OAUTH_STATE_MISMATCH] URI state mismatch or expired - HARD FAILURE")
+                            _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                            return@runCatching null
+                        } else {
+                            Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] URI state validated successfully")
+                        }
                         }
                         if (!extracted.isNullOrBlank()) {
                             cleanCode = extracted

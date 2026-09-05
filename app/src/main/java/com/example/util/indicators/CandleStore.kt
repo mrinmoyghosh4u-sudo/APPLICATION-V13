@@ -18,6 +18,7 @@ object CandleStore {
 
     // Key: "$normalizedKey:$timeframe"
     private val candleMap = ConcurrentHashMap<String, CopyOnWriteArrayList<RealCandle>>()
+    private val lastRawVolumeMap = ConcurrentHashMap<String, Long>()
 
     fun makeKey(symbolOrKey: String, timeframe: String): String {
         val cleanKey = normalizeKey(symbolOrKey)
@@ -154,35 +155,51 @@ fun normalizeTimeframe(timeframe: String): String {
                     volume = if (volume > 0L) volume.toDouble() else 0.0
                 )
             )
+            if (volume > 0L) lastRawVolumeMap[key] = volume
             return
         }
 
         val lastCandle = list.last()
         val lastBucket = (lastCandle.timestamp / intervalMs) * intervalMs
+        val lastRawVol = lastRawVolumeMap[key] ?: 0L
 
         if (bucketStart == lastBucket) {
-            // Update current bar
+            val volumeDelta = if (volume > 0L && lastRawVol > 0L && volume >= lastRawVol) {
+                volume - lastRawVol
+            } else if (volume > 0L) {
+                volume
+            } else {
+                0L
+            }
             val updated = lastCandle.copy(
                 high = maxOf(lastCandle.high, ltp),
                 low = minOf(lastCandle.low, ltp),
                 close = ltp,
-                volume = if (volume > 0L) maxOf(lastCandle.volume, volume.toDouble()) else lastCandle.volume
+                volume = lastCandle.volume + volumeDelta.toDouble()
             )
             list[list.size - 1] = updated
+            if (volume > 0L) lastRawVolumeMap[key] = volume
         } else if (bucketStart > lastBucket) {
-            // Finalize previous candle and start new candle
+            val newCandleVolume = if (volume > 0L && lastRawVol > 0L && volume >= lastRawVol) {
+                volume - lastRawVol
+            } else if (volume > 0L) {
+                volume
+            } else {
+                0.0
+            }
             val newCandle = RealCandle(
                 timestamp = bucketStart,
                 open = ltp,
                 high = ltp,
                 low = ltp,
                 close = ltp,
-                volume = if (volume > 0L) (volume - lastCandle.volume.toLong()).coerceAtLeast(0L).toDouble() else 0.0
+                volume = newCandleVolume
             )
             list.add(newCandle)
             if (list.size > MAX_CANDLES) {
                 list.removeAt(0)
             }
+            if (volume > 0L) lastRawVolumeMap[key] = volume
         }
     }
 
@@ -221,10 +238,11 @@ fun normalizeTimeframe(timeframe: String): String {
     fun clear(symbolOrKey: String? = null) {
         if (symbolOrKey == null) {
             candleMap.clear()
+            lastRawVolumeMap.clear()
         } else {
             val cleanKey = normalizeKey(symbolOrKey)
             val keysToRemove = candleMap.keys.filter { it.startsWith("$cleanKey:") || it.startsWith("${symbolOrKey.trim().uppercase()}:") }
-            keysToRemove.forEach { candleMap.remove(it) }
+            keysToRemove.forEach { candleMap.remove(it); lastRawVolumeMap.remove(it) }
         }
     }
 }

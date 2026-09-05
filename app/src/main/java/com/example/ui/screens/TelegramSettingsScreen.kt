@@ -649,14 +649,14 @@ fun TelegramSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     val testList = listOf(
-                        Triple("AI BUY CE Signal", "🟢", "NIFTY 24850 CE Buy Signal Triggered @ ₹125"),
-                        Triple("AI BUY PE Signal", "🔴", "BANKNIFTY 52400 PE Buy Signal Triggered @ ₹210"),
-                        Triple("Order Executed", "✅", "Order Executed: BUY 65 x NIFTY 24850 CE @ ₹125.00"),
-                        Triple("Order Rejected", "❌", "Order Rejected: Insufficient Margin"),
-                        Triple("Stop Loss Hit", "🛑", "NIFTY 24850 CE Stop Loss Hit @ ₹95.00"),
-                        Triple("Target 1 Hit", "🎯", "NIFTY Target 1 Achieved @ ₹145.00"),
-                        Triple("Target 2 Hit", "🎯", "NIFTY Target 2 Achieved @ ₹165.00"),
-                        Triple("Risk Limit Reached", "🚨", "Daily Max Loss Limit Reached: Trading Halted")
+                        Triple("AI BUY CE Signal", "🟢", "[EXAMPLE] NIFTY 24850 CE Buy Signal Triggered @ ₹125"),
+                        Triple("AI BUY PE Signal", "🔴", "[EXAMPLE] BANKNIFTY 52400 PE Buy Signal Triggered @ ₹210"),
+                        Triple("Order Executed", "✅", "[EXAMPLE] Order Executed: BUY 65 x NIFTY 24850 CE @ ₹125.00"),
+                        Triple("Order Rejected", "❌", "[EXAMPLE] Order Rejected: Insufficient Margin"),
+                        Triple("Stop Loss Hit", "🛑", "[EXAMPLE] NIFTY 24850 CE Stop Loss Hit @ ₹95.00"),
+                        Triple("Target 1 Hit", "🎯", "[EXAMPLE] NIFTY Target 1 Achieved @ ₹145.00"),
+                        Triple("Target 2 Hit", "🎯", "[EXAMPLE] NIFTY Target 2 Achieved @ ₹165.00"),
+                        Triple("Risk Limit Reached", "🚨", "[EXAMPLE] Daily Max Loss Limit Reached: Trading Halted")
                     )
 
                     FlowRow(

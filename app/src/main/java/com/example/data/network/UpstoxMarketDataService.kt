@@ -44,7 +44,7 @@ class UpstoxMarketDataService(
         private const val RECONNECT_STALE_MS = 45_000L // Reconnect if stale > 45s
     }
 
-    private val scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    private var scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var webSocket: WebSocket? = null
     private val wsMutex = Mutex()
 
@@ -72,7 +72,7 @@ class UpstoxMarketDataService(
 
     fun isConnectionLive(): Boolean = isConnected && _connectionState.value == "LIVE"
     fun hasFirstTickReceived(): Boolean = hasFirstTick
-    fun hasActiveSubscription(): Boolean = subscribedInstrumentKeys.isNotEmpty() || isConfigured()
+    fun hasActiveSubscription(): Boolean = isConnected && subscribedInstrumentKeys.isNotEmpty() && hasFirstTick
     fun getTickAgeMs(): Long = if (lastTickReceivedTime <= 0L) -1L else (System.currentTimeMillis() - lastTickReceivedTime).coerceAtLeast(0L)
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(lastTickReceivedTime))
 
@@ -203,6 +203,7 @@ class UpstoxMarketDataService(
     }
 
     private fun connectWebSocket() {
+        staleCheckJob?.cancel()
         scope.launch {
             wsMutex.withLock {
                 if (isConnected || _connectionState.value == "CONNECTING" || _connectionState.value == "AUTHENTICATING" || _connectionState.value == "SUBSCRIBING") {
@@ -482,6 +483,8 @@ class UpstoxMarketDataService(
     fun disconnect() {
         reconnectJob?.cancel()
         staleCheckJob?.cancel()
+        scope.cancel()
+        scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
         
         webSocket?.close(1000, "User disconnected")
         webSocket = null

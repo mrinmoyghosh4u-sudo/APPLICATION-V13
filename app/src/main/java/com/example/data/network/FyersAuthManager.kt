@@ -54,13 +54,18 @@ class FyersAuthManager(
                     ?: sessionManager.pendingFyersOAuthState.takeIf { it.isNotBlank() }
 
                 if (!storedState.isNullOrBlank()) {
-                    if (!extractedState.isNullOrBlank() && extractedState != storedState) {
-                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state mismatch ($extractedState vs $storedState) - proceeding with non-fatal warning for manual/seamless OAuth callback")
-                    } else if (extractedState.isNullOrBlank()) {
-                        Log.w(TAG, "[FYERS_OAUTH_STATE_WARN] OAuth state missing in callback - proceeding with non-fatal warning for manual/seamless OAuth callback")
-                    } else {
-                        Log.i(TAG, "[FYERS_OAUTH_STATE_MATCH] OAuth state matched successfully")
+                    if (extractedState.isNullOrBlank()) {
+                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISSING] OAuth state missing in callback - HARD FAILURE")
+                        _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                        return@runCatching null
                     }
+                    if (extractedState != storedState) {
+                        Log.e(TAG, "[FYERS_OAUTH_STATE_MISMATCH] OAuth state mismatch ($extractedState vs $storedState) - HARD FAILURE")
+                        _authStatus.value = BrokerAuthStatus.AUTHENTICATION_REQUIRED
+                        return@runCatching null
+                    }
+                    Log.i(TAG, "[FYERS_OAUTH_STATE_MATCH] OAuth state matched successfully")
+                }
                 }
 
                 // 2. Prevent reuse of authorization code (Single-use enforcement with active session recovery)
