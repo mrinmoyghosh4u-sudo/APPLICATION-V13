@@ -66,7 +66,6 @@ class FyersAuthManager(
                     }
                     Log.i(TAG, "[FYERS_OAUTH_STATE_MATCH] OAuth state matched successfully")
                 }
-                }
 
                 // 2. Prevent reuse of authorization code (Single-use enforcement with active session recovery)
                 if (consumedAuthCodes.contains(cleanCode) || sessionManager.lastProcessedOAuthCode == cleanCode) {
