@@ -88,7 +88,7 @@ class AngelOneInstrumentResolver(private val instrumentMaster: InstrumentMasterS
             symbol = inst?.symbol?.ifBlank { cleanSym } ?: cleanSym,
             displayName = inst?.name?.ifBlank { cleanSym } ?: cleanSym,
             instrumentType = inst?.instrumenttype ?: "INDEX",
-            instrumentKey = "",
+            instrumentKey = token,
             token = token,
             lotSize = inst?.lotsize?.toIntOrNull() ?: instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
         )
@@ -99,6 +99,7 @@ class FyersInstrumentResolver(private val instrumentMaster: InstrumentMasterServ
     fun resolve(symbol: String, exchange: String = "NSE"): CanonicalInstrument? {
         val cleanSym = symbol.trim().uppercase(Locale.ENGLISH)
         val fyersSym = FyersSymbolMapper.toFyersSymbol(cleanSym, exchange)
+        if (fyersSym.isBlank()) return null
         val normExch = if (cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX")) "BSE" else if (cleanSym.contains("CRUDE") || cleanSym.contains("GOLD") || cleanSym.contains("SILVER")) "MCX" else exchange
         val lotSize = instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
         return CanonicalInstrument(
@@ -107,7 +108,7 @@ class FyersInstrumentResolver(private val instrumentMaster: InstrumentMasterServ
             symbol = cleanSym,
             displayName = cleanSym,
             instrumentType = if (cleanSym.contains("NIFTY") || cleanSym.contains("SENSEX") || cleanSym.contains("BANKEX")) "INDEX" else "EQUITY",
-            instrumentKey = "",
+            instrumentKey = fyersSym,
             token = fyersSym,
             lotSize = if (lotSize > 0) lotSize else 1
         )
@@ -120,13 +121,19 @@ class DhanInstrumentResolver(private val instrumentMaster: InstrumentMasterServi
         val normExch = InstrumentMasterService.normalizeExchange(exchange)
         val secId = com.example.util.InstrumentMapUtil.getDhanSecurityId(cleanSym, normExch)
         if (secId.isBlank()) return null
+        val isOption = cleanSym.endsWith("CE") || cleanSym.endsWith("PE")
         val lotSize = instrumentMaster?.getLotSizeForSymbol(cleanSym) ?: 1
         return CanonicalInstrument(
             exchange = normExch,
-            segment = if (normExch == "NFO" || normExch == "BFO") "FUT" else if (normExch == "MCX") "COMM" else "EQ",
+            segment = when {
+                isOption -> "OPT"
+                normExch == "NFO" || normExch == "BFO" -> "FUT"
+                normExch == "MCX" -> "COMM"
+                else -> "EQ"
+            },
             symbol = cleanSym,
             displayName = cleanSym,
-            instrumentType = if (cleanSym.endsWith("CE") || cleanSym.endsWith("PE")) "OPTION" else "EQUITY",
+            instrumentType = if (isOption) "OPTION" else "EQUITY",
             instrumentKey = secId,
             token = secId,
             lotSize = if (lotSize > 0) lotSize else 1

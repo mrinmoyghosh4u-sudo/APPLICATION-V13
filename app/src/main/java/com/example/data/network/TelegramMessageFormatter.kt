@@ -97,9 +97,18 @@ object TelegramMessageFormatter {
             quantity = quantity,
             sl = sl,
             t1 = t1,
-            t2 = t2.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.15) },
-            t3 = t3.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.25) },
-            t4 = t4.ifBlank { String.format(Locale.getDefault(), "%.2f", (entryPrice.toDoubleOrNull() ?: 100.0) * 1.35) }
+            t2 = t2.ifBlank {
+                val ep = entryPrice.toDoubleOrNull()
+                if (ep != null && ep > 0.0) String.format(Locale.getDefault(), "%.2f", ep * 1.15) else "N/A"
+            },
+            t3 = t3.ifBlank {
+                val ep = entryPrice.toDoubleOrNull()
+                if (ep != null && ep > 0.0) String.format(Locale.getDefault(), "%.2f", ep * 1.25) else "N/A"
+            },
+            t4 = t4.ifBlank {
+                val ep = entryPrice.toDoubleOrNull()
+                if (ep != null && ep > 0.0) String.format(Locale.getDefault(), "%.2f", ep * 1.35) else "N/A"
+            }
         )
     }
 
@@ -150,9 +159,13 @@ object TelegramMessageFormatter {
         exit: String,
         pnl: String
     ): String {
-        val entryVal = entry.toDoubleOrNull() ?: 100.0
-        val exitVal = exit.toDoubleOrNull() ?: 80.0
-        val retPct = String.format(Locale.getDefault(), "%.1f", ((exitVal - entryVal) / entryVal) * 100)
+        val entryVal = entry.toDoubleOrNull()
+        val exitVal = exit.toDoubleOrNull()
+        val retPct = if (entryVal != null && entryVal > 0.0 && exitVal != null) {
+            String.format(Locale.getDefault(), "%.1f", ((exitVal - entryVal) / entryVal) * 100)
+        } else {
+            "N/A"
+        }
         return TelegramFormatter.formatStopLossHit(
             symbol = index,
             contract = strike,
@@ -172,9 +185,13 @@ object TelegramMessageFormatter {
         currentLtp: String,
         pnl: String
     ): String {
-        val entryVal = entry.toDoubleOrNull() ?: 100.0
-        val ltpVal = currentLtp.toDoubleOrNull() ?: 120.0
-        val retPct = String.format(Locale.getDefault(), "%.1f", ((ltpVal - entryVal) / entryVal) * 100)
+        val entryVal = entry.toDoubleOrNull()
+        val ltpVal = currentLtp.toDoubleOrNull()
+        val retPct = if (entryVal != null && entryVal > 0.0 && ltpVal != null) {
+            String.format(Locale.getDefault(), "%.1f", ((ltpVal - entryVal) / entryVal) * 100)
+        } else {
+            "N/A"
+        }
         return TelegramFormatter.formatTargetHit(
             targetNumber = targetNumber,
             symbol = index,

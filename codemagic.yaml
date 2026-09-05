@@ -17,7 +17,7 @@ workflows:
           fi
           if ! jar -tf gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
             echo "Gradle wrapper JAR is invalid or corrupt. Regenerating wrapper..."
-            gradle wrapper || true
+            gradle wrapper
           fi
           chmod +x gradlew
 

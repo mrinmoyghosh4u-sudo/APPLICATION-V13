@@ -317,7 +317,7 @@ class MarketDataEngine(
                     open = 0.0,
                     high = 0.0,
                     low = 0.0,
-                    previousClose = (item.ltp - item.change),
+                    previousClose = 0.0,
                     timestamp = System.currentTimeMillis(),
                     isLive = _unifiedFeedStatus.value.contains("LIVE")
                 )

@@ -254,148 +254,102 @@ class TelegramService(private val sessionManager: SessionManager) {
         val eventId = "${alertType}_${symbol}_${System.currentTimeMillis()}"
         val formatted = when (alertType) {
             "BUY Signal", "BUY CE Signal", "AI BUY CE Signal" -> {
-                com.example.util.alert.TelegramFormatter.formatAiBuyCe(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    sl = "95.00",
-                    t1 = "145.00",
-                    t2 = "165.00",
-                    t3 = "190.00",
-                    t4 = "220.00",
-                    confidence = 92
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🟢 AI BUY CE Signal</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Buy signal triggered" }}"
                 )
             }
             "BUY PE Signal", "AI BUY PE Signal" -> {
-                com.example.util.alert.TelegramFormatter.formatAiBuyPe(
-                    symbol = symbol,
-                    contract = "$symbol 52400 PE",
-                    entry = "210.00",
-                    sl = "175.00",
-                    t1 = "240.00",
-                    t2 = "270.00",
-                    t3 = "300.00",
-                    t4 = "340.00",
-                    confidence = 88
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🔴 AI BUY PE Signal</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Buy signal triggered" }}"
                 )
             }
             "Entry / Position", "Entry / Position Opened", "Position Opened" -> {
-                com.example.util.alert.TelegramFormatter.formatEntryPositionOpened(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    quantity = "65",
-                    sl = "95.00",
-                    t1 = "145.00",
-                    t2 = "165.00",
-                    t3 = "190.00",
-                    t4 = "220.00"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>📈 Entry / Position Opened</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Position opened" }}"
                 )
             }
             "Order Executed", "Order Placed" -> {
-                com.example.util.alert.TelegramFormatter.formatOrderExecuted(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    side = "BUY CE",
-                    price = "125.00",
-                    quantity = "65",
-                    orderId = "ORD_${System.currentTimeMillis().toString().takeLast(6)}"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>✅ Order Executed</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Order placed successfully" }}"
                 )
             }
             "Order Rejected" -> {
-                com.example.util.alert.TelegramFormatter.formatOrderRejected(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    side = "BUY CE",
-                    quantity = "65",
-                    rejectionReason = details.ifBlank { "Insufficient Margin in Trading Account" },
-                    orderId = "ORD_${System.currentTimeMillis().toString().takeLast(6)}"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>❌ Order Rejected</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Reason: ${details.ifBlank { "Unknown reason" }}"
                 )
             }
             "Stop Loss", "Stop Loss Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatStopLossHit(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    exit = "95.00",
-                    loss = "1,950.00",
-                    returnPercent = "24.0",
-                    reason = "Stop Loss Level Triggered"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🛑 Stop Loss Hit</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Stop loss triggered" }}"
                 )
             }
             "Target 1", "Target 1 Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatTargetHit(
-                    targetNumber = 1,
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    price = "145.00",
-                    profit = "1,300.00",
-                    returnPercent = "16.0"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🎯 Target 1 Hit</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Target 1 achieved" }}"
                 )
             }
             "Target 2", "Target 2 Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatTargetHit(
-                    targetNumber = 2,
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    price = "165.00",
-                    profit = "2,600.00",
-                    returnPercent = "32.0"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🎯 Target 2 Hit</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Target 2 achieved" }}"
                 )
             }
             "Target 3", "Target 3 Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatTargetHit(
-                    targetNumber = 3,
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    price = "190.00",
-                    profit = "4,225.00",
-                    returnPercent = "52.0"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🎯 Target 3 Hit</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Target 3 achieved" }}"
                 )
             }
             "Target 4", "Target 4 Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatTargetHit(
-                    targetNumber = 4,
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    price = "220.00",
-                    profit = "6,175.00",
-                    returnPercent = "76.0"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🎯 Target 4 Hit</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Target 4 achieved" }}"
                 )
             }
             "Trailing Stop Loss", "Trailing Stop Loss Hit" -> {
-                com.example.util.alert.TelegramFormatter.formatTrailingSlUpdated(
-                    symbol = symbol,
-                    contract = "$symbol 24850 CE",
-                    entry = "125.00",
-                    current = "155.00",
-                    oldSL = "95.00",
-                    newSL = "135.00",
-                    nextTarget = "165.00",
-                    pnl = "+1,950.00"
+                com.example.util.alert.TelegramMessageFormatter.build(
+                    "<b>🔔 Trailing Stop Loss Updated</b>\n\n" +
+                    "Instrument: $symbol\n" +
+                    "Details: ${details.ifBlank { "Trailing SL updated" }}"
                 )
             }
             "Broker Connected" -> {
-                com.example.util.alert.TelegramFormatter.formatBrokerConnected("Dhan")
+                com.example.util.alert.TelegramFormatter.formatBrokerConnected(symbol.ifBlank { "Dhan" })
             }
             "Broker Disconnected" -> {
-                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected("Dhan")
+                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected(symbol.ifBlank { "Dhan" })
             }
             "Algo Started" -> {
-                com.example.util.alert.TelegramFormatter.formatAlgoStarted("Supertrend Scalper", symbol)
+                com.example.util.alert.TelegramFormatter.formatAlgoStarted(details.ifBlank { "Algo" }, symbol)
             }
             "Algo Stopped" -> {
-                com.example.util.alert.TelegramFormatter.formatAlgoStopped("Supertrend Scalper")
+                com.example.util.alert.TelegramFormatter.formatAlgoStopped(details.ifBlank { "Algo" })
             }
             "Risk Limit Reached" -> {
-                com.example.util.alert.TelegramFormatter.formatRiskLimitReached("-10,000.00", "10,000.00")
+                com.example.util.alert.TelegramFormatter.formatRiskLimitReached(
+                    details.ifBlank { "-10,000.00" },
+                    "10,000.00"
+                )
             }
             "Session Expired" -> {
-                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected("Dhan")
+                com.example.util.alert.TelegramFormatter.formatBrokerDisconnected(symbol.ifBlank { "Dhan" })
             }
             else -> {
                 com.example.data.network.TelegramMessageFormatter.build("<b>$alertType</b>\n\nInstrument: $symbol\nDetails: $details")

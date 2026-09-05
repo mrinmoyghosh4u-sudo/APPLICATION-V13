@@ -799,11 +799,12 @@ object AlgoEngine {
             val e9Prev = ema9Series[i - 1]
             val e20Prev = ema20Series[i - 1]
             val closePrice = candles[idx].close
+            val lotSize = getLotSizeForIndex(strategy.index).coerceAtLeast(1)
 
             // Check Crossovers
             if (e9Prev <= e20Prev && e9Curr > e20Curr) {
                 if (position == -1) {
-                    val pnl = (entryPrice - closePrice) * 15
+                    val pnl = (entryPrice - closePrice) * lotSize
                     if (pnl >= 0) { totalProfit += pnl; wins++ } else { totalLoss += kotlin.math.abs(pnl); losses++ }
                     runningCapital += pnl
                     curve.add(runningCapital)
@@ -812,7 +813,7 @@ object AlgoEngine {
                 entryPrice = closePrice
             } else if (e9Prev >= e20Prev && e9Curr < e20Curr) {
                 if (position == 1) {
-                    val pnl = (closePrice - entryPrice) * 15
+                    val pnl = (closePrice - entryPrice) * lotSize
                     if (pnl >= 0) { totalProfit += pnl; wins++ } else { totalLoss += kotlin.math.abs(pnl); losses++ }
                     runningCapital += pnl
                     curve.add(runningCapital)
@@ -824,7 +825,8 @@ object AlgoEngine {
 
         if (position != 0 && candles.isNotEmpty()) {
             val closePrice = candles.last().close
-            val pnl = if (position == 1) (closePrice - entryPrice) * 15 else (entryPrice - closePrice) * 15
+            val lotSize = getLotSizeForIndex(strategy.index).coerceAtLeast(1)
+            val pnl = if (position == 1) (closePrice - entryPrice) * lotSize else (entryPrice - closePrice) * lotSize
             if (pnl >= 0) { totalProfit += pnl; wins++ } else { totalLoss += kotlin.math.abs(pnl); losses++ }
             runningCapital += pnl
             curve.add(runningCapital)
@@ -833,7 +835,7 @@ object AlgoEngine {
         val totalTrades = wins + losses
         val winRate = if (totalTrades > 0) (wins.toDouble() / totalTrades) * 100.0 else 0.0
         val netPnl = totalProfit - totalLoss
-        val profitFactor = if (totalLoss > 0) totalProfit / totalLoss else if (totalProfit > 0) 2.5 else 0.0
+        val profitFactor = if (totalLoss > 0) totalProfit / totalLoss else if (totalProfit > 0) Double.MAX_VALUE else 0.0
         val avgTradePnl = if (totalTrades > 0) netPnl / totalTrades else 0.0
 
         log("BACKTEST", "Real historical candle backtest completed for '${strategy.name}' on ${candles.size} candles: $totalTrades Trades, Win Rate ${String.format("%.1f", winRate)}%, Net P&L: ₹${String.format("%.2f", netPnl)}", "INFO")
@@ -851,9 +853,9 @@ object AlgoEngine {
             totalLoss = totalLoss,
             netPnl = netPnl,
             profitFactor = profitFactor,
-            maxDrawdownPct = if (strategy.riskLevel == "LOW") 2.5 else 4.0,
+            maxDrawdownPct = calculateMaxDrawdown(curve),
             avgTradePnl = avgTradePnl,
-            sharpeRatio = if (netPnl > 0) 1.85 else 0.5,
+            sharpeRatio = calculateSharpeRatio(curve),
             equityCurve = curve
         )
     }

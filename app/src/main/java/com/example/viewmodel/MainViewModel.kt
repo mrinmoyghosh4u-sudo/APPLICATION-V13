@@ -387,19 +387,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             else -> liveSymbol == dbSymbol
                         }
                     }
-                    val fallbackLtp = com.example.data.model.MarketUniverse.getReferenceClosingPrice(item.symbol)
-                    val targetLtp = if (live != null && live.price > 0.0) live.price else if (item.ltp > 0.0) item.ltp else fallbackLtp
+                    val targetLtp = if (live != null && live.price > 0.0) live.price else 0.0
 
                     if (targetLtp > 0.0 && targetLtp != item.ltp) {
-                        val prevClose = if (item.ltp > 0) item.ltp - item.change else fallbackLtp
-                        val newChange = if (prevClose > 0) targetLtp - prevClose else item.change
-                        val newChangePct = if (prevClose > 0) (newChange / prevClose) * 100.0 else item.changePercent
                         changed = true
                         item.copy(
                             ltp = targetLtp,
-                            change = newChange,
-                            changePercent = newChangePct,
-                            isPositive = newChange >= 0
+                            isPositive = item.change >= 0
                         )
                     } else {
                         item
@@ -1649,8 +1643,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!com.example.util.indicators.CandleStore.hasSufficientCandles(activeAlgoIndex, strategyTimeframe, 15)) {
                 val candleInterval = when (com.example.util.indicators.CandleStore.normalizeTimeframe(strategyTimeframe)) {
                     "1 MIN" -> "1m"
+                    "5 MIN" -> "5m"
                     "15 MIN" -> "15m"
                     "30 MIN" -> "30m"
+                    "1 HOUR" -> "1h"
                     "1 DAY" -> "1d"
                     else -> "5m"
                 }

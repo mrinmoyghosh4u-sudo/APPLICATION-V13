@@ -34,7 +34,7 @@ class FyersMarketDataService(
 
     private val TAG = "FyersMarketDataService"
 
-    private val scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    private var scope = CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var webSocket: WebSocket? = null
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -266,6 +266,7 @@ class FyersMarketDataService(
     fun disconnect() {
         reconnectJob?.cancel()
         heartbeatJob?.cancel()
+        scope.cancel()
         try {
             webSocket?.close(1000, "User disconnected")
         } catch (_: Exception) {}
