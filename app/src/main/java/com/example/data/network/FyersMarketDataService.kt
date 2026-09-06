@@ -105,7 +105,9 @@ class FyersMarketDataService(
     fun getLastUpdatedTime(): String = if (lastTickReceivedTime <= 0L) "No ticks received yet" else java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(lastTickReceivedTime))
 
     fun isConfigured(): Boolean {
-        return !sessionManager.fyersAppId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
+        val appId = sessionManager.fyersAppId.takeIf { it.isNotBlank() }
+            ?: com.example.util.BrokerConfig.fyersAppId.takeIf { it.isNotBlank() }
+        return !appId.isNullOrBlank() && !sessionManager.fyersAccessToken.isNullOrBlank()
     }
 
     private var backoffDelayMs = 2000L

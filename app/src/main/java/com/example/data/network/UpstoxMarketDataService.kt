@@ -179,7 +179,9 @@ class UpstoxMarketDataService(
     }
 
     fun isConfigured(): Boolean {
-        return !sessionManager.upstoxApiKey.isNullOrBlank() && !sessionManager.upstoxAccessToken.isNullOrBlank()
+        val apiKey = sessionManager.upstoxApiKey.takeIf { it.isNotBlank() }
+            ?: com.example.util.BrokerConfig.upstoxApiKey.takeIf { it.isNotBlank() }
+        return !apiKey.isNullOrBlank() && !sessionManager.upstoxAccessToken.isNullOrBlank()
     }
 
     private fun getAuthHeader(): String {

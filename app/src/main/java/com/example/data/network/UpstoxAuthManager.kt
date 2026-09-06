@@ -178,6 +178,7 @@ class UpstoxAuthManager(
                 healthManager?.reportTokenValidated(ProviderHealthManager.PROVIDER_UPSTOX)
 
                 // Securely store credentials and tokens in encrypted storage
+                sessionManager.upstoxApiKey = apiKey
                 sessionManager.upstoxAccessToken = accessToken
                 if (!body.effectiveRefreshToken.isNullOrBlank()) {
                     sessionManager.upstoxRefreshToken = body.effectiveRefreshToken
