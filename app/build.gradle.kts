@@ -296,5 +296,8 @@ gradle.projectsEvaluated {
 tasks.withType<Test> {
     testLogging {
         showStandardStreams = true
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
     }
 }
