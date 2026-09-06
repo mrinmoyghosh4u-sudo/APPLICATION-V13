@@ -177,6 +177,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authSuccessEvent = MutableStateFlow(false)
     val authSuccessEvent: StateFlow<Boolean> = _authSuccessEvent.asStateFlow()
 
+    fun clearAuthError() {
+        _authErrorMessage.value = null
+    }
+
     private var lastReceivedOAuthCode: String? = null
     private var lastReceivedOAuthTime: Long = 0L
 

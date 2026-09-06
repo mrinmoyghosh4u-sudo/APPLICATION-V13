@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -51,29 +52,50 @@ fun LoginScreen(
 ) {
     val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
 
     // Observe ViewModel Auth State if available
     val isAuthInProgress by viewModel?.isAuthInProgress?.collectAsStateWithLifecycle(initialValue = false)
         ?: remember { mutableStateOf(false) }
     val authErrorMessage by viewModel?.authErrorMessage?.collectAsStateWithLifecycle(initialValue = null)
         ?: remember { mutableStateOf<String?>(null) }
+    val authSuccessEvent by viewModel?.authSuccessEvent?.collectAsStateWithLifecycle(initialValue = false)
+        ?: remember { mutableStateOf(false) }
+
+    LaunchedEffect(authSuccessEvent) {
+        if (authSuccessEvent) {
+            onSkipLogin()
+        }
+    }
 
     // Navigation & Form State
     var mainLoginMode by remember { mutableStateOf(0) } // 0 = Direct Fast Auth, 1 = Broker Cards & OAuth
     var selectedDirectBroker by remember { mutableStateOf("Dhan") } // Dhan, Angel One, Upstox, Fyers
 
+    val sm = viewModel?.sessionManager
+
     // Dhan Form Fields
-    var dhanClientId by remember { mutableStateOf(BrokerConfig.dhanClientId) }
-    var dhanAccessToken by remember { mutableStateOf(BrokerConfig.dhanApiKey) }
+    var dhanClientId by remember { mutableStateOf(sm?.dhanClientId?.ifBlank { BrokerConfig.dhanClientId } ?: BrokerConfig.dhanClientId) }
+    var dhanAccessToken by remember { mutableStateOf(sm?.dhanAccessToken?.ifBlank { BrokerConfig.dhanApiKey } ?: BrokerConfig.dhanApiKey) }
     var showDhanToken by remember { mutableStateOf(false) }
 
     // Angel One Form Fields
-    var angelClientCode by remember { mutableStateOf("") }
-    var angelMpin by remember { mutableStateOf("") }
-    var angelApiKey by remember { mutableStateOf(BrokerConfig.angelApiKey) }
-    var angelTotpSecret by remember { mutableStateOf("") }
+    var angelClientCode by remember { mutableStateOf(sm?.angelClientCode ?: "") }
+    var angelMpin by remember { mutableStateOf(sm?.angelClientPin ?: "") }
+    var angelApiKey by remember { mutableStateOf(sm?.angelApiKey?.ifBlank { BrokerConfig.angelApiKey } ?: BrokerConfig.angelApiKey) }
+    var angelTotpSecret by remember { mutableStateOf(sm?.angelTotpSecret ?: "") }
     var showAngelMpin by remember { mutableStateOf(false) }
     var showAngelTotp by remember { mutableStateOf(false) }
+
+    // Upstox Form Fields
+    var upstoxApiKey by remember { mutableStateOf(sm?.upstoxApiKey?.ifBlank { BrokerConfig.upstoxApiKey } ?: BrokerConfig.upstoxApiKey) }
+    var upstoxApiSecret by remember { mutableStateOf(sm?.upstoxApiSecret?.ifBlank { BrokerConfig.upstoxApiSecret } ?: BrokerConfig.upstoxApiSecret) }
+    var upstoxAuthCode by remember { mutableStateOf("") }
+
+    // Fyers Form Fields
+    var fyersAppId by remember { mutableStateOf(sm?.fyersAppId?.ifBlank { BrokerConfig.fyersAppId } ?: BrokerConfig.fyersAppId) }
+    var fyersSecretId by remember { mutableStateOf(sm?.fyersSecretId?.ifBlank { BrokerConfig.fyersSecretId } ?: BrokerConfig.fyersSecretId) }
+    var fyersAuthCode by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -190,16 +212,28 @@ fun LoginScreen(
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = errMsg,
-                                    color = LossRed,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = errMsg,
+                                        color = LossRed,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel?.clearAuthError() },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Dismiss error", tint = LossRed, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
@@ -587,49 +621,200 @@ fun LoginScreen(
                                 }
 
                                 else -> {
-                                    // UPSTOX & FYERS QUICK LAUNCHER
-                                    Text(
-                                        text = "$selectedDirectBroker OAuth Connection",
-                                        color = TextWhite,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Surface(
-                                        color = Color(0xFF14171E),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, Color(0xFF222B38)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Text("🌐 Launch $selectedDirectBroker Authentication", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                "Tap below to open $selectedDirectBroker connection dialog to configure API Keys and OAuth consent.",
-                                                color = TextGray,
-                                                fontSize = 10.sp,
-                                                lineHeight = 14.sp
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(14.dp))
-
-                                    Button(
-                                        onClick = { onConnectBroker(selectedDirectBroker) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(48.dp),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = PrimaryGold,
-                                            contentColor = Color.Black
+                                    if (selectedDirectBroker == "Upstox") {
+                                        Text(
+                                            text = "UPSTOX API & OAUTH CONFIGURATION",
+                                            color = TextWhite,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                    ) {
-                                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("CONNECT $selectedDirectBroker 🚀", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = upstoxApiKey,
+                                            onValueChange = { upstoxApiKey = it },
+                                            label = { Text("Upstox API Key / Client ID") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = upstoxApiSecret,
+                                            onValueChange = { upstoxApiSecret = it },
+                                            label = { Text("Upstox API Secret") },
+                                            singleLine = true,
+                                            visualTransformation = PasswordVisualTransformation(),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = upstoxAuthCode,
+                                            onValueChange = { upstoxAuthCode = it },
+                                            label = { Text("Auth Code or Access Token (Optional)") },
+                                            singleLine = true,
+                                            placeholder = { Text("Paste auth_code or token here", color = TextGray) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    viewModel?.initiateUpstoxLogin(upstoxApiKey.trim(), upstoxApiSecret.trim(), context)
+                                                },
+                                                modifier = Modifier.weight(1f).height(46.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, PrimaryGold),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
+                                            ) {
+                                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    viewModel?.connectUpstox(upstoxApiKey.trim(), upstoxApiSecret.trim(), upstoxAuthCode.trim())
+                                                },
+                                                enabled = !isAuthInProgress && upstoxApiKey.isNotBlank(),
+                                                modifier = Modifier.weight(1f).height(46.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black)
+                                            ) {
+                                                if (isAuthInProgress) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                                                } else {
+                                                    Text("CONNECT 🚀", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                                }
+                                            }
+                                        }
+                                    } else if (selectedDirectBroker == "Fyers") {
+                                        Text(
+                                            text = "FYERS API & OAUTH CONFIGURATION",
+                                            color = TextWhite,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = fyersAppId,
+                                            onValueChange = { fyersAppId = it },
+                                            label = { Text("Fyers App ID (e.g. XX123456-100)") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = fyersSecretId,
+                                            onValueChange = { fyersSecretId = it },
+                                            label = { Text("Fyers Secret ID") },
+                                            singleLine = true,
+                                            visualTransformation = PasswordVisualTransformation(),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedTextField(
+                                            value = fyersAuthCode,
+                                            onValueChange = { fyersAuthCode = it },
+                                            label = { Text("Auth Code or Access Token (Optional)") },
+                                            singleLine = true,
+                                            placeholder = { Text("Paste auth_code or token here", color = TextGray) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = PrimaryGold,
+                                                unfocusedBorderColor = DarkCardBorder,
+                                                focusedLabelColor = PrimaryGold,
+                                                unfocusedLabelColor = TextGray,
+                                                focusedTextColor = TextWhite,
+                                                unfocusedTextColor = TextWhite
+                                            )
+                                        )
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    viewModel?.initiateFyersLogin(fyersAppId.trim(), fyersSecretId.trim(), context)
+                                                },
+                                                modifier = Modifier.weight(1f).height(46.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, PrimaryGold),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
+                                            ) {
+                                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    viewModel?.connectFyers(fyersAppId.trim(), fyersSecretId.trim(), fyersAuthCode.trim())
+                                                },
+                                                enabled = !isAuthInProgress && fyersAppId.isNotBlank(),
+                                                modifier = Modifier.weight(1f).height(46.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGold, contentColor = Color.Black)
+                                            ) {
+                                                if (isAuthInProgress) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                                                } else {
+                                                    Text("CONNECT 🚀", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
