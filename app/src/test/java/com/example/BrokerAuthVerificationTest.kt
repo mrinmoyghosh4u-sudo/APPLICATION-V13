@@ -1,6 +1,11 @@
 package com.example
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.example.data.network.ProviderHealthManager
+import com.example.data.network.SessionManager
+import com.example.util.AngelAuthHelper
+import com.example.util.DhanAuthHelper
 import com.example.util.FyersAuthHelper
 import com.example.util.UpstoxAuthHelper
 import org.junit.Assert.assertEquals
@@ -14,10 +19,13 @@ import java.util.UUID
 class BrokerAuthVerificationTest {
 
     private lateinit var healthManager: ProviderHealthManager
+    private lateinit var sessionManager: SessionManager
 
     @Before
     fun setUp() {
         healthManager = ProviderHealthManager()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        sessionManager = SessionManager(context)
     }
 
     @Test
@@ -254,5 +262,135 @@ class BrokerAuthVerificationTest {
 
         healthManager.reportAuthFailure(provider, ProviderHealthManager.STATE_AUTH_CANCELLED, "User cancelled")
         assertEquals("AUTH_CANCELLED", healthManager.getHealthState(provider).authenticationState)
+    }
+
+    @Test
+    fun test19_allBrokerLoginUrlsWithSecureState() {
+        val upstoxState = "upstox_" + UUID.randomUUID().toString()
+        val upstoxUrl = UpstoxAuthHelper.buildLoginUrl("UPSTOX_KEY_123", state = upstoxState)
+        assertTrue("Upstox login URL must contain client_id", upstoxUrl.contains("client_id=UPSTOX_KEY_123"))
+        assertTrue("Upstox login URL must contain redirect_uri", upstoxUrl.contains("redirect_uri="))
+        assertTrue("Upstox login URL must contain state", upstoxUrl.contains("state=$upstoxState"))
+
+        val fyersState = "fyers_" + UUID.randomUUID().toString()
+        val fyersUrl = FyersAuthHelper.buildLoginUrl("FYERS_APP_ID-100", state = fyersState)
+        assertTrue("Fyers login URL must contain client_id", fyersUrl.contains("client_id=FYERS_APP_ID-100"))
+        assertTrue("Fyers login URL must contain state", fyersUrl.contains("state=$fyersState"))
+
+        val dhanState = DhanAuthHelper.generateSecureState()
+        assertTrue("Dhan state must start with dhan_ prefix", dhanState.startsWith("dhan_"))
+        assertTrue("Dhan state must be sufficiently long", dhanState.length >= 20)
+
+        val angelState = "angel_" + UUID.randomUUID().toString()
+        val angelUrl = AngelAuthHelper.buildLoginUrl("ANGEL_API_KEY", state = angelState)
+        assertTrue("Angel One login URL must contain API key", angelUrl.contains("ANGEL_API_KEY"))
+        assertTrue("Angel One login URL must contain state", angelUrl.contains("state=$angelState"))
+    }
+
+    @Test
+    fun test20_allBrokerSessionManagerConfigurationChecks() {
+        sessionManager.clearAllSavedBrokersData()
+
+        assertFalse("Dhan must NOT be configured when empty", sessionManager.isBrokerConfigured("Dhan"))
+        assertFalse("Angel One must NOT be configured when empty", sessionManager.isBrokerConfigured("Angel One"))
+        assertFalse("Upstox must NOT be configured when empty", sessionManager.isBrokerConfigured("Upstox"))
+        assertFalse("Fyers must NOT be configured when empty", sessionManager.isBrokerConfigured("Fyers"))
+
+        sessionManager.saveDhanCredentials("DHAN_CLI", "DHAN_TOK", "DHAN_KEY", "DHAN_SEC")
+        sessionManager.saveAngelOneCredentials("ANG_CODE", "1234", "ANG_API_KEY", "TOTP_SECRET")
+        sessionManager.saveUpstoxCredentials("UP_KEY", "UP_SEC", "UP_TOK")
+        sessionManager.saveFyersCredentials("FY_APP", "FY_SEC", "FY_TOK")
+
+        assertTrue("Dhan must be configured after saving credentials", sessionManager.isBrokerConfigured("Dhan"))
+        assertTrue("Angel One must be configured after saving credentials", sessionManager.isBrokerConfigured("Angel One"))
+        assertTrue("Upstox must be configured after saving credentials", sessionManager.isBrokerConfigured("Upstox"))
+        assertTrue("Fyers must be configured after saving credentials", sessionManager.isBrokerConfigured("Fyers"))
+    }
+
+    @Test
+    fun test21_allBrokerSessionValidityChecks() {
+        sessionManager.clearAllSavedBrokersData()
+
+        assertFalse("Dhan session must be invalid when empty", sessionManager.isBrokerSessionValid("Dhan"))
+        assertFalse("Angel One session must be invalid when empty", sessionManager.isBrokerSessionValid("Angel One"))
+        assertFalse("Upstox session must be invalid when empty", sessionManager.isBrokerSessionValid("Upstox"))
+        assertFalse("Fyers session must be invalid when empty", sessionManager.isBrokerSessionValid("Fyers"))
+
+        val now = System.currentTimeMillis()
+        sessionManager.saveDhanCredentials("DHAN_CLI", "DHAN_TOK", "DHAN_KEY", "DHAN_SEC")
+        sessionManager.dhanTokenTimestamp = now
+        sessionManager.isDhanConnected = true
+
+        sessionManager.saveAngelOneCredentials("ANG_CODE", "1234", "ANG_API_KEY", "TOTP_SECRET")
+        sessionManager.angelTokenTimestamp = now
+        sessionManager.isAngelConnected = true
+
+        sessionManager.saveUpstoxCredentials("UP_KEY", "UP_SEC", "UP_TOK")
+        sessionManager.upstoxTokenTimestamp = now
+        sessionManager.isUpstoxConnected = true
+
+        sessionManager.saveFyersCredentials("FY_APP", "FY_SEC", "FY_TOK")
+        sessionManager.fyersTokenTimestamp = now
+        sessionManager.isFyersConnected = true
+
+        assertTrue("Dhan session must be valid with fresh token", sessionManager.isBrokerSessionValid("Dhan"))
+        assertTrue("Angel One session must be valid with fresh token", sessionManager.isBrokerSessionValid("Angel One"))
+        assertTrue("Upstox session must be valid with fresh token", sessionManager.isBrokerSessionValid("Upstox"))
+        assertTrue("Fyers session must be valid with fresh token", sessionManager.isBrokerSessionValid("Fyers"))
+    }
+
+    @Test
+    fun test22_brokerLoginStatusAfterDisconnect() {
+        sessionManager.saveDhanCredentials("DHAN_CLI", "DHAN_TOK", "DHAN_KEY", "DHAN_SEC")
+        sessionManager.saveAngelOneCredentials("ANG_CODE", "1234", "ANG_API_KEY", "TOTP_SECRET")
+        sessionManager.saveUpstoxCredentials("UP_KEY", "UP_SEC", "UP_TOK")
+        sessionManager.saveFyersCredentials("FY_APP", "FY_SEC", "FY_TOK")
+
+        assertTrue("All brokers should be configured", sessionManager.isBrokerConfigured("Dhan"))
+        assertTrue(sessionManager.isBrokerConfigured("Angel One"))
+        assertTrue(sessionManager.isBrokerConfigured("Upstox"))
+        assertTrue(sessionManager.isBrokerConfigured("Fyers"))
+
+        sessionManager.clearBrokerSessionTokens("Dhan")
+        sessionManager.clearBrokerSessionTokens("Angel One")
+        sessionManager.clearBrokerSessionTokens("Upstox")
+        sessionManager.clearBrokerSessionTokens("Fyers")
+
+        assertFalse("Dhan session must be invalid after clearing tokens", sessionManager.isBrokerSessionValid("Dhan"))
+        assertFalse("Angel One session must be invalid after clearing tokens", sessionManager.isBrokerSessionValid("Angel One"))
+        assertFalse("Upstox session must be invalid after clearing tokens", sessionManager.isBrokerSessionValid("Upstox"))
+        assertFalse("Fyers session must be invalid after clearing tokens", sessionManager.isBrokerSessionValid("Fyers"))
+
+        assertTrue("Dhan must still be configured after clearing session", sessionManager.isBrokerConfigured("Dhan"))
+        assertTrue(sessionManager.isBrokerConfigured("Angel One"))
+        assertTrue(sessionManager.isBrokerConfigured("Upstox"))
+        assertTrue(sessionManager.isBrokerConfigured("Fyers"))
+    }
+
+    @Test
+    fun test23_brokerCredentialRoundTripForAllBrokers() {
+        sessionManager.clearAllSavedBrokersData()
+
+        sessionManager.saveDhanCredentials("DHAN_CLI_RT", "DHAN_TOK_RT", "DHAN_KEY_RT", "DHAN_SEC_RT")
+        assertEquals("DHAN_CLI_RT", sessionManager.dhanClientId)
+        assertEquals("DHAN_TOK_RT", sessionManager.dhanAccessToken)
+        assertEquals("DHAN_KEY_RT", sessionManager.dhanApiKey)
+        assertEquals("DHAN_SEC_RT", sessionManager.dhanClientSecret)
+
+        sessionManager.saveAngelOneCredentials("ANG_CODE_RT", "4321", "ANG_API_KEY_RT", "TOTP_SECRET_RT")
+        assertEquals("ANG_CODE_RT", sessionManager.angelClientId)
+        assertEquals("4321", sessionManager.angelClientPin)
+        assertEquals("ANG_API_KEY_RT", sessionManager.angelApiKey)
+        assertEquals("TOTP_SECRET_RT", sessionManager.angelTotpSecret)
+
+        sessionManager.saveUpstoxCredentials("UP_KEY_RT", "UP_SEC_RT", "UP_TOK_RT")
+        assertEquals("UP_KEY_RT", sessionManager.upstoxApiKey)
+        assertEquals("UP_SEC_RT", sessionManager.upstoxApiSecret)
+        assertEquals("UP_TOK_RT", sessionManager.upstoxAccessToken)
+
+        sessionManager.saveFyersCredentials("FY_APP_RT", "FY_SEC_RT", "FY_TOK_RT")
+        assertEquals("FY_APP_RT", sessionManager.fyersAppId)
+        assertEquals("FY_SEC_RT", sessionManager.fyersSecretId)
+        assertEquals("FY_TOK_RT", sessionManager.fyersAccessToken)
     }
 }
