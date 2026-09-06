@@ -323,6 +323,7 @@ class BrokerAuthVerificationTest {
         sessionManager.isDhanConnected = true
 
         sessionManager.saveAngelOneCredentials("ANG_CODE", "1234", "ANG_API_KEY", "TOTP_SECRET")
+        sessionManager.angelAuthToken = "ANG_JWT"
         sessionManager.angelTokenTimestamp = now
         sessionManager.isAngelConnected = true
 

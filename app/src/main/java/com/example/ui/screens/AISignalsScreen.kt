@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -803,7 +804,7 @@ private fun EnhancedAISignalCard(
     val isBullish = signal.trend.equals("BULLISH", ignoreCase = true) || signal.actionType.contains("CE", ignoreCase = true)
     val actionColor = if (isBullish) ProfitGreen else LossRed
     val actionBg = if (isBullish) ProfitGreenBg else LossRedBg
-    val icon = if (isBullish) Icons.Default.TrendingUp else Icons.Default.TrendingDown
+    val iconRes = if (isBullish) R.drawable.ic_bull else R.drawable.ic_bear
 
     val underlyingLtp = signal.underlyingLtp
     val underlyingChange = signal.underlyingChange
@@ -943,7 +944,7 @@ private fun EnhancedAISignalCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = icon,
+                                painter = painterResource(iconRes),
                                 contentDescription = null,
                                 tint = if (isBullish) Color.Black else TextWhite,
                                 modifier = Modifier.size(16.dp)
@@ -1102,7 +1103,7 @@ private fun EnhancedAISignalCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Bolt,
+                            painter = painterResource(iconRes),
                             contentDescription = null,
                             tint = if (isBullish) Color.Black else TextWhite,
                             modifier = Modifier.size(16.dp)
@@ -1232,6 +1233,7 @@ private fun SignalDeepAnalysisDialog(
 ) {
     val isBullish = signal.trend.equals("BULLISH", ignoreCase = true) || signal.actionType.contains("CE", ignoreCase = true)
     val actionColor = if (isBullish) ProfitGreen else LossRed
+    val iconRes = if (isBullish) R.drawable.ic_bull else R.drawable.ic_bear
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1349,7 +1351,7 @@ private fun SignalDeepAnalysisDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = actionColor)
                     ) {
-                        Icon(Icons.Default.Bolt, contentDescription = null, tint = if (isBullish) Color.Black else TextWhite, modifier = Modifier.size(16.dp))
+                        Icon(painter = painterResource(iconRes), contentDescription = null, tint = if (isBullish) Color.Black else TextWhite, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("EXECUTE ${signal.actionType}", fontSize = 11.sp, fontWeight = FontWeight.Black, color = if (isBullish) Color.Black else TextWhite)
                     }
