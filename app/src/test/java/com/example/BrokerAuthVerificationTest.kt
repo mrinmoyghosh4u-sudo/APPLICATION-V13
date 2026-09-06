@@ -23,12 +23,11 @@ import java.util.UUID
 @Config(sdk = [34])
 class BrokerAuthVerificationTest {
 
-    private lateinit var healthManager: ProviderHealthManager
     private lateinit var sessionManager: SessionManager
+    private val healthManager: ProviderHealthManager by lazy { ProviderHealthManager() }
 
     @Before
     fun setUp() {
-        healthManager = ProviderHealthManager()
         val context = ApplicationProvider.getApplicationContext<Context>()
         sessionManager = SessionManager(context)
     }
