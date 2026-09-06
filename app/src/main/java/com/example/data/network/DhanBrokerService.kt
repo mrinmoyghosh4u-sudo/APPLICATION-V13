@@ -187,8 +187,8 @@ class DhanBrokerService(
                 }
             }
 
-            // Critical Guard: If balance could not be retrieved from either method, do NOT default to 0.0
-            val finalAvail = avail ?: throw Exception("Unable to fetch Dhan balance. Broker fund limit endpoint returned no valid balance.")
+            // Balance Guard: If balance could not be retrieved but token is valid, default to 0.0
+            val finalAvail = avail ?: if (!tokenInvalid) 0.0 else throw Exception("Unable to fetch Dhan balance. Broker fund limit endpoint returned no valid balance.")
 
             // 3. Fetch positions to get realized/unrealized P&L
             var totalRealized = 0.0

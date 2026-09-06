@@ -177,6 +177,7 @@ class MainActivity : FragmentActivity() {
                 val isAuthInProgress by viewModel.isAuthInProgress.collectAsStateWithLifecycle()
                 val authErrorMessage by viewModel.authErrorMessage.collectAsStateWithLifecycle()
                 val authSuccessEvent by viewModel.authSuccessEvent.collectAsStateWithLifecycle()
+                val oauthWebViewState by viewModel.oauthWebViewState.collectAsStateWithLifecycle()
                 
                 val topLevelBrokerStatuses by viewModel.brokerStatuses.collectAsStateWithLifecycle()
                 val topLevelProviderHealth by viewModel.brokerAuthManager.providerHealth.collectAsStateWithLifecycle()
@@ -921,7 +922,23 @@ class MainActivity : FragmentActivity() {
                                 onUpstoxLogin = { clientId, secret, codeOrToken -> viewModel.connectUpstox(clientId, secret, codeOrToken) },
                                 onFyersLogin = { app, secret, codeOrToken -> viewModel.connectFyers(app, secret, codeOrToken) },
                                 onOpenUpstoxLogin = { apiKey, secret -> viewModel.initiateUpstoxLogin(apiKey, secret, this@MainActivity) },
-                                onOpenFyersLogin = { appId, secret -> viewModel.initiateFyersLogin(appId, secret, this@MainActivity) }
+                                onOpenFyersLogin = { appId, secret -> viewModel.initiateFyersLogin(appId, secret, this@MainActivity) },
+                                onOpenDhanLogin = { clientId -> viewModel.initiateDhanOAuth(clientId) }
+                            )
+                        }
+
+                        // Global OAuth Secure WebView Dialog Overlay
+                        oauthWebViewState?.let { webViewState ->
+                            com.example.ui.components.OAuthWebViewDialog(
+                                url = webViewState.url,
+                                brokerName = webViewState.brokerName,
+                                onRedirectCaptured = { uri ->
+                                    viewModel.closeOAuthWebView()
+                                    viewModel.handleOAuthRedirect(uri)
+                                },
+                                onDismiss = {
+                                    viewModel.closeOAuthWebView()
+                                }
                             )
                         }
 

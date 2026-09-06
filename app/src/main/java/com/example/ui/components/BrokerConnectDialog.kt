@@ -55,7 +55,8 @@ fun BrokerConnectDialog(
     onUpstoxLogin: ((String, String, String) -> Unit)? = null,
     onDhanLogin: ((String, String) -> Unit)? = null,
     onOpenUpstoxLogin: ((String, String) -> Unit)? = null,
-    onOpenFyersLogin: ((String, String) -> Unit)? = null
+    onOpenFyersLogin: ((String, String) -> Unit)? = null,
+    onOpenDhanLogin: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val brokerList = listOf("Dhan", "Angel One", "Upstox", "Fyers")
@@ -516,15 +517,19 @@ fun BrokerConnectDialog(
 
                                 OutlinedButton(
                                     onClick = {
-                                        val url = "https://auth.dhan.co/"
-                                        try {
-                                            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
-                                            customTabsIntent.launchUrl(context, Uri.parse(url))
-                                        } catch (_: Exception) {
+                                        if (onOpenDhanLogin != null) {
+                                            onOpenDhanLogin.invoke(dhanClientId.trim())
+                                        } else {
+                                            val url = "https://auth.dhan.co/"
                                             try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                context.startActivity(intent)
-                                            } catch (_: Exception) {}
+                                                val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                                                customTabsIntent.launchUrl(context, Uri.parse(url))
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            }
                                         }
                                     },
                                     modifier = Modifier
@@ -534,9 +539,9 @@ fun BrokerConnectDialog(
                                     border = BorderStroke(1.dp, PrimaryGold),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
                                 ) {
-                                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("OPEN DHAN OAUTH LOGIN PAGE", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                    Text("OPEN DHAN SECURE WEBVIEW LOGIN 🔒", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                                 }
                             }
                         }

@@ -699,7 +699,7 @@ fun LoginScreen(
                                             ) {
                                                 Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text("WEB OAUTH 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
 
                                             Button(
@@ -796,7 +796,7 @@ fun LoginScreen(
                                             ) {
                                                 Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text("WEB OAUTH 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
 
                                             Button(

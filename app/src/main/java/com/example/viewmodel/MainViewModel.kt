@@ -168,6 +168,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _connectingBrokerName = MutableStateFlow("Dhan")
     val connectingBrokerName: StateFlow<String> = _connectingBrokerName.asStateFlow()
 
+    data class OAuthWebViewSession(val url: String, val brokerName: String)
+
+    private val _oauthWebViewState = MutableStateFlow<OAuthWebViewSession?>(null)
+    val oauthWebViewState: StateFlow<OAuthWebViewSession?> = _oauthWebViewState.asStateFlow()
+
+    fun openOAuthWebView(url: String, brokerName: String) {
+        _oauthWebViewState.value = OAuthWebViewSession(url, brokerName)
+    }
+
+    fun closeOAuthWebView() {
+        _oauthWebViewState.value = null
+    }
+
     private val _isAuthInProgress = MutableStateFlow(false)
     val isAuthInProgress: StateFlow<Boolean> = _isAuthInProgress.asStateFlow()
 
@@ -831,21 +844,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onUrlGenerated = { loginUrl ->
                 _authErrorMessage.value = null
                 _isAuthInProgress.value = true
-                try {
-                    val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
-                        .setShowTitle(true)
-                        .build()
-                    customTabsIntent.launchUrl(context, android.net.Uri.parse(loginUrl))
-                } catch (e: Exception) {
-                    try {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    } catch (e2: Exception) {
-                        _isAuthInProgress.value = false
-                        _authErrorMessage.value = "Failed to open browser: ${e2.localizedMessage}"
-                    }
-                }
+                openOAuthWebView(loginUrl, "Upstox")
             },
             onError = { err ->
                 _authErrorMessage.value = err
@@ -860,21 +859,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onUrlGenerated = { loginUrl ->
                 _authErrorMessage.value = null
                 _isAuthInProgress.value = true
-                try {
-                    val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
-                        .setShowTitle(true)
-                        .build()
-                    customTabsIntent.launchUrl(context, android.net.Uri.parse(loginUrl))
-                } catch (e: Exception) {
-                    try {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(loginUrl))
-                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    } catch (e2: Exception) {
-                        _isAuthInProgress.value = false
-                        _authErrorMessage.value = "Failed to open browser: ${e2.localizedMessage}"
-                    }
-                }
+                openOAuthWebView(loginUrl, "Fyers")
+            },
+            onError = { err ->
+                _authErrorMessage.value = err
+            }
+        )
+    }
+
+    fun initiateDhanOAuth(clientId: String? = null, apiKey: String? = null, clientSecret: String? = null) {
+        startDhanOAuth(
+            clientId = clientId,
+            apiKey = apiKey,
+            clientSecret = clientSecret,
+            onUrlGenerated = { loginUrl ->
+                _authErrorMessage.value = null
+                _isAuthInProgress.value = true
+                openOAuthWebView(loginUrl, "Dhan")
             },
             onError = { err ->
                 _authErrorMessage.value = err
