@@ -1,8 +1,38 @@
+const fs = require('fs');
 const https = require('https');
+const path = require('path');
+const stateStore = require('./state-store');
+
+// Persistent consumed codes file (best-effort persistence; replace with Redis/DB in production)
+const CONSUMED_FILE = path.join(__dirname, 'consumed_codes.json');
+let consumedCodes = new Map();
+
+function loadConsumed() {
+  try {
+    if (fs.existsSync(CONSUMED_FILE)) {
+      const raw = fs.readFileSync(CONSUMED_FILE, 'utf8');
+      const obj = JSON.parse(raw || '{}');
+      consumedCodes = new Map(Object.entries(obj));
+    }
+  } catch (e) {
+    console.warn('Failed to load consumed_codes.json', e.message);
+    consumedCodes = new Map();
+  }
+}
+
+function persistConsumed() {
+  try {
+    const obj = Object.fromEntries(consumedCodes.entries());
+    fs.writeFileSync(CONSUMED_FILE, JSON.stringify(obj), { encoding: 'utf8' });
+  } catch (e) {
+    console.warn('Failed to persist consumed_codes.json', e.message);
+  }
+}
+
+loadConsumed();
 
 // In-memory cache of successful token exchanges (code -> token response) to handle retries seamlessly
 const tokenCache = new Map();
-const consumedCodes = new Map();
 
 function getCachedToken(code) {
   const clean = (code || '').trim();
@@ -22,6 +52,7 @@ function cacheToken(code, response) {
   if (clean && response) {
     tokenCache.set(clean, { timestamp: Date.now(), response });
     consumedCodes.set(clean, Date.now());
+    persistConsumed();
   }
 }
 
@@ -33,6 +64,7 @@ function isCodeConsumed(code) {
   // Expire after 10 minutes
   if (Date.now() - entry > 10 * 60 * 1000) {
     consumedCodes.delete(clean);
+    persistConsumed();
     return false;
   }
   return true;
@@ -91,12 +123,23 @@ module.exports = async (req, res) => {
   const parsedBody = await parseRequestBody(req);
 
   const code = (req.query?.code || req.query?.auth_code || parsedBody?.code || parsedBody?.auth_code || '').trim();
+  const state = (req.query?.state || parsedBody?.state || '').trim();
   const redirectUri = (process.env.UPSTOX_REDIRECT_URI || 'https://application-beige-psi.vercel.app/oauth').trim();
   const clientId = (process.env.UPSTOX_API_KEY || '').trim();
   const clientSecret = (process.env.UPSTOX_API_SECRET || '').trim();
 
   if (!code) {
-    return res.status(400).json({ status: "error", error: "Missing authorization code" });
+    return res.status(400).json({ status: 'error', error: 'Missing authorization code' });
+  }
+
+  // Require state to be present and valid. Fail-closed if not.
+  if (!state || !stateStore.validateState(state)) {
+    return res.status(400).json({ status: 'error', error: 'Invalid, missing, expired, or replayed OAuth state' });
+  }
+
+  // Ensure code not already consumed
+  if (isCodeConsumed(code)) {
+    return res.status(400).json({ status: 'error', error: 'Authorization code already consumed' });
   }
 
   // Return cached token if already exchanged successfully
@@ -106,9 +149,10 @@ module.exports = async (req, res) => {
   }
 
   if (!clientId || !clientSecret) {
+    // Server must have client secret configured; do not expose secret to clients.
     return res.status(500).json({
-      status: "error",
-      error: "Server missing Upstox credentials configuration. UPSTOX_API_KEY and UPSTOX_API_SECRET must be configured."
+      status: 'error',
+      error: 'Server missing Upstox credentials configuration. UPSTOX_API_KEY and UPSTOX_API_SECRET must be configured.'
     });
   }
 
@@ -144,8 +188,15 @@ module.exports = async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         try {
           const jsonResponse = JSON.parse(body);
-          if (postRes.statusCode >= 200 && postRes.statusCode < 300 && (jsonResponse.access_token || jsonResponse.data?.access_token)) {
+          if (postRes.statusCode >= 200 && postRes.statusCode < 300 && (jsonResponse.access_token || jsonResponse.data?.access_token || jsonResponse.effectiveAccessToken)) {
+            // consume state and mark code consumed only after successful exchange
+            try {
+              stateStore.consumeState(state);
+            } catch (_) {}
             cacheToken(code, jsonResponse);
+            // mark consumedCodes for persistence
+            consumedCodes.set(code, Date.now());
+            persistConsumed();
           }
           res.status(postRes.statusCode).json(jsonResponse);
         } catch (e) {
@@ -156,8 +207,8 @@ module.exports = async (req, res) => {
     });
 
     postReq.on('error', (e) => {
-      console.error(`Upstox token exchange network error: ${e.message}`);
-      res.status(500).json({ status: "error", error: `Internal connection error: ${e.message}` });
+      console.error('Upstox token exchange network error: ' + e.message);
+      res.status(500).json({ status: 'error', error: `Internal connection error: ${e.message}` });
       resolve();
     });
 
@@ -165,4 +216,3 @@ module.exports = async (req, res) => {
     postReq.end();
   });
 };
-
