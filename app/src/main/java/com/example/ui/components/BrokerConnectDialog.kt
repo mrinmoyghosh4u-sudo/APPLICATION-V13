@@ -539,9 +539,9 @@ fun BrokerConnectDialog(
                                     border = BorderStroke(1.dp, PrimaryGold),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
                                 ) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("OPEN DHAN SECURE WEBVIEW LOGIN 🔒", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                    Text("OPEN DHAN OAUTH LOGIN PAGE", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                                 }
                             }
                         }
