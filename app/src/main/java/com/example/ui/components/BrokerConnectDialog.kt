@@ -93,9 +93,8 @@ fun BrokerConnectDialog(
     var upstoxApiKey by remember(selectedBroker) {
         mutableStateOf(sessionManager?.upstoxApiKey?.ifBlank { BrokerConfig.upstoxApiKey } ?: BrokerConfig.upstoxApiKey)
     }
-    var upstoxApiSecret by remember(selectedBroker) {
-        mutableStateOf(sessionManager?.upstoxApiSecret?.ifBlank { BrokerConfig.upstoxApiSecret } ?: BrokerConfig.upstoxApiSecret)
-    }
+    // Do NOT store or expose client secret on device. Leave empty.
+    var upstoxApiSecret by remember { mutableStateOf("") }
     var upstoxAuthCode by remember(selectedBroker) {
         mutableStateOf(sessionManager?.upstoxAccessToken ?: "")
     }
@@ -443,7 +442,7 @@ fun BrokerConnectDialog(
                                     Column(modifier = Modifier.padding(10.dp)) {
                                         Text("📌 Direct Access Token (No Repetitive Auth Loops):", color = PrimaryGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         Spacer(modifier = Modifier.height(3.dp))
-                                        Text("1. Log in to web.dhan.co on your browser\n2. Go to Profile -> Access Token / Developer HQ\n3. Click 'Generate Token' (valid for 30 days)\n4. Copy Client ID & Access Token here for uninterrupted connection", color = TextGray, fontSize = 10.sp, lineHeight = 14.sp)
+                                        Text("1. Log in to web.dhan.co on your browser\n2. Go to Profile -> Access Token / Developer HQ\n3. Click 'Generate Token' (valid for 30 days)\n4. Copy Cli[...]")
                                     }
                                 }
 
@@ -720,32 +719,13 @@ fun BrokerConnectDialog(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            OutlinedTextField(
-                                value = upstoxApiSecret,
-                                onValueChange = { upstoxApiSecret = it },
-                                label = { Text("API Secret (Secret Key)") },
-                                placeholder = { Text("Enter your Upstox API Secret") },
-                                singleLine = true,
-                                visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PrimaryGold,
-                                    unfocusedBorderColor = DarkCardBorder,
-                                    focusedLabelColor = PrimaryGold,
-                                    unfocusedLabelColor = TextGray,
-                                    focusedTextColor = TextWhite,
-                                    unfocusedTextColor = TextWhite
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
                             // OAuth Login URL button
                             OutlinedButton(
                                 onClick = {
                                     if (upstoxApiKey.isNotBlank()) {
                                         if (onOpenUpstoxLogin != null) {
-                                            onOpenUpstoxLogin.invoke(upstoxApiKey.trim(), upstoxApiSecret.trim())
+                                            // Do NOT pass client secret from the client
+                                            onOpenUpstoxLogin.invoke(upstoxApiKey.trim(), "")
                                         } else {
                                             val url = com.example.util.UpstoxAuthHelper.buildLoginUrl(upstoxApiKey.trim())
                                             try {
@@ -801,8 +781,8 @@ fun BrokerConnectDialog(
                             Spacer(modifier = Modifier.height(14.dp))
 
                             Button(
-                                onClick = { onUpstoxLogin?.invoke(upstoxApiKey.trim(), upstoxApiSecret.trim(), upstoxAuthCode.trim()) },
-                                enabled = !isAuthInProgress && upstoxApiKey.isNotBlank() && (upstoxApiSecret.isNotBlank() || upstoxAuthCode.isNotBlank()),
+                                onClick = { onUpstoxLogin?.invoke(upstoxApiKey.trim(), "", upstoxAuthCode.trim()) },
+                                enabled = !isAuthInProgress && upstoxApiKey.isNotBlank() && (upstoxAuthCode.isNotBlank()),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp),
@@ -998,17 +978,3 @@ fun BrokerConnectDialog(
                                 TextButton(
                                     onClick = { onRemoveAccount.invoke(selectedBroker) },
                                     modifier = Modifier.fillMaxWidth().height(36.dp)
-                                ) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = TextGray, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("CLEAR ALL SAVED CONFIGURATION FOR $selectedBroker", color = TextGray, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
