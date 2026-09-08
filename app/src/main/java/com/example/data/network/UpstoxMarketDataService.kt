@@ -31,6 +31,7 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 class UpstoxMarketDataService(
     private val sessionManager: SessionManager,
@@ -57,6 +58,7 @@ class UpstoxMarketDataService(
     val connectionState: StateFlow<String> = _connectionState.asStateFlow()
 
     private val subscribedInstrumentKeys = ConcurrentHashMap.newKeySet<String>()
+    private val serverAcknowledgedKeys = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var isConnected = false
     @Volatile private var subscriptionAcknowledged = false
     private var reconnectJob: Job? = null
@@ -65,6 +67,12 @@ class UpstoxMarketDataService(
     private var backoffDelayMs = 1000L
     @Volatile private var hasFirstTick = false
     @Volatile private var lastTickReceivedTime: Long = 0L
+
+    // Reconnect policy
+    private val initialBackoffMs = 1000L
+    private val maxBackoffMs = 60_000L
+    private val maxReconnectAttempts = 10
+    @Volatile private var reconnectAttempts = 0
 
     init {
         startStaleDataMonitor()
@@ -158,6 +166,7 @@ class UpstoxMarketDataService(
         if (symbols.isEmpty()) return@withContext
         val validKeys = UpstoxSymbolMapper.filterValidKeys(symbols)
         subscribedInstrumentKeys.removeAll(validKeys.toSet())
+        serverAcknowledgedKeys.removeAll(validKeys.toSet())
 
         if (isConnected && webSocket != null && validKeys.isNotEmpty()) {
             try {
@@ -194,11 +203,12 @@ class UpstoxMarketDataService(
             return@withContext
         }
         reconnectJob?.cancel()
-        
+
         backoffDelayMs = 1000L
         hasFirstTick = false
         lastTickReceivedTime = 0L
-        
+        resetReconnectState()
+
         connectWebSocket()
     }
 
@@ -269,6 +279,9 @@ class UpstoxMarketDataService(
                             _connectionState.value = "CONNECTED"
                             Log.i(TAG, "[UPSTOX_WS_CONNECTED] WebSocket connected successfully. Waiting for subscription payload & ticks.")
 
+                            // Reset reconnect attempts on successful connection
+                            resetReconnectState()
+
                             _connectionState.value = "SUBSCRIBING"
 
                             // Prepare initial instrument keys using UpstoxInstrumentResolver
@@ -312,7 +325,7 @@ class UpstoxMarketDataService(
                             val universeKeys = universe.mapNotNull { (sym, exch) ->
                                 resolver.resolve(sym, exch)?.instrumentKey
                             }
-                            
+
                             val rawKeys = if (subscribedInstrumentKeys.isNotEmpty()) {
                                 (subscribedInstrumentKeys.toList() + universeKeys).distinct()
                             } else {
@@ -321,12 +334,21 @@ class UpstoxMarketDataService(
                             val keys = UpstoxSymbolMapper.filterValidKeys(rawKeys)
                             subscribedInstrumentKeys.addAll(keys)
 
+                            // Determine which keys to send: omit those already acknowledged by server
+                            val toSend = keys.filter { !serverAcknowledgedKeys.contains(it) }
+                            if (toSend.isEmpty()) {
+                                Log.i(TAG, "[UPSTOX_SUBSCRIBE_NOOP] All universe keys already acknowledged by server")
+                                subscriptionAcknowledged = true
+                                _connectionState.value = "SUBSCRIBED"
+                                return
+                            }
+
                             val json = JSONObject().apply {
                                 put("guid", UUID.randomUUID().toString())
                                 put("method", "sub")
                                 put("data", JSONObject().apply {
                                     put("mode", "ltpc")
-                                    put("instrumentKeys", JSONArray(keys))
+                                    put("instrumentKeys", JSONArray(toSend))
                                 })
                             }
 
@@ -334,7 +356,7 @@ class UpstoxMarketDataService(
                             val byteString = payload.toByteString()
                             val sent = ws.send(byteString)
                             if (sent) {
-                                Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Binary subscription payload sent for ${keys.size} instrument(s): mode=ltpc. Awaiting server confirmation.")
+                                Log.i(TAG, "[UPSTOX_SUBSCRIBE_SENT] Binary subscription payload sent for ${toSend.size} instrument(s): mode=ltpc. Awaiting server confirmation.")
                             } else {
                                 _connectionState.value = "SUBSCRIPTION_ERROR"
                                 Log.e(TAG, "[UPSTOX_ERROR] Failed to send initial subscription frame via WebSocket")
@@ -416,6 +438,22 @@ class UpstoxMarketDataService(
                 if (!hasFirstTick) {
                     _connectionState.value = "WAITING_FOR_FIRST_TICK"
                 }
+                // If server returned instrumentKeys, mark them acknowledged
+                try {
+                    val data = json.optJSONObject("data")
+                    val instrumentKeys = data?.optJSONArray("instrumentKeys")
+                    if (instrumentKeys != null) {
+                        val keys = mutableListOf<String>()
+                        for (i in 0 until instrumentKeys.length()) {
+                            keys.add(instrumentKeys.optString(i))
+                        }
+                        if (keys.isNotEmpty()) {
+                            serverAcknowledgedKeys.addAll(keys)
+                            Log.i(TAG, "[UPSTOX_ACK_KEYS] Server acknowledged ${keys.size} instrument keys")
+                        }
+                    }
+                } catch (_: Exception) {}
+
                 healthManager?.reportSubscribed(ProviderHealthManager.PROVIDER_UPSTOX, subscribedInstrumentKeys.size)
             }
         } catch (_: Exception) {
@@ -455,7 +493,7 @@ class UpstoxMarketDataService(
                 }
 
                 lastTickReceivedTime = now
-                backoffDelayMs = 1000L
+                backoffDelayMs = initialBackoffMs
 
                 if (_connectionState.value != "LIVE") {
                     _connectionState.value = "LIVE"
@@ -482,7 +520,7 @@ class UpstoxMarketDataService(
     fun disconnect() {
         reconnectJob?.cancel()
         staleCheckJob?.cancel()
-        
+
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         isConnected = false
@@ -490,6 +528,7 @@ class UpstoxMarketDataService(
         _connectionState.value = "DISCONNECTED"
         com.example.data.model.MarketDataStore.setUpstoxHealth("UNKNOWN")
         subscribedInstrumentKeys.clear()
+        serverAcknowledgedKeys.clear()
         Log.i(TAG, "[UPSTOX_DISCONNECTED] Upstox WebSocket disconnected by user")
     }
 
@@ -702,16 +741,40 @@ class UpstoxMarketDataService(
     }
 
     private fun scheduleReconnect() {
+        // Do not schedule multiple parallel reconnect jobs
         if (reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                _connectionState.value = "DISCONNECTED"
+                Log.e(TAG, "[UPSTOX_RECONNECT_GIVEUP] Reconnect attempts exceeded ($reconnectAttempts). Giving up until user action.")
+                return@launch
+            }
+            reconnectAttempts++
+
+            // exponential backoff with jitter
+            val baseDelay = (initialBackoffMs * (1L shl (reconnectAttempts - 1))).coerceAtMost(maxBackoffMs)
+            val jitterRange = (-(baseDelay / 8)).toLong()..((baseDelay / 8)).toLong() // +-12.5%
+            val jitter = Random.nextLong(jitterRange.start, jitterRange.endInclusive + 1)
+            val delayMs = (baseDelay + jitter).coerceAtLeast(initialBackoffMs)
+
+            Log.i(TAG, "[UPSTOX_WS_RECONNECTING] Scheduling Upstox WebSocket reconnect attempt #$reconnectAttempts in ${delayMs}ms (base=${baseDelay}ms, jitter=${jitter}ms)")
             _connectionState.value = "RECONNECTING"
-            Log.i(TAG, "[UPSTOX_WS_RECONNECTING] Scheduling Upstox WebSocket reconnection in 5s...")
-            delay(5000L)
-            if (!isConnected && isConfigured()) {
-                Log.i(TAG, "[UPSTOX_AUTHORIZE] Initiating reconnection: requesting new V3 authorized URL...")
-                connectWebSocket()
+            try {
+                delay(delayMs)
+                if (!isConnected && isConfigured()) {
+                    Log.i(TAG, "[UPSTOX_AUTHORIZE] Initiating reconnection attempt #$reconnectAttempts: requesting new V3 authorized URL...")
+                    connectWebSocket()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[UPSTOX_RECONNECT_ERROR] Reconnect attempt failed: ${e.message}", e)
+                scheduleReconnect()
             }
         }
     }
-}
 
+    private fun resetReconnectState() {
+        reconnectAttempts = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
+    }
+}
