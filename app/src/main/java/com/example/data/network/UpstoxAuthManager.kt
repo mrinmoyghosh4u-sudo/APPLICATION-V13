@@ -7,6 +7,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.BufferedOutputStream
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 
 class UpstoxAuthManager(
     private val sessionManager: SessionManager,
@@ -15,6 +21,8 @@ class UpstoxAuthManager(
 ) {
     companion object {
         private const val TAG = "UpstoxAuthManager"
+        // Backend token-exchange endpoint (server must host this)
+        private const val TOKEN_EXCHANGE_ENDPOINT = "https://application-beige-psi.vercel.app/api/token-exchange"
     }
 
     private val _authStatus = MutableStateFlow<BrokerAuthStatus>(BrokerAuthStatus.DISCONNECTED)
@@ -28,14 +36,18 @@ class UpstoxAuthManager(
             runCatching {
                 var cleanCode = authCode.trim()
 
-                // If state provided, validate state gracefully for 1-click automatic login
+                // If state provided, validate client-side but fail-closed if invalid.
                 if (!state.isNullOrBlank()) {
                     val stateValid = UpstoxAuthHelper.validateAndConsumeState(state)
                     if (!stateValid) {
-                        Log.w(TAG, "[UPSTOX_OAUTH_STATE_WARN] State mismatch or expired for state=$state; continuing seamlessly with code exchange")
+                        Log.e(TAG, "[UPSTOX_OAUTH_STATE_FAILCLOSED] Provided state is invalid/expired — aborting exchange")
+                        throw Exception("Invalid or expired OAuth state")
                     } else {
-                        Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] State validated successfully")
+                        Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] State validated client-side")
                     }
+                } else {
+                    // Prefer server-side state; if client has no state, still allow backend to validate if present there.
+                    Log.w(TAG, "[UPSTOX_OAUTH_STATE_MISSING] No state provided by client — backend will validate and may reject")
                 }
 
                 // If already authenticated and token valid, return existing token
@@ -51,116 +63,64 @@ class UpstoxAuthManager(
                     }
                 }
 
-                val apiKey = sessionManager.upstoxApiKey.takeIf { it.isNotBlank() }
-                    ?: com.example.util.BrokerConfig.upstoxApiKey.takeIf { it.isNotBlank() }
-                    ?: throw Exception("Upstox API Key (client_id) is missing")
-                val secret = sessionManager.upstoxApiSecret.takeIf { it.isNotBlank() }
-                    ?: com.example.util.BrokerConfig.upstoxApiSecret.takeIf { it.isNotBlank() }
-                val redirectUri = "https://application-beige-psi.vercel.app/oauth".takeIf { it.isNotBlank() }
-                    ?: "https://application-beige-psi.vercel.app/oauth".takeIf { it.isNotBlank() }
-                    ?: UpstoxAuthHelper.DEFAULT_REDIRECT_URI
-
-                if (cleanCode.startsWith("http://") || cleanCode.startsWith("https://") || cleanCode.startsWith("kingkhan://")) {
-                    try {
-                        val parsedUri = android.net.Uri.parse(cleanCode)
-                        val extracted = parsedUri.getQueryParameter("code") ?: parsedUri.getQueryParameter("auth_code")
-                        val uriState = parsedUri.getQueryParameter("state")
-                        if (!uriState.isNullOrBlank() && state.isNullOrBlank()) {
-                            val uriStateValid = UpstoxAuthHelper.validateAndConsumeState(uriState)
-                            if (!uriStateValid) {
-                                Log.w(TAG, "[UPSTOX_OAUTH_STATE_WARN] URI state mismatch or expired; continuing seamlessly")
-                            } else {
-                                Log.i(TAG, "[UPSTOX_OAUTH_STATE_VALID] URI state validated successfully")
-                            }
-                        }
-                        if (!extracted.isNullOrBlank()) {
-                            cleanCode = extracted
-                        }
-                    } catch (_: Exception) {}
-                }
-                if (cleanCode.contains("code=")) {
-                    cleanCode = cleanCode.substringAfter("code=").substringBefore("&")
-                }
-                if (cleanCode.contains("auth_code=")) {
-                    cleanCode = cleanCode.substringAfter("auth_code=").substringBefore("&")
-                }
-
-                // Authorization code single-use guard with graceful recovery if already connected
+                // Authorization code single-use guard (client-side best-effort). Server will enforce single-use persistently.
                 if (!UpstoxAuthHelper.validateAndConsumeAuthCode(cleanCode)) {
-                    Log.w(TAG, "[UPSTOX_CODE_REPLAY_WARN] Auth code already consumed; checking existing valid token")
-                    val existing = sessionManager.upstoxAccessToken
-                    if (!existing.isNullOrBlank() && sessionManager.isUpstoxConnected) {
-                        _authStatus.value = BrokerAuthStatus.CONNECTED
-                        onConnectedCallback?.invoke()
-                        return@runCatching existing
-                    }
+                    Log.w(TAG, "[UPSTOX_CODE_REPLAY_WARN] Auth code already consumed on client-side; proceeding to server check")
+                    // don't fail outright because server may have a cache; server will enforce.
                 }
 
                 healthManager?.reportAuthCodeReceived(ProviderHealthManager.PROVIDER_UPSTOX, "[REDACTED]")
                 healthManager?.reportTokenExchange(ProviderHealthManager.PROVIDER_UPSTOX)
-                Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Initiating Upstox authorization code exchange...")
+                Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Requesting server-side token exchange via backend endpoint")
 
-                var tokenBody: UpstoxTokenResponse? = null
-                var directExchangeError: String? = null
-
-                if (!secret.isNullOrBlank()) {
-                    // Direct official Upstox OAuth token exchange (POST https://api-v2.upstox.com/v2/login/authorization/token)
-                    Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Exchanging code via official Upstox OAuth endpoint...")
-                    val directRes = try {
-                        upstoxApi.getAccessToken(
-                            code = cleanCode,
-                            clientId = apiKey,
-                            clientSecret = secret,
-                            redirectUri = redirectUri
-                        )
-                    } catch (e: Exception) {
-                        Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE_WARN] Direct token exchange exception: ${e.localizedMessage}")
-                        null
-                    }
-
-                    if (directRes != null && directRes.isSuccessful && directRes.body()?.effectiveAccessToken?.isNotBlank() == true) {
-                        tokenBody = directRes.body()
-                    } else if (directRes != null) {
-                        val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
-                        directExchangeError = err.take(150).replace("\n", " ")
-                        Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE_WARN] Direct Upstox exchange returned error: $directExchangeError")
-                    }
+                // Call backend token-exchange endpoint (server holds client secret)
+                val url = URL(TOKEN_EXCHANGE_ENDPOINT)
+                val params = StringBuilder()
+                params.append("code=").append(java.net.URLEncoder.encode(cleanCode, "UTF-8"))
+                if (!state.isNullOrBlank()) {
+                    params.append("&state=").append(java.net.URLEncoder.encode(state, "UTF-8"))
                 }
 
-                // Check if user passed an access token directly
-                if (tokenBody == null) {
-                    val directProfileTest = try {
-                        upstoxApi.getUserProfile(token = "Bearer $cleanCode")
-                    } catch (_: Exception) { null }
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                    doOutput = true
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                }
 
-                    if (directProfileTest != null && directProfileTest.isSuccessful && directProfileTest.body()?.status == "success") {
-                        Log.i(TAG, "[UPSTOX_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")
-                        tokenBody = UpstoxTokenResponse(accessToken = cleanCode)
+                BufferedOutputStream(conn.outputStream).use { out ->
+                    out.write(params.toString().toByteArray(Charsets.UTF_8))
+                    out.flush()
+                }
+
+                val responseCode = conn.responseCode
+                val responseBody = StringBuilder()
+                BufferedReader(InputStreamReader(if (responseCode in 200..299) conn.inputStream else conn.errorStream)).use { reader ->
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        responseBody.append(line)
                     }
                 }
 
-                if (tokenBody == null) {
-                    val err = directExchangeError ?: "Failed to exchange Upstox code. Please check API Key and Secret."
-                    sessionManager.isUpstoxConnected = false
-                    sessionManager.upstoxAccessToken = null
-                    _authStatus.value = BrokerAuthStatus.ERROR
-                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_EXCHANGE_FAILED, err)
-                    Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Token exchange failed: $err")
-                    throw Exception("TOKEN_EXCHANGE_FAILED: $err")
+                if (responseCode !in 200..299) {
+                    Log.e(TAG, "[UPSTOX_BACKEND_EXCHANGE_FAILED] HTTP $responseCode: ${responseBody}")
+                    throw Exception("Backend token exchange failed: HTTP $responseCode")
                 }
 
-                val body = tokenBody
-                val accessToken = body.effectiveAccessToken
+                val json = JSONObject(responseBody.toString())
+                // Support common field variants
+                val accessToken = when {
+                    json.has("access_token") -> json.optString("access_token")
+                    json.has("effectiveAccessToken") -> json.optString("effectiveAccessToken")
+                    json.has("data") && json.getJSONObject("data").has("access_token") -> json.getJSONObject("data").optString("access_token")
+                    else -> ""
+                }
+
                 if (accessToken.isNullOrBlank()) {
-                    sessionManager.isUpstoxConnected = false
-                    sessionManager.upstoxAccessToken = null
-                    _authStatus.value = BrokerAuthStatus.ERROR
-                    healthManager?.reportAuthFailure(ProviderHealthManager.PROVIDER_UPSTOX, ProviderHealthManager.STATE_TOKEN_INVALID, "Access token is empty in response")
-                    Log.e(TAG, "[UPSTOX_TOKEN_EXCHANGE_FAILED] Access Token is empty in response")
-                    throw Exception("TOKEN_EXCHANGE_FAILED: Access token is empty")
+                    Log.e(TAG, "[UPSTOX_BACKEND_INVALID_RESPONSE] Token missing in backend response: ${json.optString("error", "no-error")}")
+                    throw Exception("Backend did not return access token")
                 }
-
-                Log.i(TAG, "[UPSTOX_OAUTH_SUCCESS] Upstox Access Token received successfully")
 
                 // Validate token with profile endpoint before marking authenticated
                 try {
@@ -174,18 +134,12 @@ class UpstoxAuthManager(
                     throw Exception("PROFILE_VALIDATION_FAILED: ${e.message}")
                 }
 
-                Log.i(TAG, "[UPSTOX_TOKEN_VALID] Upstox profile validation passed")
-                healthManager?.reportTokenValidated(ProviderHealthManager.PROVIDER_UPSTOX)
-
-                // Securely store credentials and tokens in encrypted storage
+                // Securely store credentials and tokens in encrypted storage (do NOT store client secret)
                 sessionManager.upstoxAccessToken = accessToken
-                if (!body.effectiveRefreshToken.isNullOrBlank()) {
-                    sessionManager.upstoxRefreshToken = body.effectiveRefreshToken
-                }
                 sessionManager.upstoxTokenTimestamp = System.currentTimeMillis()
                 sessionManager.isUpstoxConnected = true
 
-                Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox session successfully connected and authenticated")
+                Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox session successfully connected and authenticated (backend-exchanged)")
                 _authStatus.value = BrokerAuthStatus.CONNECTED
                 healthManager?.reportAuthentication(ProviderHealthManager.PROVIDER_UPSTOX, true)
                 onConnectedCallback?.invoke()
@@ -198,12 +152,18 @@ class UpstoxAuthManager(
 
     suspend fun authenticateWithToken(token: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
+            // Direct token authentication is disabled in production. Only allow in DEBUG builds.
+            if (!com.example.BuildConfig.DEBUG) {
+                Log.w(TAG, "[UPSTOX_DIRECT_AUTH_BLOCKED] Direct access-token authentication is disabled in production")
+                throw Exception("Direct token authentication disabled in production")
+            }
+
             val cleanToken = token.trim().removePrefix("Bearer ").removePrefix("bearer ").trim()
             if (cleanToken.isBlank()) {
                 throw Exception("Upstox Access Token cannot be blank")
             }
 
-            Log.i(TAG, "[UPSTOX_DIRECT_AUTH] Authenticating directly with Upstox Access Token...")
+            Log.i(TAG, "[UPSTOX_DIRECT_AUTH_DEBUG] Authenticating directly with Upstox Access Token (DEBUG)...")
             validateUserProfile(cleanToken)
 
             sessionManager.upstoxAccessToken = cleanToken
@@ -211,7 +171,6 @@ class UpstoxAuthManager(
             sessionManager.isUpstoxConnected = true
 
             Log.i(TAG, "[BROKER_CONNECTED] Upstox session successfully connected and authenticated via token")
-            Log.i(TAG, "[UPSTOX_AUTHENTICATED] Upstox direct token authenticated")
             _authStatus.value = BrokerAuthStatus.CONNECTED
             onConnectedCallback?.invoke()
             cleanToken
