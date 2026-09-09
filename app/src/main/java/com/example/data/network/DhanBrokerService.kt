@@ -82,7 +82,6 @@ class DhanBrokerService(
                     .get()
                     .header("access-token", currentToken)
                     .header("dhanClientId", clientId)
-                    .header("client-id", clientId)
                     .header("Accept", "application/json")
                     .build()
 
@@ -258,7 +257,7 @@ class DhanBrokerService(
                     .header("Content-Type", "application/json")
                     .header("access-token", token)
                 if (clientId.isNotBlank()) {
-                    reqBuilder.header("client-id", clientId)
+                    reqBuilder.header("dhanClientId", clientId)
                 }
                 val response = directClient.newCall(reqBuilder.build()).execute()
                 if (response.isSuccessful) {

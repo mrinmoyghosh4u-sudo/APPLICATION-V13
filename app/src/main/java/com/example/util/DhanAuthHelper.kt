@@ -45,7 +45,6 @@ object DhanAuthHelper {
             val rawRedirectUri = BrokerConfig.dhanRedirectUri.trim()
 
             val clientId = rawClientId
-            val clientSecret = rawClientSecret
             val appId = if (rawApiKey.isNotBlank()) rawApiKey else rawClientId
             val redirectUri = if (rawRedirectUri.isNotBlank()) rawRedirectUri else "kingkhan://oauth/callback"
             val responseType = "code"
@@ -55,24 +54,12 @@ object DhanAuthHelper {
                 throw Exception("DHAN_CLIENT_ID missing in configuration.")
             }
 
-            // Official Dhan OAuth generate-consent endpoint URL
-            val urlBuilder = okhttp3.HttpUrl.Builder()
-                .scheme("https")
-                .host("auth.dhan.co")
-                .addPathSegment("app")
-                .addPathSegment("generate-consent")
-                .addQueryParameter("client_id", clientId)
+            // Using proxy to secure the client_secret and app_secret
+            val url = "https://application-beige-psi.vercel.app/dhan-token-exchange"
 
-            val url = urlBuilder.build().toString()
-
-            // Strict Official Dhan OAuth parameters only - no duplicates
             val jsonBody = JSONObject().apply {
-                put("client_id", clientId)
-                put("client_secret", clientSecret)
-                put("app_id", appId)
-                put("app_secret", clientSecret)
+                put("action", "generate-consent")
                 put("redirect_uri", redirectUri)
-                put("response_type", responseType)
                 put("state", effectiveState)
             }.toString()
 
@@ -80,10 +67,6 @@ object DhanAuthHelper {
             val requestBuilder = Request.Builder()
                 .url(url)
                 .post(reqBody)
-                .addHeader("client_id", clientId)
-                .addHeader("app_id", appId)
-                .addHeader("app_secret", clientSecret)
-                .addHeader("client_secret", clientSecret)
                 .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
 
@@ -91,7 +74,7 @@ object DhanAuthHelper {
             val response = httpClient.newCall(request).execute()
             val respBody = response.body?.string() ?: ""
 
-            Log.d(TAG, "Dhan generate-consent HTTP Response Code: ${response.code}")
+            Log.d(TAG, "Dhan generate-consent proxy HTTP Response Code: ${response.code}")
 
             if (!response.isSuccessful) {
                 val errorJson = runCatching { JSONObject(respBody) }.getOrNull()
@@ -136,16 +119,10 @@ object DhanAuthHelper {
 
             Log.i(TAG, "[DHAN_TOKEN_EXCHANGE_STARTED] Executing token exchange...")
 
-            val url = okhttp3.HttpUrl.Builder()
-                .scheme("https")
-                .host("auth.dhan.co")
-                .addPathSegment("app")
-                .addPathSegment("consumeApp-consent")
-                .addQueryParameter("tokenId", code.trim())
-                .build()
-                .toString()
+            val url = "https://application-beige-psi.vercel.app/dhan-token-exchange"
 
             val jsonBody = JSONObject().apply {
+                put("action", "consume-consent")
                 put("tokenId", code.trim())
             }.toString()
 
@@ -156,20 +133,9 @@ object DhanAuthHelper {
                 .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
 
-            if (clientId.isNotBlank()) {
-                requestBuilder.addHeader("client_id", clientId)
-            }
-            if (appId.isNotBlank()) {
-                requestBuilder.addHeader("app_id", appId)
-            }
-            if (appSecret.isNotBlank()) {
-                requestBuilder.addHeader("app_secret", appSecret)
-                requestBuilder.addHeader("client_secret", appSecret)
-            }
-
             val response = httpClient.newCall(requestBuilder.build()).execute()
             val respBody = response.body?.string() ?: ""
-            Log.d(TAG, "Dhan consumeApp-consent HTTP Response Code: ${response.code}")
+            Log.d(TAG, "Dhan consumeApp-consent proxy HTTP Response Code: ${response.code}")
 
             if (response.isSuccessful && respBody.isNotBlank()) {
                 val json = JSONObject(respBody)

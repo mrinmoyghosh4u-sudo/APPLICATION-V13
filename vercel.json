@@ -7,6 +7,8 @@
     { "source": "/api/token-exchange", "destination": "/api/token-exchange.js" },
     { "source": "/fyers-token-exchange", "destination": "/api/fyers-token-exchange.js" },
     { "source": "/api/fyers-token-exchange", "destination": "/api/fyers-token-exchange.js" },
+    { "source": "/dhan-token-exchange", "destination": "/api/dhan-token-exchange.js" },
+    { "source": "/api/dhan-token-exchange", "destination": "/api/dhan-token-exchange.js" },
     { "source": "/.well-known/assetlinks.json", "destination": "/api/assetlinks.js" }
   ]
 }

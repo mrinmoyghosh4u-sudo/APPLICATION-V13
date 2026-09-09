@@ -138,6 +138,26 @@ class FyersAuthManager(
                 }
 
                 if (tokenBody == null) {
+                    Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Attempting token exchange via secure proxy...")
+                    val proxyUrl = "https://application-beige-psi.vercel.app/fyers-token-exchange"
+                    val proxyRes = try {
+                        fyersApi.exchangeTokenSecurely(proxyUrl, cleanCode, "")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[FYERS_TOKEN_EXCHANGE_WARN] FYERS proxy exchange exception: ${e.localizedMessage}")
+                        null
+                    }
+
+                    if (proxyRes != null && proxyRes.isSuccessful && proxyRes.body()?.access_token?.isNotBlank() == true) {
+                        tokenBody = proxyRes.body()
+                        Log.i(TAG, "[FYERS_TOKEN_EXCHANGE] Proxy exchange succeeded!")
+                    } else if (proxyRes != null) {
+                        val err = proxyRes.errorBody()?.string() ?: proxyRes.body()?.message ?: "HTTP ${proxyRes.code()}"
+                        directExchangeError = err.take(150).replace("\n", " ")
+                        Log.w(TAG, "[FYERS_TOKEN_EXCHANGE_WARN] Proxy FYERS exchange returned error: $directExchangeError")
+                    }
+                }
+
+                if (tokenBody == null) {
                     val directTokenResult = authenticateWithToken(cleanCode)
                     if (directTokenResult.isSuccess) {
                         Log.i(TAG, "[FYERS_DIRECT_TOKEN_MATCH] Input verified as valid direct Access Token")

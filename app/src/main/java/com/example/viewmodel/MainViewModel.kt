@@ -48,7 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val telegramService = TelegramService(sessionManager)
     private val tradingDao = TradingDatabase.getDatabase(application).tradingDao()
     private val repository = TradingRepository(tradingDao, brokerManager)
-    val diagnosticEngine = com.example.util.diagnostic.SelfDiagnosticEngine(brokerManager)
+    val diagnosticEngine = com.example.util.diagnostic.SelfDiagnosticEngine(brokerManager, repository)
     val alertService = com.example.util.alert.AlertService(
         context = application,
         sessionManager = sessionManager,
@@ -1405,39 +1405,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callbackState: String,
         pendingSession: SessionManager.PendingOAuthSession?
     ) {
-        // Strict Provider, Expiry, Single-Use, and Exact State Verification
-        when (val validation = sessionManager.validateAndConsumeOAuthSession("DHAN", callbackState)) {
-            is SessionManager.OAuthValidationResult.Valid -> {
-                // Validated & consumed
-            }
-            is SessionManager.OAuthValidationResult.MissingPendingSession -> {
-                android.util.Log.e("DhanAuth", "[DHAN_CALLBACK_REJECTED] No pending Dhan OAuth session found")
-                _authErrorMessage.value = "Dhan Login Error: No matching pending OAuth session found."
-                _isAuthInProgress.value = false
-                return
-            }
-            is SessionManager.OAuthValidationResult.AlreadyConsumed -> {
-                android.util.Log.w("DhanAuth", "[DHAN_CALLBACK_REJECTED] Session state already consumed")
-                _authErrorMessage.value = "Dhan Login Error: This OAuth session has already been processed (duplicate)."
-                _isAuthInProgress.value = false
-                return
-            }
-            is SessionManager.OAuthValidationResult.SessionExpired -> {
-                android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
-                _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
-                _isAuthInProgress.value = false
-                return
-            }
-            is SessionManager.OAuthValidationResult.MissingCallbackState,
-            is SessionManager.OAuthValidationResult.MissingStoredState,
-            is SessionManager.OAuthValidationResult.StateMismatch,
-            is SessionManager.OAuthValidationResult.ProviderMismatch -> {
-                android.util.Log.e("DhanAuth", "[DHAN_STATE_MISMATCH] Returned OAuth state does not match pending session")
-                _authErrorMessage.value = "Dhan Login Error: State verification failed (Possible CSRF attack or invalid session)."
-                _isAuthInProgress.value = false
-                return
-            }
+        // Dhan's OAuth flow does not return a state parameter in the callback.
+        // We verify the session presence and expiry, but DO NOT require state matching.
+        if (pendingSession == null || pendingSession.provider != "DHAN") {
+            android.util.Log.e("DhanAuth", "[DHAN_CALLBACK_REJECTED] No pending Dhan OAuth session found")
+            _authErrorMessage.value = "Dhan Login Error: No matching pending OAuth session found."
+            _isAuthInProgress.value = false
+            return
         }
+
+        if (pendingSession.consumed) {
+            android.util.Log.w("DhanAuth", "[DHAN_CALLBACK_REJECTED] Session already consumed")
+            _authErrorMessage.value = "Dhan Login Error: This OAuth session has already been processed (duplicate)."
+            _isAuthInProgress.value = false
+            return
+        }
+
+        if (System.currentTimeMillis() - pendingSession.createdAt > 300000L) {
+            android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
+            _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
+            _isAuthInProgress.value = false
+            return
+        }
+        
+        // Mark session as consumed to prevent replay
+        sessionManager.pendingOAuthSession = pendingSession.copy(consumed = true)
 
         // Check for cancellation or OAuth error query parameters
         android.util.Log.i("DhanAuth", "[DHAN_CALLBACK_RECEIVED] OAuth callback received from redirect URL")

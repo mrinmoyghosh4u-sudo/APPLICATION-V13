@@ -97,7 +97,7 @@ class BrokerNetworkClient(private val sessionManager: SessionManager) {
             .header("access-token", token)
 
         if (clientId.isNotBlank()) {
-            requestBuilder.header("client-id", clientId)
+            requestBuilder.header("dhanClientId", clientId)
         }
 
         val request = requestBuilder.build()

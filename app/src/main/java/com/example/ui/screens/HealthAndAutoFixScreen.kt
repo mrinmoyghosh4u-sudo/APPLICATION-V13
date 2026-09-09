@@ -63,12 +63,25 @@ fun HealthAndAutoFixScreen(
             }
 
             item {
-                Button(
-                    onClick = { viewModel.diagnosticEngine.runFullAZCheck() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("RUN FULL A–Z CHECK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.diagnosticEngine.runFullAZCheck() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("RUN FULL A–Z CHECK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
+                    }
+
+                    Button(
+                        onClick = {
+                            viewModel.diagnosticEngine.runAutoFix()
+                            viewModel.diagnosticEngine.runFullAZCheck()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("AUTO-FIX SAFE ISSUES", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondary, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
 
