@@ -104,7 +104,7 @@ class UpstoxAuthManager(
                 var directExchangeError: String? = null
 
                 if (!secret.isNullOrBlank()) {
-                    // Direct official Upstox OAuth token exchange (POST https://api-v2.upstox.com/v2/login/authorization/token)
+                    // Direct official Upstox OAuth token exchange (POST https://api.upstox.com/v2/login/authorization/token)
                     Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Exchanging code via official Upstox OAuth endpoint...")
                     val directRes = try {
                         upstoxApi.getAccessToken(
@@ -124,6 +124,30 @@ class UpstoxAuthManager(
                         val err = directRes.errorBody()?.string() ?: "HTTP ${directRes.code()}"
                         directExchangeError = err.take(150).replace("\n", " ")
                         Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE_WARN] Direct Upstox exchange returned error: $directExchangeError")
+                    }
+                } else {
+                    // Secure Proxy Token Exchange (Server-Side Client Secret)
+                    Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Secret missing locally. Attempting exchange via secure proxy server...")
+                    val proxyUrl = "https://application-beige-psi.vercel.app/upstox-token-exchange"
+                    val proxyRes = try {
+                        upstoxApi.exchangeTokenSecurely(
+                            url = proxyUrl,
+                            code = cleanCode,
+                            redirectUri = redirectUri,
+                            clientId = apiKey
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE_WARN] Proxy token exchange exception: ${e.localizedMessage}")
+                        null
+                    }
+                    
+                    if (proxyRes != null && proxyRes.isSuccessful && proxyRes.body()?.effectiveAccessToken?.isNotBlank() == true) {
+                        tokenBody = proxyRes.body()
+                        Log.i(TAG, "[UPSTOX_TOKEN_EXCHANGE] Proxy token exchange successful")
+                    } else if (proxyRes != null) {
+                        val err = proxyRes.errorBody()?.string() ?: "HTTP ${proxyRes.code()}"
+                        directExchangeError = err.take(150).replace("\n", " ")
+                        Log.w(TAG, "[UPSTOX_TOKEN_EXCHANGE_WARN] Proxy Upstox exchange returned error: $directExchangeError")
                     }
                 }
 

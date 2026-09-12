@@ -1321,7 +1321,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is SessionManager.OAuthValidationResult.SessionExpired -> {
                     val errMsg = "$logPrefix OAuth callback rejected: Pending session has expired"
                     android.util.Log.e("Auth", "[$logPrefix" + "_SESSION_EXPIRED] $errMsg")
-                    _authErrorMessage.value = "$logPrefix Login Failed: Session Expired (Timeout)"
+                    _authErrorMessage.value = "AUTH_REDIRECT_FAILED: Session Expired (Timeout) - $logPrefix"
                     _isAuthInProgress.value = false
                     brokerManager.healthManager.reportAuthFailure(providerName, "SESSION_EXPIRED", errMsg)
                     return@launch
@@ -1332,7 +1332,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is SessionManager.OAuthValidationResult.StateMismatch,
                 is SessionManager.OAuthValidationResult.ProviderMismatch -> {
                     _isAuthInProgress.value = false
-                    _authErrorMessage.value = "$logPrefix OAuth Error: State mismatch. Possible CSRF attack or invalid session."
+                    _authErrorMessage.value = "AUTH_REDIRECT_FAILED: State mismatch. Possible CSRF attack or invalid session ($logPrefix)."
                     brokerManager.healthManager.reportAuthFailure(providerName, "STATE_MISMATCH", "Invalid state")
                     return@launch
                 }
@@ -1356,7 +1356,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (cleanedCode.isBlank()) {
                 val errMsg = "$logPrefix Authorization code missing from callback response"
                 android.util.Log.e("Auth", "[$logPrefix" + "_AUTH_CODE_MISSING] $errMsg")
-                _authErrorMessage.value = "$logPrefix Login Failed: Authorization Code Missing"
+                _authErrorMessage.value = "AUTH_REDIRECT_FAILED: Authorization Code Missing - $logPrefix"
                 _isAuthInProgress.value = false
                 brokerManager.healthManager.reportAuthFailure(providerName, "AUTH_CODE_MISSING", errMsg)
                 return@launch
@@ -1423,7 +1423,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         if (System.currentTimeMillis() - pendingSession.createdAt > 300000L) {
             android.util.Log.e("DhanAuth", "[DHAN_SESSION_EXPIRED] Pending Dhan OAuth session expired")
-            _authErrorMessage.value = "Dhan Login Failed: Session Expired (Timeout). Please initiate login again."
+            _authErrorMessage.value = "AUTH_REDIRECT_FAILED: Dhan Session Expired (Timeout). Please initiate login again."
             _isAuthInProgress.value = false
             return
         }
@@ -1568,11 +1568,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val err = exchangeRes.exceptionOrNull()
                     val errMsg = err?.localizedMessage ?: "Unknown token exchange error"
                     android.util.Log.e("DhanAuth", "Dhan token exchange: FAILURE")
-                    _authErrorMessage.value = "Failed to exchange Dhan token: $errMsg"
+                    _authErrorMessage.value = "TOKEN_EXCHANGE_FAILED: Dhan token exchange failed - $errMsg"
                 }
             } else {
                 android.util.Log.e("DhanAuth", "Dhan callback missing tokenId and token")
-                _authErrorMessage.value = "Failed to parse authorization code or token from Dhan callback redirect"
+                _authErrorMessage.value = "AUTH_REDIRECT_FAILED: Dhan callback missing tokenId and token"
             }
         } finally {
             currentlyProcessingDhanFingerprint = null

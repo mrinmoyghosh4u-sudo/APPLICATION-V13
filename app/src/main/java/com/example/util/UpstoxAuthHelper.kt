@@ -9,7 +9,7 @@ object UpstoxAuthHelper {
 
     private const val TAG = "UpstoxAuthHelper"
     const val DEFAULT_REDIRECT_URI = "https://application-beige-psi.vercel.app/oauth"
-    private const val AUTH_DIALOG_BASE = "https://api-v2.upstox.com/v2/login/authorization/dialog"
+    private const val AUTH_DIALOG_BASE = "https://api.upstox.com/v2/login/authorization/dialog"
     private const val STATE_EXPIRY_MS = 5 * 60 * 1000L // 5 minutes state validity window
 
     private data class OAuthStateEntry(
