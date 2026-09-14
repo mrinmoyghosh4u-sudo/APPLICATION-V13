@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -111,6 +112,7 @@ fun LoginScreen(
             )
             .statusBarsPadding()
             .navigationBarsPadding()
+
     ) {
         Column(
             modifier = Modifier
@@ -697,7 +699,7 @@ fun LoginScreen(
                                                 border = BorderStroke(1.dp, PrimaryGold),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
                                             ) {
-                                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
@@ -794,7 +796,7 @@ fun LoginScreen(
                                                 border = BorderStroke(1.dp, PrimaryGold),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGold)
                                             ) {
-                                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text("OPEN BROWSER 🌐", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
