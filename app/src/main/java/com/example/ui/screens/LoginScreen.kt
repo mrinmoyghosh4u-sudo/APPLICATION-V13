@@ -77,7 +77,7 @@ fun LoginScreen(
 
     // Dhan Form Fields
     var dhanClientId by remember { mutableStateOf(sm?.dhanClientId?.ifBlank { BrokerConfig.dhanClientId } ?: BrokerConfig.dhanClientId) }
-    var dhanAccessToken by remember { mutableStateOf(sm?.dhanAccessToken?.ifBlank { BrokerConfig.dhanApiKey } ?: BrokerConfig.dhanApiKey) }
+    var dhanAccessToken by remember { mutableStateOf(sm?.dhanAccessToken ?: "") }
     var showDhanToken by remember { mutableStateOf(false) }
 
     // Angel One Form Fields
